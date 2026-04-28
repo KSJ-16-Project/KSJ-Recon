@@ -33,11 +33,42 @@ from playwright.async_api import async_playwright
 # ────────────────────────────────────────────────────────────────
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ReconProto/1.0"
-TOKEN_KEYS = ("accessToken", "access_token", "token", "jwt", "id_token", "idToken")
-PAYLOAD_KEY_CANDIDATES = ("id", "loginId", "username", "email", "userId", "user_id")
+
+# 토큰 키 패턴 — 키 이름이 아래 정규식에 매칭되면 토큰 후보로 간주
+TOKEN_KEY_PATTERN = re.compile(
+    r"(access[_-]?token|^token$|^jwt$|id[_-]?token|auth[_-]?token|bearer)",
+    re.I,
+)
+JWT_RE = re.compile(r"^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$")
+
+# 로그인 라우트 자동 탐지에 쓰이는 후보 (홈에서 링크를 못 찾았을 때 폴백)
+LOGIN_ROUTE_CANDIDATES = (
+    "/login", "/auth", "/signin", "/sign-in",
+    "/account/login", "/user/login", "/users/sign_in",
+    "/#/login", "/#/auth", "/#/signin",
+)
+
+# 홈페이지에서 로그인 링크를 찾는 셀렉터들
+LOGIN_LINK_SELECTORS = (
+    'a[href*="login" i]',
+    'a[href*="signin" i]',
+    'a[href*="sign-in" i]',
+    'a[href*="auth" i]',
+    'button:has-text("로그인")',
+    'a:has-text("로그인")',
+    'button:has-text("Login")',
+    'a:has-text("Login")',
+    'button:has-text("Log in")',
+    'a:has-text("Log in")',
+    'button:has-text("Sign in")',
+    'a:has-text("Sign in")',
+    '[aria-label*="login" i]',
+    '[aria-label*="sign in" i]',
+)
 
 
-def normalize_url(base, href):
+def normalize_url(base, href, hash_mode=False):
+    """hash_mode=True 이면 #/ 로 시작하는 fragment를 라우트의 일부로 보존."""
     if href is None:
         return None
     try:
@@ -45,7 +76,10 @@ def normalize_url(base, href):
         p = urlparse(full)
         if p.scheme not in ("http", "https"):
             return None
-        return f"{p.scheme}://{p.netloc}{p.path}"
+        url = f"{p.scheme}://{p.netloc}{p.path or '/'}"
+        if hash_mode and p.fragment and p.fragment.startswith("/"):
+            url = url + "#" + p.fragment
+        return url
     except Exception:
         return None
 
@@ -62,18 +96,47 @@ def base_url(target):
     return f"{p.scheme}://{p.netloc}"
 
 
-def extract_token(body):
-    if not isinstance(body, dict):
+def strip_bearer(s):
+    if isinstance(s, str) and s.lower().startswith("bearer "):
+        return s[7:].strip()
+    return s.strip() if isinstance(s, str) else s
+
+
+def looks_like_jwt(s):
+    return isinstance(s, str) and bool(JWT_RE.match(s.strip()))
+
+
+def looks_like_token(s):
+    if not isinstance(s, str):
+        return False
+    s = strip_bearer(s)
+    if looks_like_jwt(s):
+        return True
+    return len(s) >= 20 and bool(re.match(r"^[A-Za-z0-9._\-+/=]+$", s))
+
+
+def extract_token_recursive(obj, _depth=0, _max_depth=8):
+    """JSON-like 객체에서 토큰 후보 재귀 탐색.
+       (1) 키 이름이 토큰 패턴에 매칭되고 값이 토큰처럼 보이면 즉시 반환
+       (2) JWT 모양 문자열이 발견되면 반환"""
+    if _depth > _max_depth:
         return None
-    for k in TOKEN_KEYS:
-        v = body.get(k)
-        if isinstance(v, str) and len(v) > 20:
-            return v
-    if isinstance(body.get("data"), dict):
-        for k in TOKEN_KEYS:
-            v = body["data"].get(k)
-            if isinstance(v, str) and len(v) > 20:
-                return v
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if isinstance(k, str) and TOKEN_KEY_PATTERN.search(k) and looks_like_token(v):
+                return strip_bearer(v)
+        for v in obj.values():
+            t = extract_token_recursive(v, _depth + 1, _max_depth)
+            if t:
+                return t
+    elif isinstance(obj, list):
+        for v in obj:
+            t = extract_token_recursive(v, _depth + 1, _max_depth)
+            if t:
+                return t
+    elif isinstance(obj, str):
+        if looks_like_jwt(strip_bearer(obj)):
+            return strip_bearer(obj)
     return None
 
 
@@ -116,12 +179,17 @@ CLICKABLE_SELECTOR = (
 # ────────────────────────────────────────────────────────────────
 
 class DynamicSpider:
-    def __init__(self, target, max_depth=2, max_clicks=30, page_timeout_ms=20000, label="anon"):
+    def __init__(self, target, max_depth=2, max_clicks=30, page_timeout_ms=20000,
+                 label="anon", hash_mode=None):
         self.target = target
         self.max_depth = max_depth
         self.max_clicks = max_clicks
         self.page_timeout_ms = page_timeout_ms
         self.label = label
+
+        # hash_mode: None=미정(첫 페이지에서 감지), True/False=강제
+        self.hash_mode = bool(hash_mode) if hash_mode is not None else False
+        self._mode_detected = hash_mode is not None
 
         self.visited = set()
         self.collected_urls = []
@@ -133,11 +201,24 @@ class DynamicSpider:
     def _harvest(self, log):
         out = []
         for entry in log:
-            n = normalize_url(self.target, entry.get("url", ""))
+            n = normalize_url(self.target, entry.get("url", ""), self.hash_mode)
             if n and is_in_scope(n, self.target):
                 self.client_routes.add(n)
                 out.append(n)
         return out
+
+    async def _detect_mode(self, page):
+        """첫 페이지에서 location.hash 검사하여 hash-route SPA 여부 판단."""
+        if self._mode_detected:
+            return
+        try:
+            hv = await page.evaluate("() => location.hash")
+            if hv and hv.startswith("#/"):
+                self.hash_mode = True
+                print(f"  [*] hash-route SPA 감지 (location.hash={hv!r}) — fragment 보존 모드")
+        except Exception:
+            pass
+        self._mode_detected = True
 
     async def attach(self, context, page):
         await context.add_init_script(HISTORY_HOOK)
@@ -192,7 +273,7 @@ class DynamicSpider:
                 await page.wait_for_timeout(400)
                 out.extend(await self._harvest_routes(page))
                 if page.url != before:
-                    n = normalize_url(self.target, page.url)
+                    n = normalize_url(self.target, page.url, self.hash_mode)
                     if n and is_in_scope(n, self.target):
                         out.append(n)
                     try:
@@ -213,6 +294,7 @@ class DynamicSpider:
         if resp is None:
             return None
         await page.wait_for_timeout(1500)
+        await self._detect_mode(page)
 
         h = await resp.all_headers()
         self.collected_urls.append({
@@ -339,66 +421,242 @@ async def submit_login(page, pw_input):
     return "Enter"
 
 
-async def browser_login(browser, target, login_route, login_id, login_pw):
-    """브라우저 로그인. 성공 시 (context, cookies, storage) 반환 / 실패 시 (None,...)"""
+def _route_from_url(target_url, full_url):
+    """동일 origin이면 path(+fragment)를 라우트 형태로 반환. 아니면 None."""
+    p = urlparse(full_url)
+    if p.netloc != urlparse(target_url).netloc:
+        return None
+    route = p.path or "/"
+    if p.fragment:
+        route = route + "#" + p.fragment
+    return route
+
+
+def _login_url(target, login_route):
+    """login_route가 path든 hash든 모두 처리. 외부 URL이면 그대로 반환."""
+    if login_route.startswith(("http://", "https://")):
+        return login_route
+    if not login_route.startswith("/"):
+        login_route = "/" + login_route
+    return base_url(target) + login_route
+
+
+async def detect_login_route(browser, target):
+    """홈에서 로그인 링크 탐색 → 후보 라우트 폴백. 라우트 문자열 반환 (실패 시 None)."""
     context = await browser.new_context(user_agent=UA)
     page = await context.new_page()
-    url = base_url(target) + login_route
+
+    # 1) 홈에서 로그인 링크 찾기
+    print("[*] 홈에서 로그인 링크 탐색 중...")
+    try:
+        await page.goto(target, wait_until="networkidle", timeout=20000)
+        await page.wait_for_timeout(1500)
+    except Exception as e:
+        print(f"  [!] 홈 로드 실패: {e}")
+
+    found = None
+    for sel in LOGIN_LINK_SELECTORS:
+        try:
+            els = await page.query_selector_all(sel)
+        except Exception:
+            continue
+        for el in els:
+            try:
+                if not await el.is_visible():
+                    continue
+                # href 우선
+                href = await el.get_attribute("href")
+                if href and not href.startswith(("javascript:", "mailto:", "#")):
+                    resolved = urljoin(page.url, href)
+                    route = _route_from_url(target, resolved)
+                    if route:
+                        found = route
+                        print(f"  [+] 링크에서 발견: {sel} → {found}")
+                        break
+                # href가 fragment-only 거나 없으면 클릭으로 이동
+                before_url = page.url
+                try:
+                    await el.click(timeout=2000, no_wait_after=True)
+                    await page.wait_for_timeout(2000)
+                except Exception:
+                    continue
+                if page.url != before_url:
+                    route = _route_from_url(target, page.url)
+                    pw = await page.query_selector('input[type="password"]')
+                    if route and pw:
+                        found = route
+                        print(f"  [+] 클릭 후 이동 + 패스워드 필드 확인: {found}")
+                        break
+            except Exception:
+                continue
+        if found:
+            break
+
+    # 2) 폴백: 후보 라우트 직접 방문 → 패스워드 필드 존재 시 채택
+    if not found:
+        print("[*] 홈에서 미탐지 — 후보 라우트 시도")
+        for cand in LOGIN_ROUTE_CANDIDATES:
+            url = _login_url(target, cand)
+            try:
+                await page.goto(url, wait_until="networkidle", timeout=15000)
+                await page.wait_for_timeout(1500)
+            except Exception as e:
+                print(f"  [-] {cand}: goto 실패 ({e})")
+                continue
+            try:
+                pw = await page.query_selector('input[type="password"]')
+                ok = pw and await pw.is_visible()
+            except Exception:
+                ok = False
+            if ok:
+                found = cand
+                print(f"  [+] 후보 적중: {cand}")
+                break
+            print(f"  [-] {cand}: 패스워드 필드 없음")
+
+    try:
+        await page.close()
+        await context.close()
+    except Exception:
+        pass
+    return found
+
+
+async def browser_login(browser, target, login_route, login_id, login_pw):
+    """브라우저로 로그인 폼을 채우고 제출. 사이트가 보낸 실제 POST를 가로채 토큰 추출.
+
+    반환: (context, token, cookies, login_meta) — 실패 시 (None, None, None, None)
+    - 토큰은 (1) 로그인 직전·직후 동일 origin POST 응답 본문 재귀 탐색,
+            (2) localStorage/sessionStorage 값에서 JWT 모양 스캔,
+            (3) 쿠키 값에서 JWT 모양 스캔 순으로 시도.
+    """
+    context = await browser.new_context(user_agent=UA)
+    page = await context.new_page()
+    url = _login_url(target, login_route)
     print(f"[*] 로그인 페이지: {url}")
     try:
         await page.goto(url, wait_until="networkidle", timeout=20000)
     except Exception as e:
         print(f"[!] 로그인 페이지 로드 실패: {e}")
-        return None, None, None
+        return None, None, None, None
     await page.wait_for_timeout(1500)
 
     text_in, pw_in, hint = await autodetect_login_form(page)
     if not (text_in and pw_in):
         print("[!] 로그인 폼 자동 탐지 실패")
-        return None, None, None
+        return None, None, None, None
     print(f"[*] id 필드 힌트: {hint!r}")
     await text_in.fill(login_id)
     await pw_in.fill(login_pw)
 
-    login_resp = {"status": None, "url": None}
-    def cap(resp):
+    target_netloc = urlparse(target).netloc
+    captured = []  # 동일 origin POST 응답 모음
+
+    async def on_response(resp):
         try:
-            r = resp.request
-            if r.method == "POST" and "/auth/" in resp.url and "refresh" not in resp.url:
-                login_resp["status"] = resp.status
-                login_resp["url"] = resp.url
+            req = resp.request
+            if req.method != "POST":
+                return
+            if urlparse(resp.url).netloc != target_netloc:
+                return
+            ct = (resp.headers.get("content-type") or "").lower()
+            body = None
+            if "json" in ct:
+                try:
+                    body = await resp.json()
+                except Exception:
+                    try:
+                        body = json.loads(await resp.text())
+                    except Exception:
+                        body = None
+            captured.append({"url": resp.url, "status": resp.status, "body": body})
         except Exception:
             pass
-    page.on("response", cap)
+
+    page.on("response", on_response)
 
     submitted = await submit_login(page, pw_in)
     print(f"[*] 제출: {submitted}")
     await page.wait_for_timeout(3500)
 
     cookies = await context.cookies()
-    storage = await page.evaluate(
-        "() => ({local: Object.keys(localStorage), session: Object.keys(sessionStorage)})"
-    )
-    print(f"[*] 응답: {login_resp.get('status')} {login_resp.get('url')}")
-    print(f"[*] 쿠키 {[c['name'] for c in cookies]}, "
-          f"localStorage {storage['local']}, sessionStorage {storage['session']}")
+    try:
+        storage_keys = await page.evaluate(
+            "() => ({local: Object.keys(localStorage), session: Object.keys(sessionStorage)})"
+        )
+        storage_values = await page.evaluate("""() => {
+            const dump = (s) => {
+                const o = {};
+                for (let i = 0; i < s.length; i++) {
+                    const k = s.key(i);
+                    o[k] = s.getItem(k);
+                }
+                return o;
+            };
+            return { local: dump(localStorage), session: dump(sessionStorage) };
+        }""")
+    except Exception as e:
+        print(f"  [!] storage 읽기 실패: {e}")
+        storage_keys = {"local": [], "session": []}
+        storage_values = {"local": {}, "session": {}}
 
-    has_token = (
-        any(any(k in n.lower() for k in ("token", "auth", "session", "jwt")) for n in [c["name"] for c in cookies])
-        or any(any(k in s.lower() for k in ("token", "auth", "user")) for s in storage["local"])
-        or any(any(k in s.lower() for k in ("token", "auth", "user")) for s in storage["session"])
-    )
-    if not (has_token or login_resp.get("status") == 200):
-        print("[!] 인증 토큰이 확인되지 않음 (그래도 컨텍스트는 반환)")
+    # 토큰 추출 우선순위 1: 캡처된 POST 응답 본문 (성공 status 우선)
+    token = None
+    login_url = None
+    login_body_sample = None
+    for cr in sorted(captured, key=lambda c: 0 if 200 <= (c.get("status") or 0) < 300 else 1):
+        if not cr.get("body"):
+            continue
+        t = extract_token_recursive(cr["body"])
+        if t:
+            token = t
+            login_url = cr["url"]
+            login_body_sample = cr["body"]
+            print(f"[+] 로그인 응답 본문에서 토큰 추출: {login_url}")
+            break
+
+    # 우선순위 2: localStorage/sessionStorage 값
+    if not token:
+        for store_name in ("local", "session"):
+            for k, v in (storage_values.get(store_name) or {}).items():
+                if looks_like_token(v):
+                    token = strip_bearer(v)
+                    print(f"[+] {store_name}Storage[{k!r}]에서 토큰 추출 (len={len(token)})")
+                    break
+            if token:
+                break
+
+    # 우선순위 3: 쿠키 값에서 JWT 형태
+    if not token:
+        for c in cookies:
+            if looks_like_jwt(c.get("value", "")):
+                token = c["value"].strip()
+                print(f"[+] cookie[{c['name']!r}]에서 JWT 추출")
+                break
+
+    print(f"[*] 쿠키: {[c['name'] for c in cookies]}")
+    print(f"[*] localStorage: {storage_keys['local']}, sessionStorage: {storage_keys['session']}")
+    print(f"[*] 캡처된 POST: {len(captured)}건")
+    if token:
+        print(f"[+] 토큰 확보 (len={len(token)})")
+    else:
+        print("[!] 토큰 미확보 — 쿠키 세션만으로 진행")
+
     await page.close()
-    return context, cookies, storage
+    return context, token, cookies, {
+        "login_url": login_url,
+        "login_body_sample": login_body_sample,
+        "captured_posts": [{"url": c["url"], "status": c["status"]} for c in captured],
+        "storage_keys": storage_keys,
+    }
 
 
 # ────────────────────────────────────────────────────────────────
-# HTTP 로그인 (페이로드 키 자동 탐지)
+# 인증 세션 빌드 (브라우저 → requests)
 # ────────────────────────────────────────────────────────────────
 
-def http_login(target, login_path, login_id, login_pw):
+def build_authed_session(target, cookies, token):
+    """브라우저 컨텍스트의 쿠키 + (있다면) Bearer 토큰으로 requests.Session 구성."""
     base = base_url(target)
     s = requests.Session()
     s.headers.update({
@@ -406,26 +664,19 @@ def http_login(target, login_path, login_id, login_pw):
         "Accept": "application/json, text/plain, */*",
         "Origin": base,
         "Referer": base + "/",
-        "Content-Type": "application/json",
     })
-    last = None
-    for key in PAYLOAD_KEY_CANDIDATES:
-        payload = {key: login_id, "password": login_pw}
+    for c in (cookies or []):
         try:
-            r = s.post(base + login_path, json=payload, timeout=10)
-        except Exception as e:
-            last = str(e); continue
-        try:
-            body = r.json()
+            s.cookies.set(
+                c["name"], c["value"],
+                domain=c.get("domain") or urlparse(target).netloc,
+                path=c.get("path") or "/",
+            )
         except Exception:
-            body = {}
-        print(f"  [http-login try {key:>10}] {r.status_code}")
-        if r.status_code == 200:
-            tok = extract_token(body) or extract_token(body.get("data") if isinstance(body, dict) else None)
-            return s, tok, body, key
-        last = body.get("message") if isinstance(body, dict) else None
-    print(f"[!] HTTP 로그인 실패: {last}")
-    return s, None, None, None
+            pass
+    if token:
+        s.headers["Authorization"] = f"Bearer {token}"
+    return s
 
 
 # ────────────────────────────────────────────────────────────────
@@ -475,13 +726,12 @@ def probe_endpoints(target, endpoints, session=None, label="probe"):
 
 class Recon:
     def __init__(self, target, login_id=None, login_pw=None,
-                 login_route="/auth", login_path="/api/auth/login",
+                 login_route=None,
                  explore_authed=False, depth=2, clicks=30, output_dir="recon_out"):
         self.target = target
         self.login_id = login_id
         self.login_pw = login_pw
         self.login_route = login_route
-        self.login_path = login_path
         self.explore_authed = explore_authed
         self.depth = depth
         self.clicks = clicks
@@ -494,7 +744,6 @@ class Recon:
             "config": {
                 "depth": depth, "clicks": clicks,
                 "login_route": login_route if login_id else None,
-                "login_path": login_path if login_id else None,
                 "explore_authed": explore_authed,
                 "authed": bool(login_id),
             },
@@ -510,7 +759,9 @@ class Recon:
         # ── 1) 익명 동적 크롤
         anon = DynamicSpider(self.target, max_depth=self.depth, max_clicks=self.clicks, label="anon")
         await anon.crawl()
+        self._anon_hash_mode = anon.hash_mode
         anon_dict = anon.to_dict()
+        anon_dict["hash_mode"] = anon.hash_mode
         self._save("01_anon_crawl.json", anon_dict)
         self.report["anon_crawl"] = anon_dict
 
@@ -530,8 +781,22 @@ class Recon:
         print("\n[*] (3) 인증 후 재크롤")
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
-            context, cookies, storage = await browser_login(
-                browser, self.target, self.login_route, self.login_id, self.login_pw
+
+            # 사용자가 --login-route를 명시하지 않은 경우 자동 탐지
+            login_route = self.login_route
+            if login_route is None:
+                login_route = await detect_login_route(browser, self.target)
+                if not login_route:
+                    print("[!] 로그인 라우트 탐지 실패 — 인증 단계 스킵")
+                    await browser.close()
+                    self.report["authed"] = {"error": "login_route_not_found"}
+                    self._finalize()
+                    return
+                self.report["config"]["login_route"] = login_route
+                print(f"[*] 사용할 로그인 라우트: {login_route}")
+
+            context, token, login_cookies, login_meta = await browser_login(
+                browser, self.target, login_route, self.login_id, self.login_pw
             )
             if context is None:
                 print("[!] 브라우저 로그인 실패 — 인증 단계 스킵")
@@ -540,7 +805,8 @@ class Recon:
                 self._finalize()
                 return
 
-            authed = DynamicSpider(self.target, max_depth=self.depth, max_clicks=self.clicks, label="authed")
+            authed = DynamicSpider(self.target, max_depth=self.depth, max_clicks=self.clicks,
+                                   label="authed", hash_mode=self._anon_hash_mode)
             authed_storage = await self._crawl_in_context(authed, context, anon_dict["client_routes"])
             authed_cookies = await context.cookies()
             await browser.close()
@@ -548,32 +814,30 @@ class Recon:
         authed_dict = authed.to_dict()
         authed_dict["cookies"] = [{"name": c["name"], "domain": c["domain"]} for c in authed_cookies]
         authed_dict["storage_keys"] = authed_storage
+        authed_dict["login_meta"] = {
+            "login_url": login_meta.get("login_url"),
+            "captured_posts": login_meta.get("captured_posts"),
+            "token_acquired": bool(token),
+        }
         self._save("03_authed_crawl.json", authed_dict)
         self.report["authed_crawl"] = authed_dict
 
-        # ── 4) Bearer 프로브
-        print("\n[*] (4) HTTP 로그인 + Bearer 토큰 프로브")
-        sess, token, body, key = http_login(self.target, self.login_path, self.login_id, self.login_pw)
-        if token:
-            print(f"[+] access token (len={len(token)}) — payload key: {key!r}")
-            sess.headers["Authorization"] = f"Bearer {token}"
-        else:
-            print("[!] 토큰 미확보 — 쿠키만으로 진행")
-
-        # 익명 + 인증 단계에서 발견된 모든 엔드포인트 합치기
+        # ── 4) 인증 세션 프로브 (브라우저에서 추출한 쿠키 + 토큰 사용)
+        print("\n[*] (4) 인증 세션으로 엔드포인트 프로브")
+        sess = build_authed_session(self.target, authed_cookies, token)
         all_eps = set(anon_dict["api_endpoints"]) | set(authed_dict["api_endpoints"])
-        token_results = probe_endpoints(self.target, sorted(all_eps), session=sess, label="token")
+        probe_results = probe_endpoints(self.target, sorted(all_eps), session=sess, label="authed")
         self._save("04_token_probe.json", {
             "target": self.target,
             "token_acquired": bool(token),
-            "payload_key": key,
-            "login_response_sample": body if isinstance(body, dict) else None,
-            "results": token_results,
+            "login_url": login_meta.get("login_url"),
+            "login_response_sample": login_meta.get("login_body_sample"),
+            "results": probe_results,
         })
-        self.report["token_probe"] = token_results
+        self.report["token_probe"] = probe_results
         self.report["authed"] = {
             "token_acquired": bool(token),
-            "payload_key": key,
+            "login_url": login_meta.get("login_url"),
         }
 
         self._finalize()
@@ -690,8 +954,8 @@ def main():
     ap.add_argument("target", help="타겟 URL (예: https://example.com/)")
     ap.add_argument("--id", dest="login_id", help="로그인 ID (생략 시 익명 단계만)")
     ap.add_argument("--pw", dest="login_pw", help="로그인 패스워드")
-    ap.add_argument("--login-route", default="/auth", help="로그인 페이지 라우트 (기본 /auth)")
-    ap.add_argument("--login-path", default="/api/auth/login", help="HTTP 로그인 API 경로")
+    ap.add_argument("--login-route", default=None,
+                    help="로그인 페이지 라우트 (생략 시 홈 링크 → 후보 라우트 순으로 자동 탐지)")
     ap.add_argument("--explore-authed", action="store_true",
                     help="인증 후에도 클릭 탐색 수행 (기본: 라우트 방문만)")
     ap.add_argument("--depth", type=int, default=2)
@@ -706,7 +970,7 @@ def main():
     recon = Recon(
         target=args.target,
         login_id=args.login_id, login_pw=args.login_pw,
-        login_route=args.login_route, login_path=args.login_path,
+        login_route=args.login_route,
         explore_authed=args.explore_authed,
         depth=args.depth, clicks=args.clicks,
         output_dir=args.output_dir,
