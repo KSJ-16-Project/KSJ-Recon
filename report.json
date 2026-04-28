@@ -1,0 +1,707 @@
+{
+  "target": "https://hotspotfan.online/",
+  "timestamp": "2026-04-28T09:34:59.285767+00:00",
+  "config": {
+    "depth": 2,
+    "clicks": 30,
+    "login_route": "/auth",
+    "explore_authed": false,
+    "authed": true
+  },
+  "anon_crawl": {
+    "label": "anon",
+    "target": "https://hotspotfan.online/",
+    "visited_urls": [
+      {
+        "url": "https://hotspotfan.online/",
+        "status": 200,
+        "content_type": "text/html",
+        "depth": 0
+      },
+      {
+        "url": "https://hotspotfan.online/ranking",
+        "status": 200,
+        "content_type": "text/html",
+        "depth": 1
+      },
+      {
+        "url": "https://hotspotfan.online/influencer/42986b5e-17e8-4c9f-821f-4b6856395588",
+        "status": 200,
+        "content_type": "text/html",
+        "depth": 1
+      },
+      {
+        "url": "https://hotspotfan.online/influencer/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+        "status": 200,
+        "content_type": "text/html",
+        "depth": 1
+      },
+      {
+        "url": "https://hotspotfan.online/influencer/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+        "status": 200,
+        "content_type": "text/html",
+        "depth": 1
+      },
+      {
+        "url": "https://hotspotfan.online/products/0b48a0e4-f742-450f-8d26-f00df36618e4",
+        "status": 200,
+        "content_type": "text/html",
+        "depth": 1
+      }
+    ],
+    "client_routes": [
+      "https://hotspotfan.online/",
+      "https://hotspotfan.online/influencer/42986b5e-17e8-4c9f-821f-4b6856395588",
+      "https://hotspotfan.online/influencer/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+      "https://hotspotfan.online/influencer/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+      "https://hotspotfan.online/products/0b48a0e4-f742-450f-8d26-f00df36618e4",
+      "https://hotspotfan.online/ranking"
+    ],
+    "api_endpoints": [
+      "GET /api/banners",
+      "GET /api/categories",
+      "GET /api/posts/seller/42986b5e-17e8-4c9f-821f-4b6856395588",
+      "GET /api/posts/seller/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+      "GET /api/posts/seller/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+      "GET /api/products",
+      "GET /api/products/0b48a0e4-f742-450f-8d26-f00df36618e4",
+      "GET /api/products/0b48a0e4-f742-450f-8d26-f00df36618e4/comments",
+      "GET /api/products/0b48a0e4-f742-450f-8d26-f00df36618e4/likes",
+      "GET /api/products/seller/42986b5e-17e8-4c9f-821f-4b6856395588",
+      "GET /api/products/seller/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+      "GET /api/products/seller/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+      "GET /api/ranking/daily",
+      "GET /api/ranking/monthly",
+      "GET /api/ranking/realtime",
+      "GET /api/ranking/weekly",
+      "GET /api/users/managers/42986b5e-17e8-4c9f-821f-4b6856395588",
+      "GET /api/users/managers/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+      "GET /api/users/managers/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+      "POST /api/auth/refresh",
+      "POST /cdn-cgi/rum"
+    ],
+    "api_endpoints_with_status": [
+      {
+        "method": "GET",
+        "path": "/api/banners",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/categories",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/posts/seller/42986b5e-17e8-4c9f-821f-4b6856395588",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/posts/seller/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/posts/seller/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/products",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/products/0b48a0e4-f742-450f-8d26-f00df36618e4",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/products/0b48a0e4-f742-450f-8d26-f00df36618e4/comments",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/products/0b48a0e4-f742-450f-8d26-f00df36618e4/likes",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/products/seller/42986b5e-17e8-4c9f-821f-4b6856395588",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/products/seller/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/products/seller/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/ranking/daily",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/ranking/monthly",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/ranking/realtime",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/ranking/weekly",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/users/managers/42986b5e-17e8-4c9f-821f-4b6856395588",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/users/managers/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/users/managers/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/refresh",
+        "status": 401
+      },
+      {
+        "method": "POST",
+        "path": "/cdn-cgi/rum",
+        "status": 204
+      }
+    ],
+    "headers": {
+      "server": "cloudflare"
+    },
+    "hash_mode": false
+  },
+  "anon_probe": [
+    {
+      "method": "GET",
+      "path": "/api/banners",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 796,
+      "sample": "[{\"id\":\"68d3385e-229c-4024-80a4-ae0ded4ba5b2\",\"title\":\"면 티셔츠\",\"position\":\"MAIN\",\"sortOrder\":0,\"subtitle\":\"할인 이벤트 진행\",\"linkUrl\":null,\"imageUrl\":\"https://hotspot-images-834078600268.s3.ap-northeast-2.amazonaws.com/banners/50129c58-3fdf-422b-93f9-832040e434a2.jpg\",\"startAt\":\"2026-04-05T12:10:00\",\"endAt"
+    },
+    {
+      "method": "GET",
+      "path": "/api/categories",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 764,
+      "sample": "{\"success\":true,\"data\":{\"content\":[{\"id\":1,\"name\":\"게임\",\"slug\":\"game\",\"parentId\":null},{\"id\":2,\"name\":\"헬스\",\"slug\":\"health\",\"parentId\":null},{\"id\":3,\"name\":\"아이돌\",\"slug\":\"idol\",\"parentId\":null},{\"id\":4,\"name\":\"먹방\",\"slug\":\"mukbang\",\"parentId\":null},{\"id\":5,\"name\":\"패션\",\"slug\":\"fashion\",\"parentId\":null},{"
+    },
+    {
+      "method": "GET",
+      "path": "/api/posts/seller/42986b5e-17e8-4c9f-821f-4b6856395588",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 474,
+      "sample": "{\"success\":true,\"data\":[{\"id\":\"ae0939a5-4db3-4a98-9dce-51dfa05e70b9\",\"sellerId\":\"42986b5e-17e8-4c9f-821f-4b6856395588\",\"sellerNickname\":\"testie1\",\"title\":\"XXE\",\"content\":\"<?xml version=\\\"1.0\\\" encoding=\\\"UTF-8\\\"?>\\n<!DOCTYPE foo [\\n <!ENTITY xxe SYSTEM \\\"file:///etc/passwd\\\">\\n]>\\n<stockCheck>\\n <pr"
+    },
+    {
+      "method": "GET",
+      "path": "/api/posts/seller/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 564,
+      "sample": "{\"success\":true,\"data\":[{\"id\":\"729f1619-cdf0-48ad-acd5-a3b30bfe0b0d\",\"sellerId\":\"7748dcd2-f7fc-4052-a34e-4f0470db92a2\",\"sellerNickname\":\"타키\",\"title\":\"공지 테스트\",\"content\":\"아아\",\"type\":\"NOTICE\",\"createdAt\":\"2026-04-10 08:00\"},{\"id\":\"ee51b3cb-1ee9-4509-a3d7-b6cfe6f5bbe7\",\"sellerId\":\"7748dcd2-f7fc-4052-a34"
+    },
+    {
+      "method": "GET",
+      "path": "/api/posts/seller/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 108,
+      "sample": "{\"success\":true,\"data\":[],\"errorCode\":null,\"message\":null,\"timestamp\":\"2026-04-28T18:37:09.161257963+09:00\"}"
+    },
+    {
+      "method": "GET",
+      "path": "/api/products",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 16556,
+      "sample": "{\"success\":true,\"data\":{\"content\":[{\"id\":\"031c8240-541f-462c-926c-7943e1c72692\",\"name\":\"<img src=x onerror=alert(document.domain)>\",\"price\":100.00,\"discountType\":\"NONE\",\"discountValue\":0.00,\"discountRateDisplay\":0,\"discountedPrice\":100.00,\"description\":\"<img src=x onerror=alert(document.domain)>\",\"i"
+    },
+    {
+      "method": "GET",
+      "path": "/api/products/0b48a0e4-f742-450f-8d26-f00df36618e4",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 1120,
+      "sample": "{\"success\":true,\"data\":{\"id\":\"0b48a0e4-f742-450f-8d26-f00df36618e4\",\"name\":\"토너\",\"price\":1000.00,\"discountType\":\"NONE\",\"discountValue\":0.00,\"discountRateDisplay\":0,\"discountedPrice\":1000.00,\"description\":\"토너입니다\",\"imageUrl\":\"https://hotspot-images-834078600268.s3.ap-northeast-2.amazonaws.com/products/"
+    },
+    {
+      "method": "GET",
+      "path": "/api/products/0b48a0e4-f742-450f-8d26-f00df36618e4/comments",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 421,
+      "sample": "{\"success\":true,\"data\":{\"content\":[],\"pageable\":{\"pageNumber\":0,\"pageSize\":20,\"sort\":{\"unsorted\":true,\"sorted\":false,\"empty\":true},\"offset\":0,\"unpaged\":false,\"paged\":true},\"totalPages\":0,\"totalElements\":0,\"last\":true,\"numberOfElements\":0,\"size\":20,\"number\":0,\"sort\":{\"unsorted\":true,\"sorted\":false,\"e"
+    },
+    {
+      "method": "GET",
+      "path": "/api/products/0b48a0e4-f742-450f-8d26-f00df36618e4/likes",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 135,
+      "sample": "{\"success\":true,\"data\":{\"liked\":false,\"likeCount\":0},\"errorCode\":null,\"message\":null,\"timestamp\":\"2026-04-28T18:37:09.827628156+09:00\"}"
+    },
+    {
+      "method": "GET",
+      "path": "/api/products/seller/42986b5e-17e8-4c9f-821f-4b6856395588",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 2421,
+      "sample": "{\"success\":true,\"data\":[{\"id\":\"bc9aede7-2c61-47da-af9f-a0ad336bfdb5\",\"name\":\"SSTI테스트\",\"price\":0.00,\"discountType\":\"NONE\",\"discountValue\":0.00,\"discountRateDisplay\":0,\"discountedPrice\":0.00,\"description\":\"#{7*7}\",\"imageUrl\":null,\"imageUrls\":null,\"galleryImages\":null,\"totalStock\":978,\"variants\":[{\"id\""
+    },
+    {
+      "method": "GET",
+      "path": "/api/products/seller/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 8919,
+      "sample": "{\"success\":true,\"data\":[{\"id\":\"0b48a0e4-f742-450f-8d26-f00df36618e4\",\"name\":\"토너\",\"price\":1000.00,\"discountType\":\"NONE\",\"discountValue\":0.00,\"discountRateDisplay\":0,\"discountedPrice\":1000.00,\"description\":\"토너입니다\",\"imageUrl\":\"https://hotspot-images-834078600268.s3.ap-northeast-2.amazonaws.com/products"
+    },
+    {
+      "method": "GET",
+      "path": "/api/products/seller/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 4843,
+      "sample": "{\"success\":true,\"data\":[{\"id\":\"748db1ee-c5d2-4610-8277-d33b8d66e83e\",\"name\":\"가방3\",\"price\":30000.00,\"discountType\":\"NONE\",\"discountValue\":0.00,\"discountRateDisplay\":0,\"discountedPrice\":30000.00,\"description\":\"30000\",\"imageUrl\":\"https://hotspot-images-834078600268.s3.ap-northeast-2.amazonaws.com/produ"
+    },
+    {
+      "method": "GET",
+      "path": "/api/ranking/daily",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 991,
+      "sample": "[{\"rank\":1,\"userId\":\"42986b5e-17e8-4c9f-821f-4b6856395588\",\"nickname\":\"testie1\",\"profileImageUrl\":\"https://hotspot-images-834078600268.s3.ap-northeast-2.amazonaws.com/profiles/25b777d3-3fe5-4467-bda5-77e9c015f9ba.jpg\",\"totalAmount\":100000998},{\"rank\":2,\"userId\":\"8434f51b-4c7b-42cc-97b7-5bd134ab9ee5\""
+    },
+    {
+      "method": "GET",
+      "path": "/api/ranking/monthly",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 1240,
+      "sample": "[{\"rank\":1,\"userId\":\"42986b5e-17e8-4c9f-821f-4b6856395588\",\"nickname\":\"testie1\",\"profileImageUrl\":\"https://hotspot-images-834078600268.s3.ap-northeast-2.amazonaws.com/profiles/25b777d3-3fe5-4467-bda5-77e9c015f9ba.jpg\",\"totalAmount\":100000998},{\"rank\":2,\"userId\":\"8434f51b-4c7b-42cc-97b7-5bd134ab9ee5\""
+    },
+    {
+      "method": "GET",
+      "path": "/api/ranking/realtime",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 2,
+      "sample": "[]"
+    },
+    {
+      "method": "GET",
+      "path": "/api/ranking/weekly",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 1240,
+      "sample": "[{\"rank\":1,\"userId\":\"42986b5e-17e8-4c9f-821f-4b6856395588\",\"nickname\":\"testie1\",\"profileImageUrl\":\"https://hotspot-images-834078600268.s3.ap-northeast-2.amazonaws.com/profiles/25b777d3-3fe5-4467-bda5-77e9c015f9ba.jpg\",\"totalAmount\":100000998},{\"rank\":2,\"userId\":\"8434f51b-4c7b-42cc-97b7-5bd134ab9ee5\""
+    },
+    {
+      "method": "GET",
+      "path": "/api/users/managers/42986b5e-17e8-4c9f-821f-4b6856395588",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 512,
+      "sample": "{\"success\":true,\"data\":{\"loginId\":\"testie1\",\"userId\":\"42986b5e-17e8-4c9f-821f-4b6856395588\",\"bio\":\"<?xml version=\\\"1.0\\\" encoding=\\\"UTF-8\\\"?>\\n<!DOCTYPE foo [\\n <!ENTITY xxe SYSTEM \\\"file:///etc/passwd\\\">\\n]>\\n<stockCheck>\\n <productId>&xxe;</productId>\\n</stockCheck>\",\"nickname\":\"testie1\",\"profileI"
+    },
+    {
+      "method": "GET",
+      "path": "/api/users/managers/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 358,
+      "sample": "{\"success\":true,\"data\":{\"loginId\":\"lsyun1234\",\"userId\":\"7748dcd2-f7fc-4052-a34e-4f0470db92a2\",\"bio\":\"커피 한 잔\",\"nickname\":\"타키\",\"profileImageUrl\":\"https://hotspot-images-834078600268.s3.ap-northeast-2.amazonaws.com/profiles/a86e698f-7161-4e9f-9069-d63acf6fef62.jpg\"},\"errorCode\":null,\"message\":null,\"tim"
+    },
+    {
+      "method": "GET",
+      "path": "/api/users/managers/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 261,
+      "sample": "{\"success\":true,\"data\":{\"loginId\":\"titan1234\",\"userId\":\"8434f51b-4c7b-42cc-97b7-5bd134ab9ee5\",\"bio\":\"<script>alert(1)</script>\",\"nickname\":\"진격의거인\",\"profileImageUrl\":\"\"},\"errorCode\":null,\"message\":null,\"timestamp\":\"2026-04-28T18:37:11.325050342+09:00\"}"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/refresh",
+      "skipped": "non-GET"
+    },
+    {
+      "method": "POST",
+      "path": "/cdn-cgi/rum",
+      "skipped": "cloudflare"
+    }
+  ],
+  "authed_crawl": {
+    "label": "authed",
+    "target": "https://hotspotfan.online/",
+    "visited_urls": [
+      {
+        "url": "https://hotspotfan.online/",
+        "status": 200,
+        "content_type": "text/html",
+        "depth": 2
+      },
+      {
+        "url": "https://hotspotfan.online/influencer/42986b5e-17e8-4c9f-821f-4b6856395588",
+        "status": 200,
+        "content_type": "text/html",
+        "depth": 2
+      },
+      {
+        "url": "https://hotspotfan.online/influencer/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+        "status": 200,
+        "content_type": "text/html",
+        "depth": 2
+      },
+      {
+        "url": "https://hotspotfan.online/influencer/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+        "status": 200,
+        "content_type": "text/html",
+        "depth": 2
+      },
+      {
+        "url": "https://hotspotfan.online/products/0b48a0e4-f742-450f-8d26-f00df36618e4",
+        "status": 200,
+        "content_type": "text/html",
+        "depth": 2
+      },
+      {
+        "url": "https://hotspotfan.online/ranking",
+        "status": 200,
+        "content_type": "text/html",
+        "depth": 2
+      }
+    ],
+    "client_routes": [],
+    "api_endpoints": [
+      "GET /api/banners",
+      "GET /api/categories",
+      "GET /api/posts/seller/42986b5e-17e8-4c9f-821f-4b6856395588",
+      "GET /api/posts/seller/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+      "GET /api/posts/seller/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+      "GET /api/products",
+      "GET /api/products/0b48a0e4-f742-450f-8d26-f00df36618e4",
+      "GET /api/products/0b48a0e4-f742-450f-8d26-f00df36618e4/comments",
+      "GET /api/products/0b48a0e4-f742-450f-8d26-f00df36618e4/likes",
+      "GET /api/products/seller/42986b5e-17e8-4c9f-821f-4b6856395588",
+      "GET /api/products/seller/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+      "GET /api/products/seller/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+      "GET /api/ranking/weekly",
+      "GET /api/users/managers/42986b5e-17e8-4c9f-821f-4b6856395588",
+      "GET /api/users/managers/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+      "GET /api/users/managers/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+      "POST /api/auth/refresh",
+      "POST /cdn-cgi/rum"
+    ],
+    "api_endpoints_with_status": [
+      {
+        "method": "GET",
+        "path": "/api/banners",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/categories",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/posts/seller/42986b5e-17e8-4c9f-821f-4b6856395588",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/posts/seller/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/posts/seller/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/products",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/products/0b48a0e4-f742-450f-8d26-f00df36618e4",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/products/0b48a0e4-f742-450f-8d26-f00df36618e4/comments",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/products/0b48a0e4-f742-450f-8d26-f00df36618e4/likes",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/products/seller/42986b5e-17e8-4c9f-821f-4b6856395588",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/products/seller/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/products/seller/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/ranking/weekly",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/users/managers/42986b5e-17e8-4c9f-821f-4b6856395588",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/users/managers/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/api/users/managers/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/api/auth/refresh",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/cdn-cgi/rum",
+        "status": 204
+      }
+    ],
+    "headers": {
+      "server": "cloudflare"
+    },
+    "cookies": [
+      {
+        "name": "refreshToken",
+        "domain": "hotspotfan.online"
+      }
+    ],
+    "storage_keys": {
+      "local": [
+        "currentUser"
+      ],
+      "session": []
+    },
+    "login_meta": {
+      "login_url": "https://hotspotfan.online/api/auth/login",
+      "captured_posts": [
+        {
+          "url": "https://hotspotfan.online/api/auth/login",
+          "status": 200
+        }
+      ],
+      "token_acquired": true
+    }
+  },
+  "token_probe": [
+    {
+      "method": "GET",
+      "path": "/api/banners",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 796,
+      "sample": "[{\"id\":\"68d3385e-229c-4024-80a4-ae0ded4ba5b2\",\"title\":\"면 티셔츠\",\"position\":\"MAIN\",\"sortOrder\":0,\"subtitle\":\"할인 이벤트 진행\",\"linkUrl\":null,\"imageUrl\":\"https://hotspot-images-834078600268.s3.ap-northeast-2.amazonaws.com/banners/50129c58-3fdf-422b-93f9-832040e434a2.jpg\",\"startAt\":\"2026-04-05T12:10:00\",\"endAt"
+    },
+    {
+      "method": "GET",
+      "path": "/api/categories",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 764,
+      "sample": "{\"success\":true,\"data\":{\"content\":[{\"id\":1,\"name\":\"게임\",\"slug\":\"game\",\"parentId\":null},{\"id\":2,\"name\":\"헬스\",\"slug\":\"health\",\"parentId\":null},{\"id\":3,\"name\":\"아이돌\",\"slug\":\"idol\",\"parentId\":null},{\"id\":4,\"name\":\"먹방\",\"slug\":\"mukbang\",\"parentId\":null},{\"id\":5,\"name\":\"패션\",\"slug\":\"fashion\",\"parentId\":null},{"
+    },
+    {
+      "method": "GET",
+      "path": "/api/posts/seller/42986b5e-17e8-4c9f-821f-4b6856395588",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 474,
+      "sample": "{\"success\":true,\"data\":[{\"id\":\"ae0939a5-4db3-4a98-9dce-51dfa05e70b9\",\"sellerId\":\"42986b5e-17e8-4c9f-821f-4b6856395588\",\"sellerNickname\":\"testie1\",\"title\":\"XXE\",\"content\":\"<?xml version=\\\"1.0\\\" encoding=\\\"UTF-8\\\"?>\\n<!DOCTYPE foo [\\n <!ENTITY xxe SYSTEM \\\"file:///etc/passwd\\\">\\n]>\\n<stockCheck>\\n <pr"
+    },
+    {
+      "method": "GET",
+      "path": "/api/posts/seller/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 564,
+      "sample": "{\"success\":true,\"data\":[{\"id\":\"729f1619-cdf0-48ad-acd5-a3b30bfe0b0d\",\"sellerId\":\"7748dcd2-f7fc-4052-a34e-4f0470db92a2\",\"sellerNickname\":\"타키\",\"title\":\"공지 테스트\",\"content\":\"아아\",\"type\":\"NOTICE\",\"createdAt\":\"2026-04-10 08:00\"},{\"id\":\"ee51b3cb-1ee9-4509-a3d7-b6cfe6f5bbe7\",\"sellerId\":\"7748dcd2-f7fc-4052-a34"
+    },
+    {
+      "method": "GET",
+      "path": "/api/posts/seller/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 108,
+      "sample": "{\"success\":true,\"data\":[],\"errorCode\":null,\"message\":null,\"timestamp\":\"2026-04-28T18:37:49.417582460+09:00\"}"
+    },
+    {
+      "method": "GET",
+      "path": "/api/products",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 16556,
+      "sample": "{\"success\":true,\"data\":{\"content\":[{\"id\":\"031c8240-541f-462c-926c-7943e1c72692\",\"name\":\"<img src=x onerror=alert(document.domain)>\",\"price\":100.00,\"discountType\":\"NONE\",\"discountValue\":0.00,\"discountRateDisplay\":0,\"discountedPrice\":100.00,\"description\":\"<img src=x onerror=alert(document.domain)>\",\"i"
+    },
+    {
+      "method": "GET",
+      "path": "/api/products/0b48a0e4-f742-450f-8d26-f00df36618e4",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 1120,
+      "sample": "{\"success\":true,\"data\":{\"id\":\"0b48a0e4-f742-450f-8d26-f00df36618e4\",\"name\":\"토너\",\"price\":1000.00,\"discountType\":\"NONE\",\"discountValue\":0.00,\"discountRateDisplay\":0,\"discountedPrice\":1000.00,\"description\":\"토너입니다\",\"imageUrl\":\"https://hotspot-images-834078600268.s3.ap-northeast-2.amazonaws.com/products/"
+    },
+    {
+      "method": "GET",
+      "path": "/api/products/0b48a0e4-f742-450f-8d26-f00df36618e4/comments",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 421,
+      "sample": "{\"success\":true,\"data\":{\"content\":[],\"pageable\":{\"pageNumber\":0,\"pageSize\":20,\"sort\":{\"unsorted\":true,\"sorted\":false,\"empty\":true},\"offset\":0,\"unpaged\":false,\"paged\":true},\"totalPages\":0,\"totalElements\":0,\"last\":true,\"numberOfElements\":0,\"size\":20,\"number\":0,\"sort\":{\"unsorted\":true,\"sorted\":false,\"e"
+    },
+    {
+      "method": "GET",
+      "path": "/api/products/0b48a0e4-f742-450f-8d26-f00df36618e4/likes",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 135,
+      "sample": "{\"success\":true,\"data\":{\"liked\":false,\"likeCount\":0},\"errorCode\":null,\"message\":null,\"timestamp\":\"2026-04-28T18:37:50.339912782+09:00\"}"
+    },
+    {
+      "method": "GET",
+      "path": "/api/products/seller/42986b5e-17e8-4c9f-821f-4b6856395588",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 2421,
+      "sample": "{\"success\":true,\"data\":[{\"id\":\"bc9aede7-2c61-47da-af9f-a0ad336bfdb5\",\"name\":\"SSTI테스트\",\"price\":0.00,\"discountType\":\"NONE\",\"discountValue\":0.00,\"discountRateDisplay\":0,\"discountedPrice\":0.00,\"description\":\"#{7*7}\",\"imageUrl\":null,\"imageUrls\":null,\"galleryImages\":null,\"totalStock\":978,\"variants\":[{\"id\""
+    },
+    {
+      "method": "GET",
+      "path": "/api/products/seller/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 8919,
+      "sample": "{\"success\":true,\"data\":[{\"id\":\"0b48a0e4-f742-450f-8d26-f00df36618e4\",\"name\":\"토너\",\"price\":1000.00,\"discountType\":\"NONE\",\"discountValue\":0.00,\"discountRateDisplay\":0,\"discountedPrice\":1000.00,\"description\":\"토너입니다\",\"imageUrl\":\"https://hotspot-images-834078600268.s3.ap-northeast-2.amazonaws.com/products"
+    },
+    {
+      "method": "GET",
+      "path": "/api/products/seller/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 4843,
+      "sample": "{\"success\":true,\"data\":[{\"id\":\"748db1ee-c5d2-4610-8277-d33b8d66e83e\",\"name\":\"가방3\",\"price\":30000.00,\"discountType\":\"NONE\",\"discountValue\":0.00,\"discountRateDisplay\":0,\"discountedPrice\":30000.00,\"description\":\"30000\",\"imageUrl\":\"https://hotspot-images-834078600268.s3.ap-northeast-2.amazonaws.com/produ"
+    },
+    {
+      "method": "GET",
+      "path": "/api/ranking/daily",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 991,
+      "sample": "[{\"rank\":1,\"userId\":\"42986b5e-17e8-4c9f-821f-4b6856395588\",\"nickname\":\"testie1\",\"profileImageUrl\":\"https://hotspot-images-834078600268.s3.ap-northeast-2.amazonaws.com/profiles/25b777d3-3fe5-4467-bda5-77e9c015f9ba.jpg\",\"totalAmount\":100000998},{\"rank\":2,\"userId\":\"8434f51b-4c7b-42cc-97b7-5bd134ab9ee5\""
+    },
+    {
+      "method": "GET",
+      "path": "/api/ranking/monthly",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 1240,
+      "sample": "[{\"rank\":1,\"userId\":\"42986b5e-17e8-4c9f-821f-4b6856395588\",\"nickname\":\"testie1\",\"profileImageUrl\":\"https://hotspot-images-834078600268.s3.ap-northeast-2.amazonaws.com/profiles/25b777d3-3fe5-4467-bda5-77e9c015f9ba.jpg\",\"totalAmount\":100000998},{\"rank\":2,\"userId\":\"8434f51b-4c7b-42cc-97b7-5bd134ab9ee5\""
+    },
+    {
+      "method": "GET",
+      "path": "/api/ranking/realtime",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 2,
+      "sample": "[]"
+    },
+    {
+      "method": "GET",
+      "path": "/api/ranking/weekly",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 1240,
+      "sample": "[{\"rank\":1,\"userId\":\"42986b5e-17e8-4c9f-821f-4b6856395588\",\"nickname\":\"testie1\",\"profileImageUrl\":\"https://hotspot-images-834078600268.s3.ap-northeast-2.amazonaws.com/profiles/25b777d3-3fe5-4467-bda5-77e9c015f9ba.jpg\",\"totalAmount\":100000998},{\"rank\":2,\"userId\":\"8434f51b-4c7b-42cc-97b7-5bd134ab9ee5\""
+    },
+    {
+      "method": "GET",
+      "path": "/api/users/managers/42986b5e-17e8-4c9f-821f-4b6856395588",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 512,
+      "sample": "{\"success\":true,\"data\":{\"loginId\":\"testie1\",\"userId\":\"42986b5e-17e8-4c9f-821f-4b6856395588\",\"bio\":\"<?xml version=\\\"1.0\\\" encoding=\\\"UTF-8\\\"?>\\n<!DOCTYPE foo [\\n <!ENTITY xxe SYSTEM \\\"file:///etc/passwd\\\">\\n]>\\n<stockCheck>\\n <productId>&xxe;</productId>\\n</stockCheck>\",\"nickname\":\"testie1\",\"profileI"
+    },
+    {
+      "method": "GET",
+      "path": "/api/users/managers/7748dcd2-f7fc-4052-a34e-4f0470db92a2",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 358,
+      "sample": "{\"success\":true,\"data\":{\"loginId\":\"lsyun1234\",\"userId\":\"7748dcd2-f7fc-4052-a34e-4f0470db92a2\",\"bio\":\"커피 한 잔\",\"nickname\":\"타키\",\"profileImageUrl\":\"https://hotspot-images-834078600268.s3.ap-northeast-2.amazonaws.com/profiles/a86e698f-7161-4e9f-9069-d63acf6fef62.jpg\"},\"errorCode\":null,\"message\":null,\"tim"
+    },
+    {
+      "method": "GET",
+      "path": "/api/users/managers/8434f51b-4c7b-42cc-97b7-5bd134ab9ee5",
+      "status": 200,
+      "content_type": "application/json",
+      "size": 261,
+      "sample": "{\"success\":true,\"data\":{\"loginId\":\"titan1234\",\"userId\":\"8434f51b-4c7b-42cc-97b7-5bd134ab9ee5\",\"bio\":\"<script>alert(1)</script>\",\"nickname\":\"진격의거인\",\"profileImageUrl\":\"\"},\"errorCode\":null,\"message\":null,\"timestamp\":\"2026-04-28T18:37:52.238554034+09:00\"}"
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/refresh",
+      "skipped": "non-GET"
+    },
+    {
+      "method": "POST",
+      "path": "/cdn-cgi/rum",
+      "skipped": "cloudflare"
+    }
+  ],
+  "authed": {
+    "token_acquired": true,
+    "login_url": "https://hotspotfan.online/api/auth/login"
+  }
+}
