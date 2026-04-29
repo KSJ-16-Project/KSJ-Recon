@@ -1,5 +1,6 @@
 import nmap
 import json
+# import middleware  # 미들웨어 임포트
 from datetime import datetime
 
 
@@ -10,7 +11,11 @@ class NmapScanner:
         else:
             self.nm = nmap.PortScanner()
 
-    def scan(self, target, arguments='-sS -sV --open -p- -T4'):
+    def scan(self, target, level=1):
+        if (level == 2):
+            arguments='-sS -sV --open -p- -T4' # 풀스캔
+        else:
+            arguments='-sS -sV --open -T4' # 라이트스캔 상위 1000개 포트만
         self.nm.scan(hosts=target, arguments=arguments)
         return self._parse_result(target)
 
@@ -47,7 +52,13 @@ class NmapScanner:
 
             result["hosts"].append(host_data)
 
-        return result
+        return self.connect_middle(result) # 미들 미구현으로인해서 현재는 정상동작 안함
+    
+    # 연동부 임시 함수들로 구현했습니다
+    def connect_middle(self, data):
+        conn = middleware()
+        conn.middlefunc(data)
+
 
     def save_json(self, data, filename="nmap_result.json"):
         with open(filename, "w") as f:
