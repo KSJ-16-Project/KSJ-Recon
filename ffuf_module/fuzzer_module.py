@@ -84,8 +84,8 @@ class AggressiveFuzzer:
             2: "raft-large-directories.txt",   # 하드: ~62,000개
         },
         "subdomain": {
-        1: "subdomains-top1million-5000.txt",
-        2: "subdomains-top1million-20000.txt",
+            1: "subdomains-top1million-5000.txt",
+            2: "subdomains-top1million-20000.txt",
         },
     }
 
@@ -110,6 +110,7 @@ class AggressiveFuzzer:
             "recursion": True,
         }
     }
+
     # 위험도 판단 패턴
     HIGH_RISK = [
         ".git", ".env", "admin", "backup", "config",
@@ -222,7 +223,9 @@ class AggressiveFuzzer:
 
         # 난이도별 옵션 결정
         opts = self.OPTIONS.get(difficulty, self.OPTIONS[1])
-        threads     = options.get("threads", opts["threads"])
+        threads = options.get("threads", opts["threads"])
+
+        # 서브도메인/디렉터리 timeout 분리
         if mode == "subdomain":
             timeout_sec = options.get("timeout_sec", opts["subdomain_timeout_sec"])
             options.setdefault("timeout", 3)   # 개별 요청 timeout 3초
@@ -379,7 +382,6 @@ class AggressiveFuzzer:
                     "length": item.get("length", 0),
                     "risk":   self._check_risk(url),
                 }
-                # recursion 사용 시 depth 추가
                 if recursion:
                     entry["depth"] = self._calc_url_depth(url)
 
@@ -443,13 +445,13 @@ class AggressiveFuzzer:
             if not save_path.is_absolute():
                 save_path = self.base_dir / save_path
         else:
-            timestamp = getattr(self, "_run_timestamp", datetime.now().strftime("%Y%m%d_%H%M%S"))
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             host      = urlparse(self.target).netloc or self.target
             safe_host = "".join(
                 c if c.isalnum() or c in "-_" else "_" for c in host
             )
-            mode     = result.get("mode", "unknown")
-            filename = f"fuzzer_{mode}.json"
+            mode      = result.get("mode", "unknown")
+            filename  = f"fuzzer_{mode}.json"
 
             folder_name = f"{safe_host}_{timestamp}"
             save_dir = self.base_dir / results_dir / folder_name
