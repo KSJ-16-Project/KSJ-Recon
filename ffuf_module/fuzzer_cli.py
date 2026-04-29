@@ -135,11 +135,10 @@ def print_results(result: dict):
         return
 
     if mode == "subdomain":
-        # 상태 코드별로 그룹핑해서 출력
         for item in results:
             schemes = ",".join(item.get("schemes", ["http"]))
-            host = item.get("host", item["url"])
-            print(f"  [{item['status']}] {host}  ({schemes})  length: {item['length']}")
+            host = item.get("host", "")
+            print(f"  [{item['status']}] {host}  ({schemes})")
 
     elif mode == "directory":
         for item in results:

@@ -310,17 +310,22 @@ class AggressiveFuzzer:
         normalized = []
         for item in raw.get("results", []):
             url = item.get("url", "")
-            entry = {
-                "url": url,
-                "status": item.get("status", 0),
-                "length": item.get("length", 0),
-                "module": self.MODULE_NAME,
-                "mode": mode,
-            }
             if mode == "subdomain":
+                # subdomain: host, scheme, status만 (url, length 제외)
                 parsed = urlparse(url)
-                entry["host"] = parsed.netloc
-                entry["scheme"] = parsed.scheme
+                entry = {
+                    "host": parsed.netloc,
+                    "scheme": parsed.scheme,
+                    "status": item.get("status", 0),
+                }
+            else:
+                # directory: url, status, length
+                entry = {
+                    "url": url,
+                    "status": item.get("status", 0),
+                    "length": item.get("length", 0),
+                }
+
             normalized.append(entry)
         return normalized
 
@@ -328,7 +333,9 @@ class AggressiveFuzzer:
         """같은 host의 http/https 결과를 하나로 합치되, schemes 리스트로 보존"""
         merged = {}
         for r in results:
-            host = r.get("host", r["url"])
+            host = r.get("host", "")
+            if not host:
+                continue
             if host not in merged:
                 merged[host] = {**r, "schemes": [r.get("scheme", "http")]}
             else:
