@@ -1,0 +1,9 @@
+{
+  "base_url": "http://scanme.nmap.org",
+  "tld1": "nmap.org",
+  "difficulty": 2,
+  "spider_urls": [
+    "http://scanme.nmap.org/shared",
+    "http://scanme.nmap.org/images"
+  ]
+}
