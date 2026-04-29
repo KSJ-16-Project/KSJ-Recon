@@ -57,6 +57,7 @@ class NmapScanner:
 # ======================
 # 실행부 코드 메인로직쪽에 구현해주시면 돌아 갈것 같아용
 # ======================
+''' 임시 주석
 if __name__ == "__main__":
     scanner = NmapScanner()  # 필요하면 nmap 경로 수동지정
 
@@ -65,3 +66,4 @@ if __name__ == "__main__":
     scanner.save_json(data)
 
     print("[+] JSON 결과 생성 완료")
+'''
