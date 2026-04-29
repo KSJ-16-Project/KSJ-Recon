@@ -1,0 +1,262 @@
+{
+    "target": "gym.contentshub.kr",
+    "scan_time": "2026-04-28T05:42:56.790423",
+    "hosts": [
+        {
+            "ip": "1.220.44.123",
+            "status": "up",
+            "ports": [
+                {
+                    "port": 80,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "http",
+                    "product": "nginx",
+                    "version": "1.22.1",
+                    "extra_info": "",
+                    "cpe": "cpe:/a:igor_sysoev:nginx:1.22.1"
+                },
+                {
+                    "port": 443,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "http",
+                    "product": "nginx",
+                    "version": "1.22.1",
+                    "extra_info": "",
+                    "cpe": "cpe:/a:igor_sysoev:nginx:1.22.1"
+                },
+                {
+                    "port": 3128,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "http",
+                    "product": "Proxmox Virtual Environment REST API",
+                    "version": "3.0",
+                    "extra_info": "",
+                    "cpe": "cpe:/a:proxmox:proxmox_virtual_environment:3.0"
+                },
+                {
+                    "port": 8443,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "http",
+                    "product": "nginx",
+                    "version": "1.22.1",
+                    "extra_info": "",
+                    "cpe": "cpe:/a:igor_sysoev:nginx:1.22.1"
+                },
+                {
+                    "port": 18443,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "http",
+                    "product": "nginx",
+                    "version": "1.22.1",
+                    "extra_info": "",
+                    "cpe": "cpe:/a:igor_sysoev:nginx:1.22.1"
+                },
+                {
+                    "port": 58002,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "http",
+                    "product": "nginx",
+                    "version": "1.22.1",
+                    "extra_info": "",
+                    "cpe": "cpe:/a:igor_sysoev:nginx:1.22.1"
+                },
+                {
+                    "port": 58003,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "http",
+                    "product": "Golang net/http server",
+                    "version": "",
+                    "extra_info": "",
+                    "cpe": "cpe:/a:golang:go"
+                },
+                {
+                    "port": 58004,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "http",
+                    "product": "nginx",
+                    "version": "1.22.1",
+                    "extra_info": "",
+                    "cpe": "cpe:/a:igor_sysoev:nginx:1.22.1"
+                },
+                {
+                    "port": 58005,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "http",
+                    "product": "nginx",
+                    "version": "1.22.1",
+                    "extra_info": "",
+                    "cpe": "cpe:/a:igor_sysoev:nginx:1.22.1"
+                },
+                {
+                    "port": 58006,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "http",
+                    "product": "nginx",
+                    "version": "1.24.0",
+                    "extra_info": "Ubuntu",
+                    "cpe": "cpe:/o:linux:linux_kernel"
+                },
+                {
+                    "port": 58239,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "http",
+                    "product": "Werkzeug httpd",
+                    "version": "2.3.7",
+                    "extra_info": "Python 3.11.13",
+                    "cpe": "cpe:/a:python:python:3.11.13"
+                },
+                {
+                    "port": 58240,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "http",
+                    "product": "Apache httpd",
+                    "version": "2.4.62",
+                    "extra_info": "(Debian)",
+                    "cpe": "cpe:/a:apache:http_server:2.4.62"
+                },
+                {
+                    "port": 58241,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "http",
+                    "product": "Werkzeug httpd",
+                    "version": "2.3.7",
+                    "extra_info": "Python 3.9.23",
+                    "cpe": "cpe:/a:python:python:3.9.23"
+                },
+                {
+                    "port": 58242,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "http",
+                    "product": "Werkzeug httpd",
+                    "version": "2.0.1",
+                    "extra_info": "Python 3.9.25",
+                    "cpe": "cpe:/a:python:python:3.9.25"
+                },
+                {
+                    "port": 58243,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "http",
+                    "product": "Apache httpd",
+                    "version": "2.4.62",
+                    "extra_info": "(Debian)",
+                    "cpe": "cpe:/a:apache:http_server:2.4.62"
+                },
+                {
+                    "port": 58244,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "http",
+                    "product": "nginx",
+                    "version": "1.22.1",
+                    "extra_info": "",
+                    "cpe": "cpe:/a:igor_sysoev:nginx:1.22.1"
+                },
+                {
+                    "port": 58249,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "http",
+                    "product": "Microsoft IIS httpd",
+                    "version": "8.5",
+                    "extra_info": "",
+                    "cpe": "cpe:/o:microsoft:windows"
+                },
+                {
+                    "port": 58252,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "http",
+                    "product": "Apache httpd",
+                    "version": "2.2.22",
+                    "extra_info": "(Unix) mod_ssl/2.2.22 OpenSSL/1.0.2g PHP/5.3.25",
+                    "cpe": "cpe:/a:apache:http_server:2.2.22"
+                },
+                {
+                    "port": 59000,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "ssh",
+                    "product": "OpenSSH",
+                    "version": "9.2p1 Debian 2+deb12u5",
+                    "extra_info": "protocol 2.0",
+                    "cpe": "cpe:/o:linux:linux_kernel"
+                },
+                {
+                    "port": 59001,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "ssh",
+                    "product": "OpenSSH",
+                    "version": "9.6p1 Ubuntu 3ubuntu13.15",
+                    "extra_info": "Ubuntu Linux; protocol 2.0",
+                    "cpe": "cpe:/o:linux:linux_kernel"
+                },
+                {
+                    "port": 59002,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "ssh",
+                    "product": "OpenSSH",
+                    "version": "9.6p1 Ubuntu 3ubuntu13.15",
+                    "extra_info": "Ubuntu Linux; protocol 2.0",
+                    "cpe": "cpe:/o:linux:linux_kernel"
+                },
+                {
+                    "port": 59003,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "ssh",
+                    "product": "OpenSSH",
+                    "version": "9.6p1 Ubuntu 3ubuntu13.15",
+                    "extra_info": "Ubuntu Linux; protocol 2.0",
+                    "cpe": "cpe:/o:linux:linux_kernel"
+                },
+                {
+                    "port": 59004,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "ssh",
+                    "product": "OpenSSH",
+                    "version": "9.6p1 Ubuntu 3ubuntu13.15",
+                    "extra_info": "Ubuntu Linux; protocol 2.0",
+                    "cpe": "cpe:/o:linux:linux_kernel"
+                },
+                {
+                    "port": 59005,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "ssh",
+                    "product": "OpenSSH",
+                    "version": "9.6p1 Ubuntu 3ubuntu13.15",
+                    "extra_info": "Ubuntu Linux; protocol 2.0",
+                    "cpe": "cpe:/o:linux:linux_kernel"
+                },
+                {
+                    "port": 59006,
+                    "protocol": "tcp",
+                    "state": "open",
+                    "service": "ssh",
+                    "product": "OpenSSH",
+                    "version": "9.6p1 Ubuntu 3ubuntu13.15",
+                    "extra_info": "Ubuntu Linux; protocol 2.0",
+                    "cpe": "cpe:/o:linux:linux_kernel"
+                }
+            ]
+        }
+    ]
+}
