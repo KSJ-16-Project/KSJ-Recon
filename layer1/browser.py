@@ -23,7 +23,7 @@ class XHRRecord:
     resource_type: str = "" 
     post_data: str = "" #Request 패킷 Body 값 가져옴
     status_code: int = 0 #지금은 NULL이지만, 응답 받으면 채워짐
-    response_headers: dict = field(default_factory=dict) # 응답 받은 헤더를 딕셔너리 구조로 저장하는구만?
+    response_headers: dict = field(default_factory=dict) # 응답 받은 헤더를 딕셔너리 구조로 저장
     body_preview: str = "" #Response 패킷 Body 값 가져옴. 4KB만 받고, 뒤에 버림. 미리보기 용도
     mime: str = "" #페이지가 보내는 데이터 형식을 저장. text/html, application/json, image/png 등
 
@@ -32,13 +32,11 @@ class XHRRecord:
 @dataclass
 # WebSocket 연결 하나의 DATA 클래스
 # ws:// 혹은 wss://로 시작
-# https나 http와는 다른? 아 그럼 wss는 tls가 붙은건가?
-# 프레임 관련해서 최대 1kb라는데, 왜 1kb로 제한함?
 
 class WSRecord:
     url: str = ""
-    sent_preview: str = ""
-    received_preview: str = ""# 클라이언트에서 서버, 서버에서 클라이언트로 프레임? 프레임이 뭐임?
+    sent_preview: str = "" #송신 프레임으로 서버에게 어떤 형식으로 요청해야 하는지 알 수 있음
+    received_preview: str = ""
     closed: bool = False
     close_code: int = 0 # 문제 없이 잘 닫혔으면 1000이 1006이면 비정상 종료임? 그럼 다른 것들은? 뭐있음?
 
@@ -65,7 +63,8 @@ class BrowserManager:
 
     def __init__(
         self,
-        headless: bool = True,
+        #제대로 동작하는지 검증하기 위해 headless 모드 끔. 필요하면 True로 바꿔서 실행해보기
+        headless: bool = False,
         cookies: Optional[list] = None,
     ):
         self.headless = headless
