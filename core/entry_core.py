@@ -2,7 +2,8 @@ import sys
 import os
 import requests
 from urllib.parse import urlparse
-
+from middle_core import Middle_core
+import json
 # 1. 현재 파일(entry_core.py)의 부모의 부모인 'KSJ-RECON' 폴더 경로를 찾습니다.
 root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -69,15 +70,97 @@ print("명령어를 입력하세요:")
 order = sys.stdin.readline().strip()
 print("초기 order", order)
 if check_isOrder(order):
-    #Nmap 모듈 호출
+    # Nmap 모듈 호출
     scanner=ksj_nmap.ksj_nmap.NmapScanner()
     data = scanner.scan(url,1)
     print("데이터는", data)
-    print("모듈 호출 성공")
+    print("Nmap 모듈 호출 성공")
+
+    # middle_core 모듈 호출
+    print("Middle core 테스트 시작")
+    mid_core=Middle_core()
+    mid_core.get_nmap_data({
+        "target": "https://hotspotfan.online",
+        "status": "up",
+        "ip_address": "192.168.0.100",
+        "open_ports": [
+            {
+                "port": 80,
+                "service": "http",
+                "version": "Apache httpd 2.4.41"
+            },
+            {
+                "port": 443,
+                "service": "https",
+                "version": "OpenSSL 1.1.1f"
+            }
+        ],
+        "os_guess": "Ubuntu Linux"
+    })
+
+    mid_core.get_crawler_data({
+        "base_url": "https://hotspotfan.online",
+        "total_pages": 3,
+        "discovered_links": [
+            "https://hotspotfan.online/",
+            "https://hotspotfan.online/login.php",
+            "https://hotspotfan.online/board/view.php?id=1"
+        ],
+        "forms": [
+            {
+                "action": "/login.php",
+                "method": "POST",
+                "inputs": ["username", "password"]
+            },
+            {
+                "action": "/board/view.php",
+                "method": "GET",
+                "inputs": ["id"]
+            }
+        ]
+    })
+
+    mid_core.get_fuzzer_data({
+        "scan_summary": {
+            "vulnerabilities_found": 2,
+            "severity": "High"
+        },
+        "details": [
+            {
+                "type": "Reflected XSS",
+                "url": "https://hotspotfan.online/board/view.php",
+                "parameter": "id",
+                "payload": "<script>alert(1)</script>",
+                "evidence": "Alert box triggered in response body"
+            },
+            {
+                "type": "SQL Injection",
+                "url": "https://hotspotfan.online/login.php",
+                "parameter": "username",
+                "payload": "' OR 1=1 --",
+                "evidence": "Authentication bypass successful"
+            }
+        ]
+    })
+    results=mid_core.get_all_results()
+    print(json.dumps(results, indent=4, ensure_ascii=False))
+    print("Middle_core 테스트 끝")
 else:
     print("명령어를 다시 입력하세요")
 
 
+# 순서
+# Nmap 모듈 호출 후 데이터 받기
+# Crawler 모듈 호출 후 데이터 받아서 Fuzzer 모듈에 전달
+# Fuzzer 모듈 호출 후 데이터 받기
+# Nmap , Crawler , Fuzzer 데이터 정제 후  한개로 합쳐 Middle Core에 한꺼번에 전달
+# Middle core에서 데이터 받기
+# 받은 데이터로 LLm 모듈에 전달 후 보고서 받기
+
+# 구현 체크리스트
+# 1. 세부적인 파싱 요소 , Level 에서 숫자 파싱 후 전달
+# 2. 명령어 단어 싹 다 검사
+# 3. 
 
 
 

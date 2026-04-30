@@ -1,42 +1,40 @@
-# nmap 모듈에서 데이터 받아오기
-def get_nmap_data(nmap_data):
-    print("receive data",nmap_data)
+# 역할
+# Nmap , Crawler , Fuzzer 모듈에서 데이터 받아오기
 
-# crawler 모듈에서 데이터 받아오기
-def get_crawler_data(crawler_data):
-    print("receive data",crawler_data)
-
-# Fuzzer 모듈에서 데이터 받아오기
-def get_Fuzzer_data(fuzzer_data):
-    print("receive data",fuzzer_data)
 
 class Middle_core:
+
     #초기화 메서드 
     def __init__(self):
-        return
+        # 클래스 내부 메모리에 데이터를 저장할 딕셔너리 초기화
+        self.storage={
+            "nmap":None,
+            "crawler":None,
+            "fuzzer":None
+        }
     
-    # 메서드 #
-    ############### Nmap 모듈 쪽 ###################
-    # 메서드 ( 동작 정의 )
-    # nmap 모듈에서 데이터 받아오기
-    def get_nmap_data(nmap_data):
-        print("receive data",nmap_data)
+    # nmap 모듈에서 데이터 받아 내부 저장소에 기록
+    def get_nmap_data(self, nmap_data):
+        print(f"[Core] Nmap 데이터 수신 완료")
+        self.storage["nmap"] = nmap_data
+
+
+   # crawler 모듈에서 데이터 받아 내부 저장소에 기록
+    def get_crawler_data(self, crawler_data):
+        print(f"[Core] Crawler 데이터 수신 완료")
+        self.storage["crawler"] = crawler_data
+
     
-    ############## Crawler 모듈 쪽 ####################
+   # fuzzer 모듈에서 데이터 받아 내부 저장소에 기록
+    def get_fuzzer_data(self, fuzzer_data):
+        print(f"[Core] Fuzzer 데이터 수신 완료")
+        self.storage["fuzzer"] = fuzzer_data
 
-    # 메서드 ( 동작 정의 )
-    # crawler 모듈에서 데이터 받아오기
-    def get_crawler_data(crawler_data):
-        print("receive data",crawler_data)
+    # 저장된 전체 데이터를 확인하거나 다른 모듈(LLM 등)에 전달할 때 사용
+    def get_all_results(self):
+        #일단은 한개로 합쳤다.
+        return self.storage
 
-    # 메서드 ( 동작 정의 )
-    # Fuzzer 모듈에서 데이터 받아오기
-    def get_Fuzzer_data(fuzzer_data):
-        print("receive data",fuzzer_data)
-
-
-    ############### Fuzzer 모듈 쪽 #################
-    
 
 
 #선 Crawler 모듈에서 데이터 받은 후 Fuzzer 모듈로 데이터 전송
