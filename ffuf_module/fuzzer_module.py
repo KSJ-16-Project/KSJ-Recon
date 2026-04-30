@@ -390,7 +390,6 @@ class AggressiveFuzzer:
                 entry = {
                     "host":   parsed.netloc,
                     "status": item.get("status", 0),
-                    "length": item.get("length", 0),
                     "scheme": parsed.scheme,
                 }
 
@@ -408,7 +407,6 @@ class AggressiveFuzzer:
                 merged[host] = {
                     "host":    host,
                     "status":  r.get("status", 0),
-                    "length":  r.get("length", 0),
                     "schemes": [r.get("scheme", "http")],
                 }
             else:
