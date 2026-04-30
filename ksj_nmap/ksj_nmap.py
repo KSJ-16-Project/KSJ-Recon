@@ -9,7 +9,6 @@ import os
 class NmapScanner:
     def __init__(self, nmap_path=None):
         self.nmap_path = self._get_nmap_path(nmap_path)
-        print("[DEBUG] nmap_path:", self.nmap_path) #디버그
 
     def _get_nmap_path(self, custom_path):
         os_type = platform.system()
@@ -17,8 +16,7 @@ class NmapScanner:
         if os_type == "Windows":
             # ../bin/win/ 경로 기준 프로젝트 파일에서 경로변경시 수정 필요
             base_dir = os.path.dirname(os.path.abspath(__file__))
-            print("[DEBUG] base_dir:", base_dir) #디버그
-            return os.path.abspath(os.path.join(base_dir, "../bin/win/nmap.exe"))
+            return os.path.abspath(os.path.join(base_dir, "bin/win/nmap.exe"))
 
         elif os_type == "Linux": # 다른 OS버전은 추후 개선 예정
             # TODO: 나중에 구현
