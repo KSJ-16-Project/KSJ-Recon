@@ -1,4 +1,4 @@
-#nmap 모듈에서 데이터 받아오기
+# nmap 모듈에서 데이터 받아오기
 def get_nmap_data(nmap_data):
     print("receive data",nmap_data)
 
