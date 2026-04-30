@@ -22,10 +22,13 @@ import os
 import platform
 import tempfile
 import uuid
+import re
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+import time
 
 
 class AggressiveFuzzer:
@@ -93,7 +96,7 @@ class AggressiveFuzzer:
     # 난이도별 실행 옵션
     OPTIONS = {
         1: {
-            "wordlist_dir": "raft-small-directories.txt",
+            "wordlist_dir": "raft-small-words-lowercase.txt",
             "wordlist_sub": "subdomains-top1million-5000.txt",
             "threads": 40,
             "timeout_sec": 600,
@@ -102,12 +105,12 @@ class AggressiveFuzzer:
             "recursion": False,
         },
         2: {
-            "wordlist_dir": "raft-large-directories.txt",
+            "wordlist_dir": "raft-large-words-lowercase.txt",
             "wordlist_sub": "subdomains-top1million-20000.txt",
             "threads": 60,
             "timeout_sec": 3600,
             "subdomain_timeout_sec": 7200,
-            "depth": None,
+            "depth": 1,
             "recursion": True,
         }
     }
@@ -174,22 +177,14 @@ class AggressiveFuzzer:
         else:
             raise ValueError(f"지원하지 않는 모드: {mode}")
 
-    # ---------- depth 자동 조절 ----------
-    def _calc_depth(self, difficulty: int, spider_url_count: int) -> int:
+    # ---------- depth 결정 ----------
+    def _calc_depth(self, difficulty: int, spider_url_count: int = 0) -> int:
         """
-        하드 모드에서 Spider URL 개수에 따라 depth 자동 조절.
-        요청 폭발 방지.
+        난이도별 고정 depth 반환.
+        easy(1): 0  → 재귀 없음
+        hard(2): 1  → 한 단계 더 재귀
         """
-        if difficulty == 1:
-            return 0
-
-        # 하드 모드
-        if spider_url_count <= 5:
-            return 2
-        elif spider_url_count <= 15:
-            return 1
-        else:
-            return 0   # URL 너무 많으면 depth 포기
+        return self.OPTIONS.get(difficulty, self.OPTIONS[1]).get("depth", 0)
 
     # ---------- 메인 실행 ----------
     def run_fuzz(
@@ -201,6 +196,8 @@ class AggressiveFuzzer:
         save_to: str = None,
         verbose: bool = False,
         wordlist: str = None,
+        progress_dict: dict = None,
+        exclude_words: set = None,
         **options,
     ) -> dict:
         """
@@ -246,44 +243,67 @@ class AggressiveFuzzer:
         if not wordlist_path.exists():
             return self._error(f"워드리스트 없음: {wordlist_path}", mode)
 
+        # 알려진 경로 제외한 임시 wordlist 생성
+        tmp_wordlist = None
+        if exclude_words and mode == "directory":
+            tmp_wordlist = self._make_filtered_wordlist(wordlist_path, exclude_words)
+            wordlist_path = tmp_wordlist
+
         target_urls = self._build_target_urls(mode, try_https=try_https)
         all_results = []
         warnings    = []
 
-        for target_url in target_urls:
-            output_file = Path(tempfile.gettempdir()) / f"ffuf_{uuid.uuid4().hex}.json"
-            try:
-                cmd = self._compose_command(
-                    target_url=target_url,
-                    wordlist=str(wordlist_path),
-                    output_file=str(output_file),
-                    mode=mode,
-                    threads=threads,
-                    recursion=recursion,
-                    recursion_depth=recursion_depth,
-                    **options,
-                )
-
-                if verbose:
-                    tag = f"(재귀 depth={recursion_depth})" if recursion else ""
-                    print(f"[fuzzer] {mode} 퍼징 {tag}: {target_url}")
-
+        try:
+            for target_url in target_urls:
+                output_file = Path(tempfile.gettempdir()) / f"ffuf_{uuid.uuid4().hex}.json"
                 try:
-                    subprocess.run(
-                        cmd,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.PIPE,
-                        timeout=timeout_sec,
-                        check=False,
+                    cmd = self._compose_command(
+                        target_url=target_url,
+                        wordlist=str(wordlist_path),
+                        output_file=str(output_file),
+                        mode=mode,
+                        threads=threads,
+                        recursion=recursion,
+                        recursion_depth=recursion_depth,
+                        **options,
                     )
-                except subprocess.TimeoutExpired:
-                    warnings.append(f"타임아웃: {target_url}")
 
-                all_results.extend(self._parse_output(output_file, mode, recursion))
+                    if verbose:
+                        tag = f"(재귀 depth={recursion_depth})" if recursion else ""
+                        print(f"[fuzzer] {mode} 퍼징 {tag}: {target_url}")
 
-            finally:
-                if output_file.exists():
-                    output_file.unlink()
+                    try:
+                        proc = subprocess.Popen(
+                            cmd,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.PIPE,
+                            text=True,
+                        )
+                        tracker = threading.Thread(
+                            target=self._track_progress,
+                            args=(proc, progress_dict),
+                            daemon=True,
+                        )
+                        tracker.start()
+                        try:
+                            proc.wait(timeout=timeout_sec)
+                        except subprocess.TimeoutExpired:
+                            proc.kill()
+                            proc.wait()
+                            warnings.append(f"타임아웃: {target_url}")
+                        tracker.join(timeout=5)
+                    except Exception as e:
+                        warnings.append(f"실행 오류: {e}")
+
+                    all_results.extend(self._parse_output(output_file, mode, recursion))
+
+                finally:
+                    if output_file.exists():
+                        output_file.unlink()
+
+        finally:
+            if tmp_wordlist and tmp_wordlist.exists():
+                tmp_wordlist.unlink()
 
         # 서브도메인 중복 제거
         if mode == "subdomain":
@@ -312,6 +332,34 @@ class AggressiveFuzzer:
 
         return result
 
+    # ---------- wordlist 필터링 ----------
+    def _make_filtered_wordlist(self, wordlist_path: Path, exclude_words: set) -> Path:
+        """알려진 경로를 제외한 임시 wordlist 파일 생성"""
+        tmp = Path(tempfile.gettempdir()) / f"ffuf_wl_{uuid.uuid4().hex}.txt"
+        with open(wordlist_path, 'r', encoding='utf-8', errors='ignore') as fin, \
+             open(tmp, 'w', encoding='utf-8') as fout:
+            for line in fin:
+                if line.strip() not in exclude_words:
+                    fout.write(line)
+        return tmp
+
+    # ---------- 진행률 추적 ----------
+    def _track_progress(self, proc, progress_dict: dict):
+        """ffuf stderr에서 진행률을 파싱하여 progress_dict에 업데이트"""
+        pattern = re.compile(r'Progress: \[(\d+)/(\d+)\]')
+        try:
+            for line in proc.stderr:
+                if progress_dict is not None:
+                    m = pattern.search(line)
+                    if m:
+                        cur, tot = int(m.group(1)), int(m.group(2))
+                        if tot > 0:
+                            progress_dict['pct'] = int(cur / tot * 100)
+                            progress_dict['cur'] = cur
+                            progress_dict['tot'] = tot
+        except Exception:
+            pass
+
     # ---------- 명령어 조립 ----------
     def _compose_command(
         self,
@@ -330,7 +378,6 @@ class AggressiveFuzzer:
             "-w", wordlist,
             "-o", output_file,
             "-of", "json",
-            "-s",
             "-t", str(threads),
         ]
 
@@ -501,31 +548,124 @@ class FuzzOrchestrator:
           run_dir.mkdir(parents=True, exist_ok=True)
 
           # ── 전체 작업 병렬 실행 ──
-          subdomain_target = f"https://{tld1}"
+          # subdomain_target = f"https://{tld1}"  # 팀 회의 결과 subdomain 퍼징 미사용
+
+          # base_url 퍼징 시 spider_urls에서 이미 알고 있는 직계 경로를 wordlist에서 제외
+          parsed_base = urlparse(base_url)
+          base_path   = parsed_base.path.rstrip("/")
+          base_netloc = parsed_base.netloc
+
+          exclude_words = set()
+          for url in spider_urls:
+              p = urlparse(url)
+              if p.netloc != base_netloc:
+                  continue
+              url_path = p.path.rstrip("/")
+              prefix = base_path + "/"
+              if url_path.startswith(prefix):
+                  first_seg = url_path[len(base_path):].lstrip("/").split("/")[0]
+                  if first_seg:
+                      exclude_words.add(first_seg)
+
+          if exclude_words:
+              print(f"  [최적화] base_url 퍼징에서 {len(exclude_words)}개 알려진 경로 제외: {', '.join(sorted(exclude_words))}")
+
+          spider_tasks = [(url, "directory", f"fuzzer_spider_{i}.json")
+                          for i, url in enumerate(spider_urls, 1)]
+
           all_tasks = (
               [(base_url, "directory", "fuzzer_directory.json")]
-              + [(url, "directory", f"fuzzer_spider_{i}.json") for i, url in enumerate(spider_urls, 1)]
-              + [(subdomain_target, "subdomain", "fuzzer_subdomain.json")]
+              + spider_tasks
+              # + [(subdomain_target, "subdomain", "fuzzer_subdomain.json")]  # 팀 회의 결과 subdomain 퍼징 미사용
           )
 
           all_results = [None] * len(all_tasks)
+          task_progress = [{} for _ in all_tasks]
 
           def fuzz_task(args):
               idx, url, mode, filename = args
               fuzzer = AggressiveFuzzer(url)
-              kwargs = dict(difficulty=difficulty, save_to=str(run_dir / filename), verbose=verbose)
+              kwargs = dict(
+                  difficulty=difficulty,
+                  save_to=str(run_dir / filename),
+                  verbose=verbose,
+                  progress_dict=task_progress[idx],
+              )
               if mode == "directory":
                   kwargs["spider_url_count"] = len(spider_urls)
+              # base_url 태스크(idx=0)에만 알려진 경로 제외 적용
+              if idx == 0 and exclude_words:
+                  kwargs["exclude_words"] = exclude_words
               return idx, fuzzer.run_fuzz(mode=mode, **kwargs)
 
+          task_status = {i: {"url": url, "mode": mode, "start": None, "done": False}
+                        for i, (url, mode, _) in enumerate(all_tasks)}
+
+          def monitor(stop_event):
+              while not stop_event.is_set():
+                  time.sleep(30)
+                  if stop_event.is_set():
+                      break
+                  for i, s in task_status.items():
+                      if s["start"] and not s["done"]:
+                          elapsed = int(time.time() - s["start"])
+                          m, sec  = divmod(elapsed, 60)
+                          pct     = task_progress[i].get("pct", 0)
+                          print(f"  [진행중] {s['mode']} {s['url']} ({m}분 {sec}초 경과) {pct}%")
+
+          stop_event = threading.Event()
+          monitor_thread = threading.Thread(target=monitor, args=(stop_event,), daemon=True)
+          monitor_thread.start()
+
           with ThreadPoolExecutor(max_workers=min(len(all_tasks), 4)) as executor:
-              futures = {
-                  executor.submit(fuzz_task, (i, url, mode, fname)): i
-                  for i, (url, mode, fname) in enumerate(all_tasks)
-              }
+              futures = {}
+              for i, (url, mode, fname) in enumerate(all_tasks):
+                  task_status[i]["start"] = time.time()
+                  futures[executor.submit(fuzz_task, (i, url, mode, fname))] = i
+
               for future in as_completed(futures):
                   idx, result = future.result()
                   all_results[idx] = result
+                  s       = task_status[idx]
+                  s["done"] = True
+                  elapsed = int(time.time() - s["start"])
+                  m, sec  = divmod(elapsed, 60)
+                  count   = len(result.get("results", []))
+                  print(f"  [완료] {s['mode']} {s['url']} → {count}개 발견 ({m}분 {sec}초)")
+
+          stop_event.set()
+          monitor_thread.join()
+
+          # ── 결과 중복 제거 (URL/host 기준) ──
+          seen_dir = set()
+          seen_sub = set()
+          dedup_count = 0
+          for result in all_results:
+              if not result:
+                  continue
+              mode   = result.get("mode")
+              unique = []
+              for item in result.get("results", []):
+                  if mode == "directory":
+                      key = item.get("url")
+                      if key and key not in seen_dir:
+                          seen_dir.add(key)
+                          unique.append(item)
+                      else:
+                          dedup_count += 1
+                  elif mode == "subdomain":
+                      key = item.get("host")
+                      if key and key not in seen_sub:
+                          seen_sub.add(key)
+                          unique.append(item)
+                      else:
+                          dedup_count += 1
+                  else:
+                      unique.append(item)
+              result["results"] = unique
+
+          if dedup_count > 0:
+              print(f"  [중복 제거] {dedup_count}개 항목 제거됨")
 
           return {
               "status":      "ok",
