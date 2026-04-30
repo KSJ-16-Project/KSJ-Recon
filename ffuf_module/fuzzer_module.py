@@ -25,6 +25,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 class AggressiveFuzzer:
@@ -472,3 +473,67 @@ class AggressiveFuzzer:
             "results":   [],
             "error":     msg,
         }
+class FuzzOrchestrator:
+
+      def run(
+          self,
+          base_url: str,
+          tld1: str,
+          spider_urls: list,
+          difficulty: int,
+          run_dir: str = None,
+          verbose: bool = False,
+      ) -> dict:
+          from pathlib import Path
+          from datetime import datetime
+          from urllib.parse import urlparse
+
+          base_dir    = Path(__file__).resolve().parent
+          results_dir = base_dir / "results"
+          results_dir.mkdir(exist_ok=True)
+
+          if run_dir is None:
+              timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+              host      = urlparse(base_url).netloc or base_url
+              safe_host = "".join(c if c.isalnum() or c in "-_" else "_" for c in host)
+              run_dir   = results_dir / f"{safe_host}_{timestamp}"
+          run_dir = Path(run_dir)
+          run_dir.mkdir(parents=True, exist_ok=True)
+
+          # ── 전체 작업 병렬 실행 ──
+          subdomain_target = f"https://{tld1}"
+          all_tasks = (
+              [(base_url, "directory", "fuzzer_directory.json")]
+              + [(url, "directory", f"fuzzer_spider_{i}.json") for i, url in enumerate(spider_urls, 1)]
+              + [(subdomain_target, "subdomain", "fuzzer_subdomain.json")]
+          )
+
+          all_results = [None] * len(all_tasks)
+
+          def fuzz_task(args):
+              idx, url, mode, filename = args
+              fuzzer = AggressiveFuzzer(url)
+              kwargs = dict(difficulty=difficulty, save_to=str(run_dir / filename), verbose=verbose)
+              if mode == "directory":
+                  kwargs["spider_url_count"] = len(spider_urls)
+              return idx, fuzzer.run_fuzz(mode=mode, **kwargs)
+
+          with ThreadPoolExecutor(max_workers=min(len(all_tasks), 4)) as executor:
+              futures = {
+                  executor.submit(fuzz_task, (i, url, mode, fname)): i
+                  for i, (url, mode, fname) in enumerate(all_tasks)
+              }
+              for future in as_completed(futures):
+                  idx, result = future.result()
+                  all_results[idx] = result
+
+          return {
+              "status":      "ok",
+              "base_url":    base_url,
+              "tld1":        tld1,
+              "difficulty":  difficulty,
+              "spider_urls": spider_urls,
+              "timestamp":   datetime.now().isoformat(),
+              "run_dir":     str(run_dir),
+              "results":     all_results,
+          }
