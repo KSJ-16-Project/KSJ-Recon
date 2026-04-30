@@ -64,39 +64,19 @@ def check_isOrder(command_input):
 
 url=""
 # 명령어 입력
+# recon start L1 [URL] 로 입력해서 데이터 가져오면 됩니다.
 print("명령어를 입력하세요:")
 order = sys.stdin.readline().strip()
 print("초기 order", order)
 if check_isOrder(order):
     #Nmap 모듈 호출
-    print("url은", url)
     scanner=ksj_nmap.ksj_nmap.NmapScanner()
-    data = scanner.scan("gym.contentshub.kr",1)
+    data = scanner.scan(url,1)
     print("데이터는", data)
     print("모듈 호출 성공")
 else:
     print("명령어를 다시 입력하세요")
-#     print()
-# 테스터 데이터 
-# recon start L1 https://hotspotfan.online/ -> 성공 해야함
-# rec start L1 https://hotspotfan.online/ -> 실패 ( recon이 아님 )
-# recon L1 https://hotspotfan.online/ -> 실패 ( start가 없음 )
-# recon start L1 hs://hotspotfan.online/ -> 실패 ( http , https 검사 )
 
-# --- 테스트 실행부 ---
-# test_data = [
-#     "recon start L1 https://hotspotfan.online/", # 성공 해야함
-#     "rec start L1 https://hotspotfan.online/", # 실패 ( recon이 아님 )
-#     "recon L1 https://hotspotfan.online/",  # 실패 (start가 없음 )
-#     "recon start L1 hs://hotspotfan.online/" # 실패 ( http , https  검사 )
-# ]
-
-# for test in test_data:
-#     if check_isOrder(test):
-#         print("모듈 호출 성공")
-#     else:
-#         print("명령어를 다시 입력하세요")
-#     print()
 
 
 
