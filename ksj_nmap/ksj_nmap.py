@@ -1,6 +1,6 @@
 import subprocess
 import platform
-import json
+#import json # save 함수 쓰려면 임포트 해야함
 from datetime import datetime
 import xml.etree.ElementTree as ET
 import os
@@ -11,7 +11,7 @@ class NmapScanner:
     def __init__(self, nmap_path=None):
         self.nmap_path = self._get_nmap_path(nmap_path)
 
-    def _get_nmap_path(self, custom_path):
+    def _get_nmap_path(self, custom_path): #OS 분석후 namp binary 경로 설정 함수
         os_type = platform.system()
 
         if os_type == "Windows":
@@ -26,7 +26,9 @@ class NmapScanner:
         else:
             raise Exception(f"Unsupported OS: {os_type}") # OS 식별 에러처리
 
-    def scan(self, target, level=2):
+    def scan(self, target, level=2): #스캔 함수 이후 바로 파서로 data 전달
+        target = self.normalize_target(target)
+
         if not self.nmap_path:
             raise Exception("Nmap path not configured for this OS")
 
@@ -66,7 +68,7 @@ class NmapScanner:
 
             return self._parse_result(target, result.stdout)
 
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired: #스캔중 발생하는 에러 처리부
             return {
                 "target": target,
                 "scan_time": datetime.utcnow().isoformat(),
@@ -84,7 +86,7 @@ class NmapScanner:
                 "hosts": []
             }
 
-    def _parse_result(self, target, xml_data):
+    def _parse_result(self, target, xml_data): # JSON 전처리 함수
         root = ET.fromstring(xml_data)
 
         result = {
@@ -147,6 +149,21 @@ class NmapScanner:
             result["hosts"].append(host_data)
 
         return result #추후 미들웨어 연동시 connect_middle 함수로 리턴예정
+    
+    def normalize_target(self, target): # URL 형태 인자를 도메인형식으로 파싱
+        target = target.strip()
+
+        if not target.startswith(("http://", "https://")):
+            parsed = urlparse("//" + target)
+        else:
+            parsed = urlparse(target)
+
+        hostname = parsed.hostname
+
+        if not hostname:
+            raise ValueError(f"Invalid target format: {target}")
+
+        return hostname
 
     # 연동부 미들 구현시 함수명 맞추겠슴당
     '''
