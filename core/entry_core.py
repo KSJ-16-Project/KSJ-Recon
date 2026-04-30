@@ -4,6 +4,7 @@ import requests
 from urllib.parse import urlparse
 from middle_core import Middle_core
 import json
+
 # 1. 현재 파일(entry_core.py)의 부모의 부모인 'KSJ-RECON' 폴더 경로를 찾습니다.
 root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -13,33 +14,34 @@ if root_path not in sys.path:
 
 import ksj_nmap.ksj_nmap 
 
-#Nmap 모듈 호출
-def call_nmap_module():
-    return
-#Crawler 모듈 호출
-def call_crawler_module():
-    return
 
 # 명령어 검사 로직 
 def check_isOrder(command_input):
     global url
+    global level
+
     #1. 간단한 명령어 패턴 검사
     if not command_input.startswith("recon"):
         print("Error : 올바른 명령어가 아닙니다.")
         return False
     
     # 2. URL 추출 및 파싱
-    # 입력 예시 : "recon start [L1] URL"
-    # URL 형식이 맞는지 검사 -> http , https인지 확인
+    # 입력 예시 : "recon start [L1] URL" -> 최소 형식 
     try:
         parts=command_input.split()
         if len(parts)<4:
             return False
-        # 명령어 단어 하나하나마다 검사
+        
+        # Level이 잘 입력됐는지 검사
+        try:
+            level = int(parts[2][1:].strip())
+        except ValueError:
+            return False
+        
         target_url =parts[3]
         parsed =urlparse(target_url)
 
-        # 프로토콜 확인
+        # URL 형식이 맞는지 검사 -> http , https인지 확인
         if parsed.scheme not in ['http','https']:
             print(f"올바른 URL을 입력해주세요.")
             return False
@@ -63,16 +65,18 @@ def check_isOrder(command_input):
         print(f"Connection Error : 실제 페이지에 접근할 수 없습니다.\n{e}")
         return False
 
+level=0
 url=""
 # 명령어 입력
 # recon start L1 [URL] 로 입력해서 데이터 가져오면 됩니다.
 print("명령어를 입력하세요:")
 order = sys.stdin.readline().strip()
 print("초기 order", order)
+
 if check_isOrder(order):
     # Nmap 모듈 호출
     scanner=ksj_nmap.ksj_nmap.NmapScanner()
-    data = scanner.scan(url,1)
+    data = scanner.scan(url,level)
     print("데이터는", data)
     print("Nmap 모듈 호출 성공")
 
