@@ -14,6 +14,12 @@ import asyncio
 from urllib.parse import urljoin, urlparse
 
 
+# ── 테스트용 타깃 URL ─────────────────────────────────────────
+# core/models.py 의 Config 가 확정되면 이 상수를 삭제하고
+# core 로부터 target_url 을 전달받는 방식으로 교체한다.
+TARGET_URL = "http://testphp.vulnweb.com"
+
+
 _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -151,3 +157,31 @@ async def check_security_files(target_url: str) -> dict[str, str]:
             found[path] = body
 
     return found
+
+
+# ── 단독 실행 테스트 ──────────────────────────────────────────
+# python sitemap.py 로 직접 실행하면 TARGET_URL 의 robots.txt,
+# sitemap, 보안 파일을 순서대로 조회해 결과를 출력한다.
+if __name__ == "__main__":
+    import asyncio
+
+    async def _main() -> None:
+        print("=== robots.txt ===")
+        disallowed, sitemaps = await fetch_robots(TARGET_URL)
+        print(f"disallowed : {disallowed}")
+        print(f"sitemaps   : {sitemaps}")
+
+        if sitemaps:
+            print("\n=== sitemap ===")
+            urls = await fetch_sitemap(sitemaps[0])
+            print(f"발견 URL ({len(urls)}개) : {urls[:5]}")
+
+        print("\n=== security files ===")
+        found = await check_security_files(TARGET_URL)
+        if found:
+            for path, body in found.items():
+                print(f"{path} : {body[:120]}")
+        else:
+            print("없음")
+
+    asyncio.run(_main())

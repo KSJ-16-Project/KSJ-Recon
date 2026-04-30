@@ -14,6 +14,12 @@ from typing import Optional
 from urllib.parse import parse_qs, urljoin, urlparse
 
 
+# ── 테스트용 타깃 URL ─────────────────────────────────────────
+# core/models.py 의 Config 가 확정되면 이 상수를 삭제하고
+# core 로부터 target_url 을 전달받는 방식으로 교체한다.
+TARGET_URL = "https://www.hotspotfan.online"
+
+
 # ── 임시 데이터 모델 ──────────────────────────────────────────
 # core/models.py 확정 후 아래 두 클래스를 삭제하고
 # from core.models import FormField, FormInfo 로 교체한다.
@@ -286,3 +292,31 @@ def extract_comments(html: str) -> list[str]:
     """HTML 주석(<!-- ... -->) 을 추출해 목록으로 반환한다."""
     comments = re.findall(r"<!--(.*?)-->", html, re.DOTALL)
     return [c.strip() for c in comments if c.strip()]
+
+
+# ── 단독 실행 테스트 ──────────────────────────────────────────
+# python parser.py 로 직접 실행하면 TARGET_URL 페이지를 fetch 해서
+# 각 함수의 결과를 출력한다.
+if __name__ == "__main__":
+    import urllib.request as _req
+
+    def _fetch(url: str) -> tuple[int, str, dict]:
+        r = _req.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        try:
+            with _req.urlopen(r, timeout=10) as resp:
+                return resp.status, resp.read().decode("utf-8", errors="replace"), dict(resp.headers)
+        except Exception:
+            return 0, "", {}
+
+    status, html, headers = _fetch(TARGET_URL)
+    if status != 200:
+        print(f"[오류] {TARGET_URL} 응답: {status}")
+    else:
+        print(f"[render_type] {detect_render_type(html, html)}")
+        print(f"[framework]   {detect_csr_framework(html)}")
+        print(f"[tech]        {detect_technologies(html, headers)}")
+        print(f"[links]       {extract_links(html, TARGET_URL)[:5]}")
+        print(f"[forms]       {extract_forms(html)}")
+        print(f"[scripts]     {extract_scripts(html)[:3]}")
+        print(f"[comments]    {extract_comments(html)[:3]}")
+        print(f"[url_params]  {extract_url_params(TARGET_URL + '?q=test&page=1')}")
