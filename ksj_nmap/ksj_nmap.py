@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 import xml.etree.ElementTree as ET
 import os
+from urllib.parse import urlparse
 #import 미들웨어
 
 class NmapScanner:
@@ -152,11 +153,11 @@ class NmapScanner:
     def connect_middle(self, data):
         conn = middleware()
         conn.middlefunc(data)
-    '''
 
     def save_json(self, data, filename="nmap_result.json"):
         with open(filename, "w") as f:
-            json.dump(data, f, indent=4)
+            json.dump(data, f, indent=4) # 
+    '''
 
 
 # ======================
