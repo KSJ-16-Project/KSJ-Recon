@@ -25,7 +25,7 @@ class NmapScanner:
         else:
             raise Exception(f"Unsupported OS: {os_type}") # OS 식별 에러처리
 
-    def scan(self, target, level=1):
+    def scan(self, target, level=2):
         if not self.nmap_path:
             raise Exception("Nmap path not configured for this OS")
 
@@ -45,20 +45,43 @@ class NmapScanner:
 
         bin_dir = os.path.dirname(self.nmap_path)
 
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            cwd=bin_dir
-        )
-        #스캔결과(result)값의 대한 에러처리
-        if result.returncode != 0:
-            print(result.stderr)
-            raise Exception("Nmap scan failed")
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                cwd=bin_dir,
+                timeout=1800  # 풀스캔 최대 대기시간, 필요시 조정
+            )
 
-        xml_output = result.stdout
+            if result.returncode != 0:
+                return {
+                    "target": target,
+                    "scan_time": datetime.utcnow().isoformat(),
+                    "status": "failed",
+                    "error": result.stderr,
+                    "hosts": []
+                }
 
-        return self._parse_result(target, xml_output)
+            return self._parse_result(target, result.stdout)
+
+        except subprocess.TimeoutExpired:
+            return {
+                "target": target,
+                "scan_time": datetime.utcnow().isoformat(),
+                "status": "timeout",
+                "error": "Nmap scan timed out",
+                "hosts": []
+            }
+
+        except KeyboardInterrupt:
+            return {
+                "target": target,
+                "scan_time": datetime.utcnow().isoformat(),
+                "status": "interrupted",
+                "error": "Scan interrupted by user",
+                "hosts": []
+            }
 
     def _parse_result(self, target, xml_data):
         root = ET.fromstring(xml_data)
@@ -139,13 +162,13 @@ class NmapScanner:
 # ======================
 # 실행부 코어에서 실행시 참고해주세요!
 # ======================
-''' 핸들러 부분입니다 코어 작업할떄 참고해주세요
+'''
 if __name__ == "__main__":
     scanner = NmapScanner()
 
-    data = scanner.scan("127.0.0.1")
-
-    scanner.save_json(data)
+    data = scanner.scan("127.0.0.1",2)
+    #scanner.save_json(data)
 
     print("[+] JSON 결과 생성 완료")
+    print("데이타 :",data)
 '''
