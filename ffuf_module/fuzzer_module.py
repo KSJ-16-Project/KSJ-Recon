@@ -103,7 +103,7 @@ class AggressiveFuzzer:
         2: {
             "wordlist_dir": "raft-large-directories.txt",
             "wordlist_sub": "subdomains-top1million-20000.txt",
-            "threads": 30,
+            "threads": 60,
             "timeout_sec": 3600,
             "subdomain_timeout_sec": 7200,
             "depth": None,
@@ -228,9 +228,9 @@ class AggressiveFuzzer:
         # 서브도메인/디렉터리 timeout 분리
         if mode == "subdomain":
             timeout_sec = options.get("timeout_sec", opts["subdomain_timeout_sec"])
-            options.setdefault("timeout", 3)   # 개별 요청 timeout 3초
         else:
             timeout_sec = options.get("timeout_sec", opts["timeout_sec"])
+        options.setdefault("timeout", 3)
 
         # depth 자동 조절
         recursion       = opts["recursion"] if mode == "directory" else False
