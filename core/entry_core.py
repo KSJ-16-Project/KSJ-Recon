@@ -83,69 +83,11 @@ if check_isOrder(order):
     # middle_core 모듈 호출
     print("Middle core 테스트 시작")
     mid_core=Middle_core()
-    mid_core.get_nmap_data({
-        "target": "https://hotspotfan.online",
-        "status": "up",
-        "ip_address": "192.168.0.100",
-        "open_ports": [
-            {
-                "port": 80,
-                "service": "http",
-                "version": "Apache httpd 2.4.41"
-            },
-            {
-                "port": 443,
-                "service": "https",
-                "version": "OpenSSL 1.1.1f"
-            }
-        ],
-        "os_guess": "Ubuntu Linux"
-    })
+    
+    # mid_core.get_nmap_data()
+    # mid_core.get_crawler_data()
+    # mid_core.get_fuzzer_data()
 
-    mid_core.get_crawler_data({
-        "base_url": "https://hotspotfan.online",
-        "total_pages": 3,
-        "discovered_links": [
-            "https://hotspotfan.online/",
-            "https://hotspotfan.online/login.php",
-            "https://hotspotfan.online/board/view.php?id=1"
-        ],
-        "forms": [
-            {
-                "action": "/login.php",
-                "method": "POST",
-                "inputs": ["username", "password"]
-            },
-            {
-                "action": "/board/view.php",
-                "method": "GET",
-                "inputs": ["id"]
-            }
-        ]
-    })
-
-    mid_core.get_fuzzer_data({
-        "scan_summary": {
-            "vulnerabilities_found": 2,
-            "severity": "High"
-        },
-        "details": [
-            {
-                "type": "Reflected XSS",
-                "url": "https://hotspotfan.online/board/view.php",
-                "parameter": "id",
-                "payload": "<script>alert(1)</script>",
-                "evidence": "Alert box triggered in response body"
-            },
-            {
-                "type": "SQL Injection",
-                "url": "https://hotspotfan.online/login.php",
-                "parameter": "username",
-                "payload": "' OR 1=1 --",
-                "evidence": "Authentication bypass successful"
-            }
-        ]
-    })
     results=mid_core.get_all_results()
     print(json.dumps(results, indent=4, ensure_ascii=False))
     print("Middle_core 테스트 끝")
