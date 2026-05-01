@@ -13,7 +13,7 @@ if root_path not in sys.path:
     sys.path.append(root_path)
 
 import ksj_nmap.ksj_nmap 
-
+from ffuf_module.fuzzer_module import FuzzOrchestrator
 
 # 명령어 검사 로직 
 def check_isOrder(command_input):
@@ -67,6 +67,13 @@ def check_isOrder(command_input):
 
 level=0
 url=""
+
+# level 1 -> nmap low , fuzzer low
+# level 2 -> nmap hard , fuzzer low
+# level 3 -> nmap low , fuzzer hard
+# level 4 -> nmap hard , fuzzer hard
+level_mode=[[1,1],[2,1],[1,2],[2,2]]
+
 # 명령어 입력
 # recon start L1 [URL] 로 입력해서 데이터 가져오면 됩니다.
 print("명령어를 입력하세요:")
@@ -75,21 +82,28 @@ print("초기 order", order)
 
 if check_isOrder(order):
     # Nmap 모듈 호출
-    scanner=ksj_nmap.ksj_nmap.NmapScanner()
-    data = scanner.scan(url,level)
-    print("데이터는", data)
     print("Nmap 모듈 호출 성공")
-
+    scanner=ksj_nmap.ksj_nmap.NmapScanner()
+    nmap_data = scanner.scan(url,level)
+    print("Nmap 데이터는", nmap_data)
+    print("Fuzzer 모듈 호출 성공")
+    fuzzer_data= FuzzOrchestrator().run(
+    base_url    = "http://gym.contentshub.kr:58252/",  # 필수
+    spider_urls = ["http://gym.contentshub.kr:58252/kisec", "http://gym.contentshub.kr:58252/kisec/main"],  # 필수 (없으면 [])
+    difficulty  = 1,  # 필수: 1(이지) or 2(하드)
+)
+    
+    print("Fuzzer 모듈 데이터는",fuzzer_data)
     # middle_core 모듈 호출
     print("Middle core 테스트 시작")
     mid_core=Middle_core()
-    
+
     # mid_core.get_nmap_data()
     # mid_core.get_crawler_data()
     # mid_core.get_fuzzer_data()
 
-    results=mid_core.get_all_results()
-    print(json.dumps(results, indent=4, ensure_ascii=False))
+    # results=mid_core.get_all_results()
+    # print(json.dumps(results, indent=4, ensure_ascii=False))
     print("Middle_core 테스트 끝")
 else:
     print("명령어를 다시 입력하세요")
