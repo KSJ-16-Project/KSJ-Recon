@@ -53,9 +53,10 @@ class RawPageData:
     response_headers: dict = field(default_factory=dict)
     raw_html: str = ""
     rendered_html: str = ""
-    xhr_list: list = field(default_factory=list)   # list[XHRRecord]
-    ws_list: list = field(default_factory=list)    # list[WSRecord]
-    cookies: list = field(default_factory=list)    # list[str]
+    xhr_list: list = field(default_factory=list)        # list[XHRRecord]
+    ws_list: list = field(default_factory=list)         # list[WSRecord]
+    cookies: list = field(default_factory=list)         # list[str]
+    discovered_urls: list = field(default_factory=list) # list[str]
 
 
 class BrowserManager:

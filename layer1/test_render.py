@@ -77,6 +77,27 @@ async def main():
 
         await ctx.close()
 
+    print("\n=== 동적 렌더링 검증 — hotspotfan.online ===")
+    async with BrowserManager() as bm:
+        result = await render(bm.browser, "https://hotspotfan.online/", render_wait=3000)
+        if result is None:
+            print("결과: None")
+        else:
+            print(f"status              : {result.status}")
+            print(f"raw_html 길이       : {len(result.raw_html)}")
+            print(f"rendered_html 길이  : {len(result.rendered_html)}")
+            diff = len(result.rendered_html) - len(result.raw_html)
+            print(f"차이 (JS가 추가)    : {diff:+,} 글자")
+            print(f"xhr_list            : {len(result.xhr_list)}개")
+            print(f"ws_list             : {len(result.ws_list)}개")
+            print(f"cookies             : {result.cookies}")
+            print(f"\nraw_html 앞 300자:\n{result.raw_html[:300]}")
+            print(f"\nrendered_html 앞 300자:\n{result.rendered_html[:300]}")
+            if result.xhr_list:
+                print(f"\nXHR 샘플 (최대 5개):")
+                for x in result.xhr_list[:5]:
+                    print(f"  [{x.method}] {x.url[:90]} (status={x.status_code})")
+
     print("\n=== WS 인터셉트 검증 — Binance BTC/USDT ===")
     async with BrowserManager() as bm:
         result = await render(bm.browser, "https://www.binance.com/en/trade/BTC_USDT", render_wait=5000)

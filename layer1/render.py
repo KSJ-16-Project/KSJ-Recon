@@ -8,6 +8,7 @@ from playwright.async_api import (
 )
 
 from .browser import BrowserManager, RawPageData, WSRecord, XHRRecord
+from layer2.discovery import HISTORY_SHIM, history_urls, click_walk
 
 
 _UA = (
@@ -112,6 +113,7 @@ async def _run(
             except PlaywrightError:
                 pass
 
+        await ctx.add_init_script(HISTORY_SHIM)
         page = await ctx.new_page()
 
         xhr_list: list[XHRRecord] = []
@@ -250,6 +252,19 @@ async def _run(
         except PlaywrightError:
             rendered_html = ""
 
+        # ── URL 탐색 (discovery) ───────────────────────────────────────
+        discovered_urls: list[str] = []
+        try:
+            from_history = await history_urls(page, url)
+            from_clicks = await click_walk(page, url)
+            seen_d: set[str] = set()
+            for u in from_history + from_clicks:
+                if u not in seen_d:
+                    seen_d.add(u)
+                    discovered_urls.append(u)
+        except Exception:
+            pass
+
         # ── 쿠키 수집 ─────────────────────────────────────────────────
         try:
             jar = await ctx.cookies([url])
@@ -278,6 +293,7 @@ async def _run(
         xhr_list=xhr_list,
         ws_list=ws_list,
         cookies=cookies,
+        discovered_urls=discovered_urls,
     )
 
 
