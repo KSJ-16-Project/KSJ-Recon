@@ -178,7 +178,6 @@ def run_all(config: dict):
       orchestrator = FuzzOrchestrator()
       combined = orchestrator.run(
           base_url    = config["base_url"],
-          tld1        = config["tld1"],
           spider_urls = config["spider_urls"],
           difficulty  = config["difficulty"],
           verbose     = True,

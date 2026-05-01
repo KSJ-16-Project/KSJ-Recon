@@ -1,9 +1,9 @@
 {
-  "base_url": "http://scanme.nmap.org",
+  "base_url": "http://gym.contentshub.kr:58252",
   "tld1": "nmap.org",
   "difficulty": 2,
   "spider_urls": [
-    "http://scanme.nmap.org/shared",
-    "http://scanme.nmap.org/images"
+    "http://gym.contentshub.kr:58252/kisec",
+    "http://gym.contentshub.kr:58252/kisec/main"
   ]
 }
