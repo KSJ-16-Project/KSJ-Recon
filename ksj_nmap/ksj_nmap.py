@@ -5,7 +5,6 @@ from datetime import datetime
 import xml.etree.ElementTree as ET
 import os
 from urllib.parse import urlparse
-#import 미들웨어
 
 class NmapScanner:
     def __init__(self, nmap_path=None):
@@ -164,18 +163,6 @@ class NmapScanner:
             raise ValueError(f"Invalid target format: {target}")
 
         return hostname
-
-    # 연동부 미들 구현시 함수명 맞추겠슴당
-    '''
-    def connect_middle(self, data):
-        conn = middleware()
-        conn.middlefunc(data)
-
-    def save_json(self, data, filename="nmap_result.json"):
-        with open(filename, "w") as f:
-            json.dump(data, f, indent=4) # 
-    '''
-
 
 # ======================
 # 실행부 코어에서 실행시 참고해주세요!
