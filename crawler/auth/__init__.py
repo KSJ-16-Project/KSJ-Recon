@@ -16,6 +16,7 @@ from .models import AuthConfig, AuthResult, FormSelectors
 from .detector import find_login_page
 from .form_analyzer import analyze_login_form
 from .login import perform_login
+from .layer import run_auth_layer
 
 __all__ = [
     "AuthConfig",
@@ -24,4 +25,5 @@ __all__ = [
     "find_login_page",
     "analyze_login_form",
     "perform_login",
+    "run_auth_layer",
 ]

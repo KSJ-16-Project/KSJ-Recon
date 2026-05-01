@@ -50,10 +50,13 @@ def find_login_page(pages: list[dict]) -> Optional[dict]:
 
 
 def _is_login_form(form: dict) -> bool:
-    """단일 폼이 로그인 폼인지 판별."""
-    if (form.get("method") or "").upper() != "POST":
-        return False
+    """
+    단일 폼이 로그인 폼인지 판별.
 
+    method 검사는 의도적으로 제외 — React/Vue SPA는 폼에 method 속성을 안 붙이고
+    onSubmit 핸들러로 처리하므로 method='get' (기본값)으로 보일 수 있음.
+    검색 폼은 password 필드가 없어서 자동으로 걸러짐.
+    """
     fields = form.get("fields", [])
 
     password_count = sum(1 for f in fields if f.get("type") == "password")

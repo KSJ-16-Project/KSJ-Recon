@@ -19,10 +19,12 @@ _USERNAME_KEYWORDS = (
 # id 필드명에 자주 쓰이는 패턴 ("id" 단독은 노이즈 많아서 분리)
 _ID_NAME_PATTERNS = ("_id", "id_", "userid", "loginid", "memberid")
 
-# Submit 버튼 셀렉터 (button:has-text는 다국어 대응)
+# Submit 버튼/링크 셀렉터 (한국 사이트 + 다국어 대응)
+# 한국 사이트는 <a onclick="chk_login()">로그인</a> 같은 패턴이 흔함
 _SUBMIT_SELECTOR = (
     "button[type=submit], input[type=submit], "
-    "button:has-text('로그인'), button:has-text('Login'), "
+    "button:has-text('로그인'), a:has-text('로그인'), [role=button]:has-text('로그인'), "
+    "button:has-text('Login'), a:has-text('Login'), "
     "button:has-text('Sign in'), button:has-text('Log in')"
 )
 
@@ -121,7 +123,8 @@ def _find_username_field(fields: list[dict], password_field: dict) -> dict | Non
 def _to_selector(field: dict) -> str:
     """
     필드 메타데이터에서 가장 안정적인 CSS 셀렉터를 만든다.
-    우선순위: name > id > type별 첫 번째 매칭
+    우선순위: name > id > placeholder > type별 첫 번째 매칭
+    React SPA처럼 name이 없는 폼도 placeholder로 폴백.
     """
     name = field.get("name") or ""
     if name:
@@ -131,7 +134,12 @@ def _to_selector(field: dict) -> str:
     if id_attr:
         return f"#{_escape(id_attr)}"
 
-    # 폴백: 타입 기반 (모호하지만 단일 폼이면 보통 작동)
+    # React SPA 폴백: placeholder 기반 셀렉터
+    placeholder = field.get("placeholder") or ""
+    if placeholder:
+        return f"input[placeholder='{_escape(placeholder)}']"
+
+    # 최종 폴백: 타입 기반 (단일 폼이면 보통 작동)
     ftype = field.get("type") or "text"
     if ftype == "password":
         return "input[type=password]"
