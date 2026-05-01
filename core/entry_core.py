@@ -4,6 +4,8 @@ import requests
 from urllib.parse import urlparse
 from middle_core import Middle_core
 import json
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 # 1. 현재 파일(entry_core.py)의 부모의 부모인 'KSJ-RECON' 폴더 경로를 찾습니다.
 root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -79,34 +81,52 @@ level_mode=[[1,1],[2,1],[1,2],[2,2]]
 print("명령어를 입력하세요:")
 order = sys.stdin.readline().strip()
 print("초기 order", order)
-
+start = time.time()
 if check_isOrder(order):
     # Nmap 모듈 호출
-    print("Nmap 모듈 호출 성공")
     scanner=ksj_nmap.ksj_nmap.NmapScanner()
-    nmap_data = scanner.scan(url,level)
-    print("Nmap 데이터는", nmap_data)
-    print("Fuzzer 모듈 호출 성공")
-    fuzzer_data= FuzzOrchestrator().run(
-    base_url    = "http://gym.contentshub.kr:58252/",  # 필수
-    spider_urls = ["http://gym.contentshub.kr:58252/kisec", "http://gym.contentshub.kr:58252/kisec/main"],  # 필수 (없으면 [])
-    difficulty  = 1,  # 필수: 1(이지) or 2(하드)
-)
-    
-    print("Fuzzer 모듈 데이터는",fuzzer_data)
+    fuzzer=FuzzOrchestrator()
+
+    # 1. ThreadPoolExecutor 생성
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        future_nmap=executor.submit(scanner.scan,url,level)
+
+        future_fuzzer=executor.submit(
+            fuzzer.run,
+            base_url    = "http://gym.contentshub.kr:58252/",  # 필수
+            spider_urls = ["http://gym.contentshub.kr:58252/kisec", "http://gym.contentshub.kr:58252/kisec/main"],  # 필수 (없으면 [])
+            difficulty  = 1,  # 필수: 1(이지) or 2(하드)
+        )
+    print("병렬 스레드 진행중 ")
+    # nmap_data = scanner.scan(url,level)
+    try:
+        nmap_data=future_nmap.result()
+        #print("Nmap 데이터는", nmap_data)
+
+        fuzzer_data=future_fuzzer.result()
+        #print("Fuzzer 데이터는", fuzzer_data)
+    except Exception as e:
+        print(" 병렬 스레드 실행 중 오류 발생 , {e}")
+#     fuzzer_data= FuzzOrchestrator().run(
+#     base_url    = "http://gym.contentshub.kr:58252/",  # 필수
+#     spider_urls = ["http://gym.contentshub.kr:58252/kisec", "http://gym.contentshub.kr:58252/kisec/main"],  # 필수 (없으면 [])
+#     difficulty  = 1,  # 필수: 1(이지) or 2(하드)
+# )
     # middle_core 모듈 호출
     print("Middle core 테스트 시작")
     mid_core=Middle_core()
 
-    # mid_core.get_nmap_data()
+    mid_core.get_nmap_data(nmap_data)
     # mid_core.get_crawler_data()
-    # mid_core.get_fuzzer_data()
+    mid_core.get_fuzzer_data(fuzzer_data)
 
-    # results=mid_core.get_all_results()
-    # print(json.dumps(results, indent=4, ensure_ascii=False))
+    results=mid_core.get_all_results()
+    print(json.dumps(results, indent=4, ensure_ascii=False))
     print("Middle_core 테스트 끝")
 else:
     print("명령어를 다시 입력하세요")
+end = time.time()
+print(f"소요 시간: {end - start:.2f}초")
 
 
 # 순서
