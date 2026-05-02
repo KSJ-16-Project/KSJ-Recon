@@ -13,7 +13,7 @@ from urllib.parse import urljoin
 
 from playwright.async_api import Page
 
-from .parser import _PageParser   # iframe HTML 파싱에 재사용
+from crawler.parser import _PageParser
 
 
 # ── 브라우저 주입용 JS 상수 ────────────────────────────────────
@@ -73,7 +73,7 @@ def frame_links(html: str, base_url: str) -> list[str]:
 
 
 # ── Playwright page 객체 기반 함수들 ──────────────────────────
-# Layer 1 render.py 에서 from layer2.discovery import history_urls, click_walk 로 호출.
+# crawler.browser.render 가 page.goto 이후 history_urls / click_walk 호출.
 
 async def history_urls(page: Page, base_url: str) -> list[str]:
     """

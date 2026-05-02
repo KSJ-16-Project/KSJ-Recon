@@ -8,6 +8,8 @@ from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
 )
 
+from crawler.discovery import HISTORY_SHIM, click_walk, history_urls
+
 from .browser import BrowserManager, RawPageData, WSRecord, XHRRecord
 
 
@@ -80,6 +82,7 @@ async def render(
     cookies: list[dict] | None = None,
     local_storage: dict | None = None,
     session_storage: dict | None = None,
+    enable_dynamic_discovery: bool = False,
 ) -> RawPageData | None:
     try:
         return await asyncio.wait_for(
@@ -93,6 +96,7 @@ async def render(
                 cookies or [],
                 local_storage or {},
                 session_storage or {},
+                enable_dynamic_discovery,
             ),
             timeout=timeout + 10,
         )
@@ -110,12 +114,14 @@ async def _run(
     cookies: list[dict],
     local_storage: dict,
     session_storage: dict,
+    enable_dynamic_discovery: bool,
 ) -> RawPageData | None:
     ctx = await browser.new_context(
         user_agent=_UA,
         ignore_https_errors=True,
         extra_http_headers=extra_headers,
     )
+    discovered_urls: list[str] = []
 
     try:
         if cookies:
@@ -145,6 +151,12 @@ async def _run(
                     "__SESSION_STORAGE__", session_storage_json
                 )
             )
+
+        if enable_dynamic_discovery:
+            try:
+                await ctx.add_init_script(HISTORY_SHIM)
+            except PlaywrightError:
+                pass
 
         if block_heavy_resources:
             try:
@@ -285,6 +297,18 @@ async def _run(
         except PlaywrightError:
             rendered_html = ""
 
+        if enable_dynamic_discovery:
+            try:
+                from_history = await history_urls(page, url)
+                from_clicks = await click_walk(page, url)
+                seen_discovered: set[str] = set()
+                for discovered in [*from_history, *from_clicks]:
+                    if discovered not in seen_discovered:
+                        seen_discovered.add(discovered)
+                        discovered_urls.append(discovered)
+            except Exception:
+                pass
+
         try:
             jar = await ctx.cookies([url])
             cookies = [f"{c['name']}={c['value']}" for c in jar]
@@ -312,6 +336,7 @@ async def _run(
         xhr_list=xhr_list,
         ws_list=ws_list,
         cookies=cookies,
+        discovered_urls=discovered_urls,
     )
 
 

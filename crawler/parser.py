@@ -34,6 +34,10 @@ class FormField:
     value: str = ""
     required: bool = False
 
+    @property
+    def type(self) -> str:
+        return self.field_type
+
 
 @dataclass
 class FormInfo:
@@ -75,9 +79,9 @@ class _PageParser(HTMLParser):
                 self.scripts.append(urljoin(self.base_url, src))
 
         elif tag == "link":
-            rel = attr.get("rel") or ""
+            rel = (attr.get("rel") or "").lower().split()
             href = attr.get("href") or ""
-            if rel == "manifest" and href:
+            if "manifest" in rel and href:
                 self.manifest_url = urljoin(self.base_url, href)
 
         elif tag == "title":

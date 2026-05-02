@@ -73,7 +73,10 @@ async def _crawl_with_browser(browser: Browser, config: CrawlerConfig) -> CrawlR
                 local_storage=result.auth.local_storage,
                 session_storage=result.auth.session_storage,
             )
-            result.authenticated_pages = auth_pages
+            public_signatures = {(p.url, p.status) for p in public_pages}
+            result.authenticated_pages = [
+                p for p in auth_pages if (p.url, p.status) not in public_signatures
+            ]
             result.errors.extend(auth_errors)
 
     result.endpoint_hints = _dedupe_endpoints(
@@ -199,6 +202,7 @@ async def _render_one(
             cookies=cookies,
             local_storage=local_storage,
             session_storage=session_storage,
+            enable_dynamic_discovery=config.enable_dynamic_discovery,
         )
         if raw is None:
             return None
@@ -221,7 +225,7 @@ def _snapshot_from_raw(raw: RawPageData, depth: int) -> PageSnapshot:
         for w in raw.ws_list
     )
 
-    return PageSnapshot(
+    snapshot = PageSnapshot(
         url=raw.url,
         depth=depth,
         status=raw.status,
@@ -239,6 +243,8 @@ def _snapshot_from_raw(raw: RawPageData, depth: int) -> PageSnapshot:
         response_headers=raw.response_headers,
         cookies=raw.cookies,
     )
+    snapshot.routes = _dedupe_strings([*snapshot.routes, *getattr(raw, "discovered_urls", [])])
+    return snapshot
 
 
 async def _enrich_from_scripts(

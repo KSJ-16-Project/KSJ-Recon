@@ -19,6 +19,7 @@ class CrawlerConfig:
     path_depth_limit: int = 12
     query_variants_limit: int = 3
     block_heavy_resources: bool = True
+    enable_dynamic_discovery: bool = False
     auth: AuthConfig | None = None
 
 

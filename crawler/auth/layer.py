@@ -5,10 +5,7 @@ from typing import Any
 
 from playwright.async_api import Browser
 
-try:
-    from crawler.parser import extract_forms
-except ModuleNotFoundError:
-    from parser import extract_forms
+from crawler.parser import extract_forms
 
 from .detector import find_login_page
 from .form_analyzer import analyze_login_form
