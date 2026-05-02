@@ -20,7 +20,7 @@ if root_path not in sys.path:
 
 import ksj_nmap.ksj_nmap 
 from ffuf_module.fuzzer_module import FuzzOrchestrator
-
+from ksj_llm.ksj_llm import LLMReporter
 # Rich 콘솔 초기화
 console = Console()
 
@@ -75,7 +75,6 @@ def check_isOrder(command_input):
         response = requests.get(target_url , timeout=5)
 
         if response.status_code==200:
-            print(f"Connection Error : 실제 페이지에 접근할 수 없습니다.\n{e}")
             url=target_url
             return True
         else:
@@ -108,6 +107,7 @@ order = sys.stdin.readline().strip()
 
 start = time.time()
 if check_isOrder(order):
+
     # Nmap 모듈 호출
     scanner=ksj_nmap.ksj_nmap.NmapScanner()
     fuzzer=FuzzOrchestrator()
@@ -153,7 +153,7 @@ if check_isOrder(order):
         except Exception as e:
             console.print(f"[bold red] KSJ-RECON 실행 중 오류 발생: {e}")
    
-        # --- 5. Middle Core 연동 (Progress 밖에서 실행) ---
+    # --- 5. Middle Core 연동 (Progress 밖에서 실행) ---
     console.print("\n[bold blue]>>> Middle core 분석 및 데이터 통합 시작[/bold blue]")
     mid_core = Middle_core()
 
@@ -162,7 +162,12 @@ if check_isOrder(order):
 
     results = mid_core.get_all_results()
 
-    # 결과물 출력 최적화 (Rich 전용 JSON 출력)
+    console.print("\n[bold blue]>>> LLM 기반 보고서 생성[/bold blue]")
+    reporter = LLMReporter()
+    report = reporter.generate_report_from_data(results)
+    reporter.save_report(report)
+
+# 결과물 출력 최적화 (Rich 전용 JSON 출력)
     console.print(Panel("[bold white]최종 통합 결과 데이터 (JSON)[/bold white]", border_style="yellow"))
     console.print_json(data=results)
     console.print("[bold green]Middle_core 테스트 끝[/bold green]")
@@ -172,19 +177,7 @@ else:
     console.print("[bold red]✘ Error: 명령어를 다시 입력하세요.[/bold red]")
 
 
-
-# 순서
-# Nmap 모듈 호출 후 데이터 받기
-# Crawler 모듈 호출 후 데이터 받아서 Fuzzer 모듈에 전달
-# Fuzzer 모듈 호출 후 데이터 받기
-# Nmap , Crawler , Fuzzer 데이터 정제 후  한개로 합쳐 Middle Core에 한꺼번에 전달
-# Middle core에서 데이터 받기
-# 받은 데이터로 LLm 모듈에 전달 후 보고서 받기
-
-# 구현 체크리스트
-# 1. 세부적인 파싱 요소 , Level 에서 숫자 파싱 후 전달
-# 2. 명령어 단어 싹 다 검사
-# 3. 
+ 
 
 
 
