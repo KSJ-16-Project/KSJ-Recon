@@ -198,7 +198,7 @@ Markdown, 설명문, 코드블록(```json), 주석은 출력하지 마라.
         scan_data = self.load_scan_result(filepath)
         return self.generate_dashboard_from_data(scan_data, output_filename)
     
- # 핸들러 예시입니다. Core 연동 시 참고하세요.
+""" # 핸들러 예시입니다. Core 연동 시 참고하세요.
 if __name__ == "__main__":
     reporter = LLMReporter()
 
@@ -213,3 +213,4 @@ if __name__ == "__main__":
 
     # Core 연동 시에는 아래처럼 사용
     # result = reporter.generate_dashboard_from_data(scan_data)
+"""
