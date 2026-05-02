@@ -28,8 +28,8 @@ class LLMReporter:
         self.api_key = self.api_key.strip()
         self.model = self.model.strip()
 
-        # [추가] 디버깅 출력 (문제 확인용)
-        print(f"[DEBUG] MODEL_NAME = {self.model}")
+        # 디버깅 출력 (모델문제 확인용)
+        #print(f"[DEBUG] MODEL_NAME = {self.model}")
 
         # [수정] 클라이언트 생성
         self.client = anthropic.Anthropic(api_key=self.api_key)
@@ -93,7 +93,7 @@ class LLMReporter:
 
     def generate_report_from_scan_file(self, filepath: str):
         """
-        [수정] 테스트 단계용
+        테스트 단계용
         통합 scan JSON 파일 1개를 읽고 보고서를 생성
         """
         scan_data = self.load_scan_result(filepath)
@@ -110,12 +110,14 @@ class LLMReporter:
 
         return output_path
 
-
+"""
 if __name__ == "__main__":
     reporter = LLMReporter()
 
     report = reporter.generate_report_from_scan_file("scan_result.json")
+    
 
     saved_path = reporter.save_report(report)
 
     print(f"[+] 보고서 저장 완료: {saved_path}")
+"""
