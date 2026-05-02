@@ -43,7 +43,7 @@ class NmapScanner:
             target
         ]
 
-        print(f"[+] Running Nmap: {' '.join(cmd)}")
+        #print(f"[+] Running Nmap: {' '.join(cmd)}")
 
         bin_dir = os.path.dirname(self.nmap_path)
 
