@@ -83,7 +83,6 @@ class LLMReporter:
 
         response = self.client.messages.create(
             model=self.model.strip(),
-            temperature=0.2,
             max_tokens=4096,
             messages=[
                 {"role": "user", "content": prompt}
