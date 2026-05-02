@@ -108,3 +108,38 @@
 
 [입력 데이터 / INPUT DATA]
 아래 [스캔 데이터] 섹션에 제공되는 JSON만 근거로 분석하라.
+
+[출력 형식 / OUTPUT FORMAT]
+
+반드시 아래 JSON 형식만 출력하라.
+JSON 외의 설명, Markdown, 코드블록은 출력하지 마라.
+
+{
+  "summary": "전체 요약",
+  "stats": {
+    "total_findings": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0
+  },
+  "findings": [
+    {
+      "category": "Network | Web | Other",
+      "title": "발견사항 제목",
+      "risk": "HIGH | MEDIUM | LOW",
+      "target": "대상 IP, 포트, URL 등",
+      "evidence": "입력 데이터 기반 근거",
+      "impact": "예상 영향",
+      "recommendation": "권고사항"
+    }
+  ],
+  "attack_paths": [
+    {
+      "title": "공격 경로 제목",
+      "entry_point": "초기 진입점",
+      "steps": ["단계1", "단계2"],
+      "impact": "예상 영향",
+      "likelihood": "HIGH | MEDIUM | LOW"
+    }
+  ]
+}
