@@ -10,7 +10,7 @@ class DashboardRenderer:
         self.base_dir = Path(base_dir).resolve() if base_dir else Path(__file__).resolve().parent.parent
 
         #"../templates" 대신 project/templates 로 명확하게 고정
-        self.template_dir = self.base_dir / "templates"
+        self.template_dir = Path(__file__).resolve().parent / "templates"
 
         self.env = Environment(
             loader=FileSystemLoader(self.template_dir),
