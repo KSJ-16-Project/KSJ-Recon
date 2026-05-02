@@ -108,16 +108,20 @@ class LLMReporter:
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(report_text)
 
+        print(f"[+] 보고서 저장 완료: {output_path}")
         return output_path
-
-"""
+""" # 핸들러 입니다 연동에 참고해주세요
 if __name__ == "__main__":
     reporter = LLMReporter()
 
     report = reporter.generate_report_from_scan_file("scan_result.json")
-    
+    #reporter.generate_report_from_scan_file 로컬파일 기준 보고서 작성시 파일을 읽는 함수
+    report = reporter.generate_report_from_data(scan_data)
+    # 코어 연동간에서는 reporter.generate_report_from_data 함수를 사용하시면 됩니다
+    # 보고서 파일 세이브는 ../output/에 생성됩니다
+    # 생성 보고서 git에 공유 안되게하려면 .gitignore 파일에 output/ 가 등록되어 있어야합니다
+    # API 키 노출 안되게 조심해주세요
 
     saved_path = reporter.save_report(report)
-
-    print(f"[+] 보고서 저장 완료: {saved_path}")
+    현재는 모듈 내부에 save 함수를 구현을 해놨지만 나중에 코어단에서 save로직을 돌려야 할듯 합니다
 """
