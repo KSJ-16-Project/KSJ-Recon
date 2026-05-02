@@ -1,21 +1,39 @@
 {
-  "base_url": "http://gym.contentshub.kr:58249",
-  "urls": [
-    {
-      "url": "http://gym.contentshub.kr:58249/demoshop/shop/shop_topview.asp?top=3",
-      "type": "spider",
-      "method": "GET",
-      "params": {"top": "3"},
-      "cookies": {},
-      "headers": {}
-    },
-    {
-      "url": "http://gym.contentshub.kr:58249/demoshop/shop/폼action경로.asp",
-      "type": "form",
-      "method": "POST",
-      "params": {"frmSearchWord": "test"},
-      "cookies": {},
-      "headers": {}
-    }
-  ]
+    "base_url": "https://xss-game.appspot.com",
+    "session_id": "",
+    "token": "",
+    "urls": [
+        {
+            "url": "https://xss-game.appspot.com/level1/frame",
+            "type": "spider",
+            "method": "GET",
+            "params": {"query": "test"},
+            "cookies": {},
+            "headers": {}
+        },
+        {
+            "url": "https://xss-game.appspot.com/level2/frame",
+            "type": "form",
+            "method": "POST",
+            "params": {"b": "test comment"},
+            "cookies": {},
+            "headers": {}
+        },
+        {
+            "url": "https://xss-game.appspot.com/level4/frame",
+            "type": "spider",
+            "method": "GET",
+            "params": {"timer": "3"},
+            "cookies": {},
+            "headers": {}
+        },
+         {
+            "url": "https://xss-game.appspot.com/level5/frame/signup",
+            "type": "spider",
+            "method": "GET",
+            "params": {"next": "confirm"},
+            "cookies": {},
+            "headers": {}
+        }
+    ]
 }

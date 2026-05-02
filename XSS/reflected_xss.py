@@ -33,12 +33,22 @@ TIMEOUT = 10
 
 
 class ReflectedXSSScanner:
-    def __init__(self, urls: list):
+    def __init__(self, urls: list, auth: dict = None):
         self.urls = urls
         self.context_analyzer = ContextAnalyzer()
         self.result_builder = ResultBuilder()
         self.session = requests.Session()
         self.session.headers.update(DEFAULT_HEADERS)
+        auth = auth or {}
+        self.auth_cookies = {"session_id": auth["session_id"]} if auth.get("session_id") else {}
+        self.auth_headers = {"Authorization": f"Bearer {auth['token']}"} if auth.get("token") else {}
+        self.errors = []
+
+    def _is_auth_failed(self, response) -> bool:
+        if response.status_code in [401, 403]:
+            return True
+        url_lower = response.url.lower()
+        return "login" in url_lower or "signin" in url_lower
 
     def scan(self) -> list:
         """전체 URL 스캔 후 후보 목록 반환"""
@@ -61,8 +71,8 @@ class ReflectedXSSScanner:
         """단일 URL에 대한 Reflected XSS 스캔"""
         url = url_item.get("url", "")
         params = url_item.get("params", {})
-        cookies = url_item.get("cookies", {})
-        headers = url_item.get("headers", {})
+        cookies = {**self.auth_cookies, **url_item.get("cookies", {})}
+        headers = {**self.auth_headers, **url_item.get("headers", {})}
 
         if not url:
             return []
@@ -107,10 +117,28 @@ class ReflectedXSSScanner:
                 cookies=cookies,
                 headers=headers,
                 timeout=TIMEOUT,
-                verify=False  # 자체 서명 인증서 허용
+                verify=False
             )
+        except (requests.ConnectionError, requests.Timeout) as e:
+            logger.warning(f"네트워크 오류: {url} - {e}")
+            self.errors.append(self.result_builder.build_error(
+                url=url, method="GET", error="network_error", detail=str(e)
+            ))
+            return None
         except requests.RequestException as e:
             logger.warning(f"요청 실패: {url} - {e}")
+            self.errors.append(self.result_builder.build_error(
+                url=url, method="GET", error="network_error", detail=str(e)
+            ))
+            return None
+
+        # 세션 만료 / 인증 실패 감지
+        if self._is_auth_failed(response):
+            logger.warning(f"인증 실패 (스킵): {url} [{response.status_code}]")
+            self.errors.append(self.result_builder.build_error(
+                url=url, method="GET", error="auth_failed",
+                detail=f"status={response.status_code} final_url={response.url}"
+            ))
             return None
 
         response_text = response.text

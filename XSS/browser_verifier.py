@@ -24,27 +24,33 @@ class BrowserVerifier:
     def __init__(self, evidence_dir: Path):
         self.evidence_dir = evidence_dir
 
-    def verify(self, candidates: list) -> list:
-        """후보 목록 전체 브라우저 검증"""
+    def verify(self, candidates: list, on_result=None) -> list:
+        """후보 목록 전체 브라우저 검증.
+        on_result: 각 URL 검증 완료 시 호출되는 콜백 (Ctrl+C 부분 저장용)
+        """
         try:
             from playwright.sync_api import sync_playwright
         except ImportError:
-            logger.error(
-                "Playwright가 설치되지 않음. "
-                "Crawler 팀 환경에서 실행되고 있는지 확인 필요."
-            )
-            return candidates  # 브라우저 검증 없이 그대로 반환
+            logger.error("Playwright가 설치되지 않음.")
+            return candidates
 
         results = []
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
 
-            for candidate in candidates:
-                verified = self._verify_single(browser, candidate)
-                results.append(verified)
+                for candidate in candidates:
+                    verified = self._verify_single(browser, candidate)
+                    results.append(verified)
+                    if on_result:
+                        on_result(verified)
 
-            browser.close()
+                browser.close()
+        except Exception as e:
+            logger.error(f"브라우저 실행 실패: {e}")
+            logger.warning("브라우저 검증 없이 후보 결과만 반환합니다.")
+            return candidates
 
         return results
 
