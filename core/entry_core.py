@@ -24,21 +24,25 @@ from ffuf_module.fuzzer_module import FuzzOrchestrator
 # Rich 콘솔 초기화
 console = Console()
 
+# KSJ-Recon 배너
 def print_banner():
     ascii_banner = pyfiglet.figlet_format("KSJ-RECON", font="slant")
     console.print(Panel(f"[bold cyan]{ascii_banner}[/bold cyan]", subtitle="[yellow]v1.0.0 - Modular Recon Platform[/yellow]"))
+
 # 명령어 검사 로직 
 def check_isOrder(command_input):
-    global url
-    global level
+    global url 
+    global level # 사용자가 입력한 레벨
+    global fuzzer_level 
+    global nmap_level
 
     #1. 간단한 명령어 패턴 검사
     if not command_input.startswith("recon"):
-        print("Error : 올바른 명령어가 아닙니다.")
+        console.print("[bold red]✘ Error: 명령어를 다시 입력하세요.[/bold red]")
         return False
     
     # 2. URL 추출 및 파싱
-    # 입력 예시 : "recon start [L1] URL" -> 최소 형식 
+    # 입력 예시 : "recon start [L1] URL" -> 최소 형식 , 4개나 있어야 한다.
     try:
         parts=command_input.split()
         if len(parts)<4:
@@ -47,15 +51,19 @@ def check_isOrder(command_input):
         # Level이 잘 입력됐는지 검사
         try:
             level = int(parts[2][1:].strip())
+            nmap_level=level_mode[level-1][0]
+            fuzzer_level=level_mode[level-1][1]
+    
         except ValueError:
             return False
         
+        # URL 뽑아내기
         target_url =parts[3]
         parsed =urlparse(target_url)
 
         # URL 형식이 맞는지 검사 -> http , https인지 확인
         if parsed.scheme not in ['http','https']:
-            print(f"올바른 URL을 입력해주세요.")
+            console.print("[bold red]✘ 올바른 URL를 입력하세요.[/bold red]")
             return False
     except Exception as e:
         print(f"Parsing Error: {e}")
@@ -67,20 +75,17 @@ def check_isOrder(command_input):
         response = requests.get(target_url , timeout=5)
 
         if response.status_code==200:
-            print(f"Success: {target_url}에 접근 가능합니다. Nmap 모듈을 호출합니다.")
+            print(f"Connection Error : 실제 페이지에 접근할 수 없습니다.\n{e}")
             url=target_url
             return True
         else:
-            print(f"Warning: 페이지 응답 코드 {response.status_code}")
+            console.print(f"[bold red]✘ URL에 접근할 수 없습니다. {response.status_code}[/bold red]")
             return False
     except requests.exceptions.RequestException as e:
-        print(f"Connection Error : 실제 페이지에 접근할 수 없습니다.\n{e}")
+        console.print(f"[bold red]✘ URL에 접근할 수 없습니다.[/bold red]")
         return False
 
 
-
-level=0
-url=""
 
 # level 1 -> nmap low , fuzzer low
 # level 2 -> nmap hard , fuzzer low
@@ -88,6 +93,10 @@ url=""
 # level 4 -> nmap hard , fuzzer hard
 level_mode=[[1,1],[2,1],[1,2],[2,2]]
 
+level=0
+nmap_level=0
+fuzzer_level=0
+url=""
 
 # --- 메인 실행부 ---
 print_banner()
@@ -119,7 +128,6 @@ if check_isOrder(order):
 
         try:
             with ThreadPoolExecutor(max_workers=3) as executor:
-            # 여기에도 상태 표시 하고싶은데?
                 future_nmap=executor.submit(scanner.scan,url,level)
                 future_fuzzer=executor.submit(
                     fuzzer.run,
