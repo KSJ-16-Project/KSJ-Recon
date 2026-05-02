@@ -92,7 +92,7 @@ class AggressiveFuzzer:
         },
         2: {
             "threads": 60,
-            "timeout_sec": 3600,
+            "timeout_sec": 7200,
             "depth": 1,
             "recursion": True,
         }
@@ -131,7 +131,10 @@ class AggressiveFuzzer:
     def _ensure_executable(self):
         """macOS/Linux에서 바이너리 실행 권한 부여"""
         if platform.system() != "Windows" and self.ffuf_bin.exists():
-            os.chmod(self.ffuf_bin, 0o755)
+            try:
+                os.chmod(self.ffuf_bin, 0o755)
+            except OSError as e:
+                logger.warning(f"바이너리 실행 권한 부여 실패: {e}")
 
     def _resolve_wordlist(self, wordlist: str) -> Path:
         """절대경로면 그대로, 아니면 wordlists/ 디렉토리에서 탐색"""
@@ -205,16 +208,18 @@ class AggressiveFuzzer:
         if not wordlist_path.exists():
             return self._error(target, f"워드리스트 없음: {wordlist_path}")
 
-        # 알려진 경로 제외한 임시 wordlist 생성
+        # 알려진 경로 제외한 임시 wordlist 생성 (실패 시 원본 사용)
         tmp_wordlist = None
         if exclude_words:
-            tmp_wordlist  = self._make_filtered_wordlist(wordlist_path, exclude_words)
-            wordlist_path = tmp_wordlist
+            tmp_wordlist = self._make_filtered_wordlist(wordlist_path, exclude_words)
+            if tmp_wordlist:
+                wordlist_path = tmp_wordlist
 
         target_url  = f"{target}/FUZZ"
         all_results = []
         warnings    = []
         output_file = Path(tempfile.gettempdir()) / f"ffuf_{uuid.uuid4().hex}.json"
+        proc        = None
 
         try:
             cmd = self._compose_command(
@@ -250,16 +255,46 @@ class AggressiveFuzzer:
                     proc.wait()
                     warnings.append(f"타임아웃: {target_url}")
                 tracker.join(timeout=5)
-            except Exception as e:
+            except FileNotFoundError as e:
+                warnings.append(f"바이너리 실행 실패: {e}")
+                logger.error(f"ffuf 바이너리 실행 실패 ({target}): {e}")
+            except OSError as e:
                 warnings.append(f"실행 오류: {e}")
+                logger.error(f"실행 오류 ({target}): {e}")
 
+            # ffuf가 부분이라도 출력했으면 파싱
             all_results.extend(self._parse_output(target, output_file, recursion))
 
+        except KeyboardInterrupt:
+            # 진행 중이던 ffuf 프로세스 강제 종료
+            if proc is not None and proc.poll() is None:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=5)
+                except Exception:
+                    pass
+            warnings.append(f"사용자 중단: {target_url}")
+            logger.warning(f"사용자 중단: {target_url}")
+            # 부분 결과라도 회수 시도
+            try:
+                all_results.extend(self._parse_output(target, output_file, recursion))
+            except Exception:
+                pass
+            raise
+        except Exception as e:
+            logger.error(f"퍼징 중 예상치 못한 오류 ({target}): {e}")
+            warnings.append(f"예상치 못한 오류: {e}")
         finally:
-            if output_file.exists():
-                output_file.unlink()
-            if tmp_wordlist and tmp_wordlist.exists():
-                tmp_wordlist.unlink()
+            try:
+                if output_file.exists():
+                    output_file.unlink()
+            except OSError:
+                pass
+            try:
+                if tmp_wordlist and tmp_wordlist.exists():
+                    tmp_wordlist.unlink()
+            except OSError:
+                pass
 
         # ffuf 재귀 실행 시 같은 URL이 중복 추가될 수 있어 dedup
         seen   = set()
@@ -284,26 +319,37 @@ class AggressiveFuzzer:
         if warnings:
             result["warnings"] = warnings
 
-        # 저장
+        # 저장 (실패 시 saved_path 누락, 데이터는 결과 dict에 그대로)
         if save_to == "auto":
-            saved_path           = self.save_results(result)
-            result["saved_path"] = str(saved_path)
+            saved_path = self.save_results(result)
+            if saved_path:
+                result["saved_path"] = str(saved_path)
         elif save_to:
-            saved_path           = self.save_results(result, output_path=save_to)
-            result["saved_path"] = str(saved_path)
+            saved_path = self.save_results(result, output_path=save_to)
+            if saved_path:
+                result["saved_path"] = str(saved_path)
 
         return result
 
     # ---------- wordlist 필터링 ----------
-    def _make_filtered_wordlist(self, wordlist_path: Path, exclude_words: set) -> Path:
-        """알려진 경로를 제외한 임시 wordlist 파일 생성"""
+    def _make_filtered_wordlist(self, wordlist_path: Path, exclude_words: set):
+        """알려진 경로를 제외한 임시 wordlist 파일 생성. 실패 시 None 반환"""
         tmp = Path(tempfile.gettempdir()) / f"ffuf_wl_{uuid.uuid4().hex}.txt"
-        with open(wordlist_path, 'r', encoding='utf-8', errors='ignore') as fin, \
-             open(tmp, 'w', encoding='utf-8') as fout:
-            for line in fin:
-                if line.strip() not in exclude_words:
-                    fout.write(line)
-        return tmp
+        try:
+            with open(wordlist_path, 'r', encoding='utf-8', errors='ignore') as fin, \
+                 open(tmp, 'w', encoding='utf-8') as fout:
+                for line in fin:
+                    if line.strip() not in exclude_words:
+                        fout.write(line)
+            return tmp
+        except OSError as e:
+            logger.warning(f"wordlist 필터링 실패, 원본 사용: {e}")
+            try:
+                if tmp.exists():
+                    tmp.unlink()
+            except OSError:
+                pass
+            return None
 
     # ---------- 진행률 추적 ----------
     def _track_progress(self, proc, progress_dict: dict):
@@ -424,30 +470,35 @@ class AggressiveFuzzer:
         result:      dict,
         output_path: str = None,
         results_dir: str = "results",
-    ) -> Path:
-        if output_path:
-            save_path = Path(output_path)
-            if not save_path.is_absolute():
-                save_path = self.base_dir / save_path
-        else:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            target    = result.get("target", "")
-            host      = urlparse(target).netloc or target
-            safe_host = "".join(
-                c if c.isalnum() or c in "-_" else "_" for c in host
-            )
-            filename  = "fuzzer_directory.json"
+    ):
+        """결과를 JSON으로 저장. 실패 시 None 반환"""
+        try:
+            if output_path:
+                save_path = Path(output_path)
+                if not save_path.is_absolute():
+                    save_path = self.base_dir / save_path
+            else:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                target    = result.get("target", "")
+                host      = urlparse(target).netloc or target
+                safe_host = "".join(
+                    c if c.isalnum() or c in "-_" else "_" for c in host
+                )
+                filename  = "fuzzer_directory.json"
 
-            folder_name = f"{safe_host}_{timestamp}"
-            save_dir    = self.base_dir / results_dir / folder_name
-            save_dir.mkdir(parents=True, exist_ok=True)
-            save_path   = save_dir / filename
+                folder_name = f"{safe_host}_{timestamp}"
+                save_dir    = self.base_dir / results_dir / folder_name
+                save_dir.mkdir(parents=True, exist_ok=True)
+                save_path   = save_dir / filename
 
-        save_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(save_path, "w", encoding="utf-8") as f:
-            json.dump(result, f, indent=2, ensure_ascii=False)
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(save_path, "w", encoding="utf-8") as f:
+                json.dump(result, f, indent=2, ensure_ascii=False)
 
-        return save_path
+            return save_path
+        except OSError as e:
+            logger.warning(f"결과 저장 실패: {e}")
+            return None
 
     def _error(self, target: str, msg: str) -> dict:
         return {
@@ -513,41 +564,94 @@ class FuzzOrchestrator:
         host = host.split(":")[0]
         tld1 = ".".join(host.split(".")[-2:]) if "." in host else host
 
-        run_dir       = self._prepare_run_dir(base_url, run_dir)
+        # 디렉토리 준비 실패 시 즉시 에러 응답
+        try:
+            run_dir = self._prepare_run_dir(base_url, run_dir)
+        except RuntimeError as e:
+            logger.error(str(e))
+            return self._build_response(
+                status="error", base_url=base_url, tld1=tld1,
+                difficulty=difficulty, spider_urls=spider_urls,
+                run_dir="", all_results=[], error=str(e),
+            )
+
         exclude_words = self._compute_exclude_words(base_url, spider_urls)
         all_tasks     = self._build_tasks(base_url, spider_urls)
+        all_results   = [None] * len(all_tasks)
 
-        all_results = self._execute_tasks(
-            all_tasks, run_dir, difficulty, verbose, exclude_words,
-        )
+        try:
+            self._execute_tasks(
+                all_tasks, run_dir, difficulty, verbose, exclude_words, all_results,
+            )
+            self._dedupe_across_tasks(all_results)
+            return self._build_response(
+                status="ok", base_url=base_url, tld1=tld1,
+                difficulty=difficulty, spider_urls=spider_urls,
+                run_dir=str(run_dir), all_results=all_results,
+            )
+        except KeyboardInterrupt:
+            logger.warning("사용자가 중단했습니다 - 부분 결과 반환")
+            # 취소된 태스크의 None 슬롯을 에러 dict로 채움
+            for i, (url, _) in enumerate(all_tasks):
+                if all_results[i] is None:
+                    all_results[i] = self.fuzzer._error(url, "사용자 중단으로 취소됨")
+            self._dedupe_across_tasks(all_results)
+            return self._build_response(
+                status="interrupted", base_url=base_url, tld1=tld1,
+                difficulty=difficulty, spider_urls=spider_urls,
+                run_dir=str(run_dir), all_results=all_results,
+            )
+        except Exception as e:
+            logger.error(f"퍼징 실행 중 예상치 못한 오류: {e}")
+            return self._build_response(
+                status="error", base_url=base_url, tld1=tld1,
+                difficulty=difficulty, spider_urls=spider_urls,
+                run_dir=str(run_dir), all_results=all_results, error=str(e),
+            )
 
-        self._dedupe_across_tasks(all_results)
-
-        return {
-            "status":      "ok",
+    def _build_response(
+        self,
+        status:      str,
+        base_url:    str,
+        tld1:        str,
+        difficulty:  int,
+        spider_urls: list,
+        run_dir:     str,
+        all_results: list,
+        error:       str = None,
+    ) -> dict:
+        """run() 응답 dict 빌더"""
+        resp = {
+            "status":      status,
             "base_url":    base_url,
             "tld1":        tld1,
             "difficulty":  difficulty,
             "spider_urls": spider_urls,
             "timestamp":   datetime.now().isoformat(),
-            "run_dir":     str(run_dir),
+            "run_dir":     run_dir,
             "results":     all_results,
         }
+        if error:
+            resp["error"] = error
+        return resp
 
     # ---------- 디렉토리 준비 ----------
     def _prepare_run_dir(self, base_url: str, run_dir: str = None) -> Path:
         """결과 저장용 run_dir 결정 및 생성"""
-        results_dir = self.base_dir / "results"
-        results_dir.mkdir(exist_ok=True)
+        try:
+            results_dir = self.base_dir / "results"
+            results_dir.mkdir(exist_ok=True)
 
-        if run_dir is None:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            host      = urlparse(base_url).netloc or base_url
-            safe_host = "".join(c if c.isalnum() or c in "-_" else "_" for c in host)
-            run_dir   = results_dir / f"{safe_host}_{timestamp}"
-        run_dir = Path(run_dir)
-        run_dir.mkdir(parents=True, exist_ok=True)
-        return run_dir
+            if run_dir is None:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                host      = urlparse(base_url).netloc or base_url
+                safe_host = "".join(c if c.isalnum() or c in "-_" else "_" for c in host)
+                run_dir   = results_dir / f"{safe_host}_{timestamp}"
+            run_dir = Path(run_dir)
+            run_dir.mkdir(parents=True, exist_ok=True)
+            return run_dir
+        except OSError as e:
+            raise RuntimeError(f"결과 디렉토리 생성 실패 ({run_dir}): {e}") from e
 
     # ---------- exclude_words 계산 ----------
     def _compute_exclude_words(self, base_url: str, spider_urls: list) -> set:
@@ -626,9 +730,10 @@ class FuzzOrchestrator:
         difficulty:    int,
         verbose:       bool,
         exclude_words: set,
-    ) -> list:
-        """모든 태스크를 병렬 실행하고 결과 리스트 반환"""
-        all_results   = [None] * len(all_tasks)
+        all_results:   list,
+    ) -> None:
+        """모든 태스크를 병렬 실행하고 all_results에 in-place로 채워 넣음.
+        KeyboardInterrupt 발생 시 부분 결과만 채워진 채로 예외 재전파."""
         task_progress = [{} for _ in all_tasks]
         task_status   = {
             i: {"url": url, "start": None, "done": False}
@@ -643,30 +748,42 @@ class FuzzOrchestrator:
         )
         monitor_thread.start()
 
-        with ThreadPoolExecutor(max_workers=min(len(all_tasks), 4)) as executor:
-            futures = {}
-            for i, (url, fname) in enumerate(all_tasks):
-                task_status[i]["start"] = time.time()
-                futures[executor.submit(
-                    self._run_single_task,
-                    i, url, fname, run_dir, difficulty, verbose,
-                    exclude_words, task_progress[i],
-                )] = i
+        try:
+            with ThreadPoolExecutor(max_workers=min(len(all_tasks), 4)) as executor:
+                futures = {}
+                for i, (url, fname) in enumerate(all_tasks):
+                    task_status[i]["start"] = time.time()
+                    futures[executor.submit(
+                        self._run_single_task,
+                        i, url, fname, run_dir, difficulty, verbose,
+                        exclude_words, task_progress[i],
+                    )] = i
 
-            for future in as_completed(futures):
-                idx              = futures[future]
-                result           = future.result()
-                all_results[idx] = result
-                s                = task_status[idx]
-                s["done"]        = True
-                elapsed          = int(time.time() - s["start"])
-                m, sec           = divmod(elapsed, 60)
-                count            = len(result.get("results", []))
-                logger.info(f"  [완료] {s['url']} → {count}개 발견 ({m}분 {sec}초)")
-
-        stop_event.set()
-        monitor_thread.join()
-        return all_results
+                try:
+                    for future in as_completed(futures):
+                        idx = futures[future]
+                        try:
+                            result = future.result()
+                        except Exception as e:
+                            logger.error(f"태스크 실행 실패 (idx={idx}): {e}")
+                            url    = task_status[idx]["url"]
+                            result = self.fuzzer._error(url, f"태스크 실행 실패: {e}")
+                        all_results[idx] = result
+                        s         = task_status[idx]
+                        s["done"] = True
+                        elapsed   = int(time.time() - s["start"])
+                        m, sec    = divmod(elapsed, 60)
+                        count     = len(result.get("results", []))
+                        logger.info(f"  [완료] {s['url']} → {count}개 발견 ({m}분 {sec}초)")
+                except KeyboardInterrupt:
+                    logger.warning("사용자 중단 감지 - 진행 중인 태스크 취소 시도")
+                    for f in futures:
+                        f.cancel()
+                    raise
+        finally:
+            stop_event.set()
+            if monitor_thread.is_alive():
+                monitor_thread.join(timeout=2)
 
     # ---------- 태스크간 중복 제거 ----------
     def _dedupe_across_tasks(self, all_results: list) -> None:
