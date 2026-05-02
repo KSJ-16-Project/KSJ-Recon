@@ -117,7 +117,7 @@ def validate_input(data: dict) -> dict:
 def print_config(config: dict):
     diff_label = {
         1: "이지 (raft-small, ~17,000개, depth 0)",
-        2: "하드 (raft-large, ~62,000개, depth 자동)",
+        2: "하드 (raft-large, ~62,000개, depth 자동, 최대 2시간)",
     }.get(config["difficulty"], "알 수 없음")
 
     print(f"\n{'=' * 60}")
