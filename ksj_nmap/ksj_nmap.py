@@ -32,9 +32,9 @@ class NmapScanner:
             raise Exception("Nmap path not configured for this OS")
 
         if level == 1: # 레벨처리구문 기본값 1 : 라이트스캔
-            arguments = ['-sS', '-sV', '--open', '-p-', '-T4']
-        else:
             arguments = ['-sS', '-sV', '--open', '-T4']
+        else:
+            arguments = ['-sS', '-sV', '--open', '-p-','-T4']
 
         cmd = [
             self.nmap_path,
@@ -43,7 +43,7 @@ class NmapScanner:
             target
         ]
 
-        print(f"[+] Running Nmap: {' '.join(cmd)}")
+        #print(f"[+] Running Nmap: {' '.join(cmd)}")
 
         bin_dir = os.path.dirname(self.nmap_path)
 
