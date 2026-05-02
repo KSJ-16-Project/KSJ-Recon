@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from dotenv import load_dotenv
 import anthropic
-from dashboard_renderer import DashboardRenderer
+from .dashboard_renderer import DashboardRenderer
 
 
 class LLMReporter:
