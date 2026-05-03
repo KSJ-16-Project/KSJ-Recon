@@ -1,120 +1,39 @@
-# XSS Scanner Module
+# Lightweight XSS Module v2.1
 
-## 구조
+Recon 결과 URL을 입력받아 Reflected XSS 후보, 제한적 Stored XSS 후보, hash/fragment 기반 DOM XSS를 경량 검증합니다.
 
-```
-xss_module/
-├── xss_scanner.py          # 메인 진입점 (Middle Core에서 호출)
-├── requirements.txt
-│
-├── core/
-│   ├── payloads.py         # 페이로드 / 마커 정의
-│   ├── context_analyzer.py # 반사 위치 컨텍스트 분류
-│   └── result_builder.py   # 결과 JSON 빌더
-│
-├── modules/
-│   ├── reflected_xss.py    # Reflected XSS (requests 기반)
-│   ├── stored_xss.py       # Stored XSS (POST + URL 순회)
-│   └── browser_verifier.py # 브라우저 실행 확인 (Playwright)
-│
-├── evidence/               # 스크린샷 저장 (자동 생성)
-└── tests/
-    ├── test_unit.py        # 유닛 테스트 (네트워크 불필요)
-    └── test_real.py        # 실제 사이트 테스트
-```
+## 설치
 
-## 실행 방법
-
-### 1. 설치
 ```bash
 pip install -r requirements.txt
-# Playwright는 Crawler 팀 환경에서 이미 설치됨
+python -m playwright install chromium
 ```
 
-### 2. Middle Core에서 호출
-```python
-from xss_scanner import run_xss_scan
+## 실행
 
-result = run_xss_scan(input_json)
-```
-
-### 3. 직접 실행 (테스트)
 ```bash
-# 유닛 테스트 (네트워크 불필요)
-python tests/test_unit.py
-
-# 실제 사이트 테스트 (인터넷 필요)
-python tests/test_real.py --target vulnweb
-
-# DVWA 테스트 (로컬 설치 필요)
-python tests/test_real.py --target dvwa
+python xss_cli.py input.json
 ```
 
-## 입력 JSON 스펙
+입력 파일을 생략하면 `input.json`을 기본으로 읽습니다.
 
-```json
-{
-  "base_url": "https://target.com",
-  "urls": [
-    {
-      "url": "https://target.com/search?q=test",
-      "type": "spider",
-      "method": "GET",
-      "params": {"q": "test"},
-      "cookies": {"session": "abc123"},
-      "headers": {"Authorization": "Bearer xxx"}
-    }
-  ]
-}
-```
+## v2.1 수정 사항
 
-**필수 필드**: `url`  
-**선택 필드**: `method` (기본: GET), `params`, `cookies`, `headers`
+- `onload="startTimer('...')"` 같은 HTML 이벤트 핸들러 내부 JS 문자열 context 분류 추가
+- 이벤트 핸들러 context용 payload 추가: `');alert(1);//`
+- URL context에서 `javascript:alert(1)` 링크 클릭 검증 추가
+- hash/fragment DOM XSS payload 추가: `1' onerror='alert(1)`
+- Level 3/4/5 유형이 정적 분석에서 LOW로 떨어지는 문제 개선
 
-## 출력 JSON 스펙
+## 범위
 
-```json
-{
-  "scan_info": { "base_url": "...", "scan_time": "...", "scanner": "..." },
-  "xss_results": [
-    {
-      "url": "https://target.com/search",
-      "method": "GET",
-      "param": "q",
-      "xss_type": "reflected",
-      "risk_level": "high",
-      "marker_reflected": true,
-      "context": "html_body",
-      "special_chars_escaped": false,
-      "payload_tried": "<script>alert(1)</script>",
-      "browser_verified": true,
-      "screenshot_alert": "evidence/20240101_target.com_q_alert.png",
-      "screenshot_after": "evidence/20240101_target.com_q_after.png",
-      "waf_detected": false,
-      "evidence": "...반사 위치..."
-    }
-  ],
-  "summary": {
-    "total_tested": 50,
-    "total_found": 3,
-    "high": 1,
-    "medium": 1,
-    "low": 1,
-    "waf_detected": false,
-    "scope_excluded": ["DOM XSS - 스코프 외", "WAF 우회 - 감지만 수행"]
-  }
-}
-```
+지원:
+- GET 파라미터 기반 Reflected XSS 후보 탐지
+- 고위험 후보의 Playwright 기반 alert 검증
+- `#fragment` 기반 DOM XSS 제한 검증
+- 명시적으로 안전한 POST form에 대한 제한적 Stored XSS 후보 검증
 
-## risk_level 기준
-
-| 레벨 | 조건 |
-|------|------|
-| HIGH | 브라우저에서 실제 JS 실행 확인 |
-| MEDIUM | 마커 반사 + 특수문자 미인코딩 |
-| LOW | 마커 반사됐지만 특수문자 인코딩됨 |
-
-## 스코프 외
-
-- **DOM XSS**: JS 코드 흐름 분석 필요, 이번 스코프 제외
-- **WAF 우회**: 감지만 하고 보고서에 명시
+제외/제한:
+- 전체 DOM XSS data-flow 분석은 미구현
+- WAF 우회 및 대량 payload fuzzing 미구현
+- 인증/세션이 필요한 흐름은 입력 JSON의 headers/cookies가 필요

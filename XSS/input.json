@@ -1,39 +1,55 @@
 {
-    "base_url": "https://xss-game.appspot.com",
-    "session_id": "",
-    "token": "",
-    "urls": [
-        {
-            "url": "https://xss-game.appspot.com/level1/frame",
-            "type": "spider",
-            "method": "GET",
-            "params": {"query": "test"},
-            "cookies": {},
-            "headers": {}
-        },
-        {
-            "url": "https://xss-game.appspot.com/level2/frame",
-            "type": "form",
-            "method": "POST",
-            "params": {"b": "test comment"},
-            "cookies": {},
-            "headers": {}
-        },
-        {
-            "url": "https://xss-game.appspot.com/level4/frame",
-            "type": "spider",
-            "method": "GET",
-            "params": {"timer": "3"},
-            "cookies": {},
-            "headers": {}
-        },
-         {
-            "url": "https://xss-game.appspot.com/level5/frame/signup",
-            "type": "spider",
-            "method": "GET",
-            "params": {"next": "confirm"},
-            "cookies": {},
-            "headers": {}
-        }
-    ]
+  "base_url": "https://xss-game.appspot.com",
+  "options": {
+    "browser_verify": true,
+    "stored_xss": true,
+    "dom_hash_xss": true,
+    "dom_stored_xss": true,
+    "timeout": 10,
+    "verify_tls": false
+  },
+  "urls": [
+    {
+      "url": "https://xss-game.appspot.com/level1/frame",
+      "type": "spider",
+      "method": "GET",
+      "params": {"query": "test"},
+      "cookies": {},
+      "headers": {}
+    },
+    {
+      "url": "https://xss-game.appspot.com/level3/frame#1",
+      "type": "dom_hash",
+      "method": "GET",
+      "cookies": {},
+      "headers": {}
+    },
+    {
+      "url": "https://xss-game.appspot.com/level2/frame",
+      "type": "form",
+      "method": "POST",
+      "params": {"b": "test comment"},
+      "safe_to_submit": true,
+      "check_urls": ["https://xss-game.appspot.com/level2/frame"],
+      "body_format": "form",
+      "cookies": {},
+      "headers": {}
+    },
+    {
+      "url": "https://xss-game.appspot.com/level4/frame",
+      "type": "spider",
+      "method": "GET",
+      "params": {"timer": "3"},
+      "cookies": {},
+      "headers": {}
+    },
+    {
+      "url": "https://xss-game.appspot.com/level5/frame/signup",
+      "type": "spider",
+      "method": "GET",
+      "params": {"next": "confirm"},
+      "cookies": {},
+      "headers": {}
+    }
+  ]
 }
