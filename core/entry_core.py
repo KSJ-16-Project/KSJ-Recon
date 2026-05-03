@@ -11,6 +11,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn 
 import pyfiglet
+import questionary
+from questionary import Choice
+from questionary import Style
 
 # 1. 현재 파일(entry_core.py)의 부모의 부모인 'KSJ-RECON' 폴더 경로를 찾습니다.
 root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -32,37 +35,12 @@ def print_banner():
     ascii_banner = pyfiglet.figlet_format("KSJ-RECON", font="slant")
     console.print(Panel(f"[bold cyan]{ascii_banner}[/bold cyan]", subtitle="[yellow]v1.0.0 - Modular Recon Platform[/yellow]"))
 
-# 명령어 검사 로직 
-def check_isOrder(command_input):
-    global url 
-    global level # 사용자가 입력한 레벨
-    global fuzzer_level 
-    global nmap_level
-
-    #1. 간단한 명령어 패턴 검사
-    if not command_input.startswith("recon"):
-        console.print("[bold red]✘ Error: 명령어를 다시 입력하세요.[/bold red]")
-        return False
+# Url 검사 로직
+def check_Url(recon_url):
     
-    # 2. URL 추출 및 파싱
-    # 입력 예시 : "recon start [L1] URL" -> 최소 형식 , 4개나 있어야 한다.
     try:
-        parts=command_input.split()
-        if len(parts)<4:
-            return False
-        
-        # Level이 잘 입력됐는지 검사
-        try:
-            level = int(parts[2][1:].strip())
-            nmap_level=level_mode[level-1][0]
-            fuzzer_level=level_mode[level-1][1]
-    
-        except ValueError:
-            return False
-        
         # URL 뽑아내기
-        target_url =parts[3]
-        parsed =urlparse(target_url)
+        parsed =urlparse(recon_url)
 
         # URL 형식이 맞는지 검사 -> http , https인지 확인
         if parsed.scheme not in ['http','https']:
@@ -75,10 +53,9 @@ def check_isOrder(command_input):
     # 3. URL이 실제로 접근되는지?
     try:
         #timeout을 설정하여 무한 대기를 방지한다.
-        response = requests.get(target_url , timeout=5)
+        response = requests.get(recon_url , timeout=5)
 
         if response.status_code==200:
-            url=target_url
             return True
         else:
             console.print(f"[bold red]✘ URL에 접근할 수 없습니다. {response.status_code}[/bold red]")
@@ -95,44 +72,87 @@ def check_isOrder(command_input):
 # level 4 -> nmap hard , fuzzer hard
 level_mode=[[1,1],[2,1],[1,2],[2,2]]
 
-level=0
-nmap_level=0
-fuzzer_level=0
-url=""
 
 # --- 메인 실행부 ---
+print()
 print_banner()
+print()
 
-# 명령어 입력
-# recon start L1 [URL] 로 입력해서 데이터 가져오면 됩니다.
-console.print("\n[bold yellow]명령어를 입력하세요 (예: recon start L1 http://example.com):[/bold yellow]")
-order = sys.stdin.readline().strip()
+# Level 선택지 스타일 정의
+custom_style = Style([
+    ('qmark', 'fg:#673ab7 bold'),       # 질문 기호 색상
+    ('question', 'bold'),               # 질문 텍스트
+    ('pointer', 'fg:#ff5252 bold'),      # 화살표 색상 (강렬한 레드)
+    ('highlighted', 'fg:#ff5252 bold'),  # 선택된 항목 색상
+    ('selected', 'fg:#ccff00'),          # 최종 선택 후 색상
+    ('pointer', 'fg:#ff5252 bold'),
+])
 
+# 레벨 선택
+level_choice = questionary.select(
+    "진단 레벨을 선택하세요",
+    choices=[
+        Choice(title="Level 1 (Nmap: Low / Fuzzer: Low)", value=1),
+        Choice(title="Level 2 (Nmap: Hard / Fuzzer: Low)", value=2),
+        Choice(title="Level 3 (Nmap: Low / Fuzzer: Hard)", value=3),
+        Choice(title="Level 4 (Nmap: Hard / Fuzzer: Hard)", value=4),
+    ],
+    style=custom_style,
+    pointer='▶',
+    instruction=" "
+).ask()
+
+
+sys.stdout.write("\033[A\033[K")
+
+explain=""
+if level_choice == 1:
+    explain = "Level 1 (Nmap: Low / Fuzzer: Low)"
+elif level_choice == 2:
+    explain = "Level 2 (Nmap: Hard / Fuzzer: Low)"
+elif level_choice == 3:
+    explain = "Level 3 (Nmap: Low / Fuzzer: Hard)"
+else:
+    explain = "Level 4 (Nmap: Hard / Fuzzer: Hard)"
+
+console.print(f"[bold green]✔[/] 선택한 진단 레벨: [orange1]{explain}[/]")
+
+# 선택한 레벨에 맞게 nmap , fuzzer 레벨 설정
+nmap_level=level_mode[level_choice-1][0]
+fuzzer_level=level_mode[level_choice-1][1]
+
+# URL 입력
+console.print("\n[bold yellow]URL를 입력하세요[/bold yellow]")
+recon_url = sys.stdin.readline().strip()
+print()
+
+#검사 시간 측정
 start = time.time()
-if check_isOrder(order):
+
+if check_Url(recon_url):
 
     mid_core = Middle_core()
 
-    # 1. ThreadPoolExecutor 생성
     with Progress(
     SpinnerColumn(),
-    TextColumn("[progress.description]{task.description}"),
-    transient=False, # 완료 후 진행바 남기기
+    TextColumn("[progress.description]{task.description}",justify="left"),
+    transient=False, 
     ) as progress:
         
         # Crawler 설정 (config 생성)
         config = CrawlerConfig(
-            target_url=url # check_isOrder에서 검증된 url
+            target_url=recon_url # check_isOrder에서 검증된 url
             
         )
+
         # Crawler 전용 프로그레스 바
         crawl_task = progress.add_task("[red]Crawler 모듈 동작중 (Target 분석)...", total=1)
         # 비동기 함수인 crawl_target 실행 및 결과 수령
         crawl_data = asyncio.run(crawl_target(config))
+        
         mid_core.get_crawler_data(crawl_data)
 
-        # page 객체에서 url 속성만 뽑아서 리스트로 만듭니다.
-        # discovered_urls = [p.url for p in crawl_result.public_pages]
+       
         
         progress.update(crawl_task, advance=1, description="[bold red]✔ Crawler 분석 완료")
         
@@ -151,14 +171,19 @@ if check_isOrder(order):
 
         try:
             with ThreadPoolExecutor(max_workers=2) as executor:
-                future_nmap=executor.submit(scanner.scan,url,level)
+
+                # Nmap 모듈 작동
+                future_nmap=executor.submit(scanner.scan,recon_url,nmap_level)
+                
+                # Fuzzer 모듈 작동
                 future_fuzzer=executor.submit(
                     fuzzer.run,
                     base_url    = "http://gym.contentshub.kr:58252/",  # 필수
                     spider_urls = ["http://gym.contentshub.kr:58252/kisec", "http://gym.contentshub.kr:58252/kisec/main"],  # 필수 (없으면 [])
-                    difficulty  = 1,  # 필수: 1(이지) or 2(하드)
+                    difficulty  = fuzzer_level,  # 필수: 1(이지) or 2(하드)
                 )
-                # 2. 핵심: 완료되는 순서대로 처리 (as_completed 사용)
+
+                # 완료되는 순서대로 처리 (as_completed 사용)
                 from concurrent.futures import as_completed
                 futures = {future_nmap: "nmap", future_fuzzer: "fuzzer"}
 
@@ -176,7 +201,7 @@ if check_isOrder(order):
         except Exception as e:
             console.print(f"[bold red] KSJ-RECON 실행 중 오류 발생: {e}")
    
-        # --- 5. Middle Core 연동 (Progress 밖에서 실행) ---
+        # --- 5. Middle Core로 데이터 통합 ---
         middle_core_task = progress.add_task("[yellow]모듈 데이터 통합 중...", total=1)
         
 
@@ -186,12 +211,10 @@ if check_isOrder(order):
         results = mid_core.get_all_results()
         progress.update(middle_core_task, advance=1, description="[yellow]✔ 모듈 데이터 통합 완료")
 
-    
+        # LLM 기반 보고서 생성 모듈 호출
         report_task = progress.add_task("[bold blue]LLM 기반 보고서 생성 중...", total=1)
         reporter = LLMReporter()
         reporter.generate_dashboard_from_data(results)
-        # report = reporter.generate_report_from_data(results)
-        # reporter.save_report(report)
         progress.update(report_task, advance=1, description="[bold blue]✔ LLM 보고서 생성 및 저장 완료")
 
 # 결과물 출력 최적화 (Rich 전용 JSON 출력)
@@ -199,9 +222,9 @@ if check_isOrder(order):
     console.print_json(data=results)
     console.print("[bold green]Middle_core 테스트 끝[/bold green]")
     end = time.time()
-    print(f"소요 시간: {end - start:.2f}초")
+    console.print(f"[bold magenta]⏱ 소요 시간:[/] [bold cyan]{end - start:.2f}초[/]")
 else:
-    console.print("[bold red]✘ Error: 명령어를 다시 입력하세요.[/bold red]")
+    console.print("[bold red]✘ Error: URL를 다시 입력하세요.[/bold red]")
 
 
  
