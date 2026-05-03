@@ -4,6 +4,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 import anthropic
 from .dashboard_renderer import DashboardRenderer
+import re
 
 
 class LLMReporter:
