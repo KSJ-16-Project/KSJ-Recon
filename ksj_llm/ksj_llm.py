@@ -4,6 +4,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 import anthropic
 from .dashboard_renderer import DashboardRenderer
+import re
 
 
 class LLMReporter:
@@ -125,7 +126,7 @@ Markdown, 설명문, 코드블록(```json), 주석은 출력하지 마라.
 }
 """
 
-        return f"{prompt_template}\n\n[스캔 데이터]\n{combined_data}"
+        return f"{prompt_template}\n\n{json_output_rule}\n\n[스캔 데이터]\n{combined_data}"
     
     # Claude 응답에서 JSON 객체만 안전하게 파싱
     def parse_llm_json(self, response_text: str):

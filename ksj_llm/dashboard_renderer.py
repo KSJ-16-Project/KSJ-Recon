@@ -11,7 +11,6 @@ class DashboardRenderer:
 
         #"../templates" 대신 project/templates 로 명확하게 고정
         self.template_dir = Path(__file__).resolve().parent / "templates"
-
         self.env = Environment(
             loader=FileSystemLoader(self.template_dir),
             autoescape=select_autoescape(["html", "xml"])
