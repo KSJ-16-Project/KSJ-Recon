@@ -8,6 +8,7 @@ observable on configured check URLs or known crawled URLs.
 from __future__ import annotations
 
 import logging
+from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 
 from .context_analyzer import ContextAnalyzer
 from .csrf import extract_csrf
@@ -16,6 +17,8 @@ from .payloads import CONTEXT_PAYLOADS, HIGH_VALUE_PARAM_NAMES, SPECIAL_PROBE, W
 from .result_builder import ResultBuilder
 
 logger = logging.getLogger(__name__)
+
+VERIFIABLE_CONTEXTS = {"html_body", "html_attribute", "event_handler", "script", "url_context"}
 
 
 class StoredXSSScanner:
@@ -31,7 +34,7 @@ class StoredXSSScanner:
     def scan(self) -> list[dict]:
         findings: list[dict] = []
         for target in self.targets:
-            if target.get("method", "GET").upper() != "POST":
+            if target.get("method", "GET").upper() not in ("GET", "POST"):
                 continue
             if not target.get("safe_to_submit"):
                 continue
@@ -60,34 +63,37 @@ class StoredXSSScanner:
         data = dict(params)
         data[param] = marker
         url = target["url"]
+        method = target.get("method", "GET").upper()
         req_headers = target.get("headers") or {}
         req_cookies = target.get("cookies") or {}
         body_format = target.get("body_format", "form")
 
-        self._inject_csrf(url, data, req_headers, req_cookies)
+        if method == "POST":
+            self._inject_csrf(url, data, req_headers, req_cookies)
 
         try:
-            post_resp = self._post(url, data, body_format, req_headers, req_cookies)
+            submit_resp = self._submit(method, url, data, body_format, req_headers, req_cookies)
         except Exception as e:
             self.errors.append(self.builder.error(url=url, phase="stored_submit", error="request_failed", detail=str(e)))
             return None
 
-        if self._auth_failed(post_resp):
+        if self._auth_failed(submit_resp):
             if self.auth_refresher:
                 self.auth_refresher()
-                self._inject_csrf(url, data, req_headers, req_cookies)
+                if method == "POST":
+                    self._inject_csrf(url, data, req_headers, req_cookies)
                 try:
-                    post_resp = self._post(url, data, body_format, req_headers, req_cookies)
+                    submit_resp = self._submit(method, url, data, body_format, req_headers, req_cookies)
                 except Exception as e:
                     self.errors.append(self.builder.error(url=url, phase="stored_submit_retry", error="request_failed", detail=str(e)))
                     return None
-            if self._auth_failed(post_resp):
-                self.errors.append(self.builder.error(url=url, phase="stored_submit", error="auth_failed", detail=f"status={post_resp.status_code}"))
+            if self._auth_failed(submit_resp):
+                self.errors.append(self.builder.error(url=url, phase="stored_submit", error="auth_failed", detail=f"status={submit_resp.status_code}"))
                 return None
 
-        waf = self._detect_waf(post_resp)
+        waf = self._detect_waf(submit_resp)
 
-        check_urls = self._check_urls(target, post_resp.url)
+        check_urls = self._check_urls(target, submit_resp.url)
         for check_url in check_urls:
             try:
                 resp = self.client.get(check_url, headers=req_headers, cookies=req_cookies)
@@ -105,11 +111,13 @@ class StoredXSSScanner:
             if waf and not escaped:
                 bypass_payload = self._find_waf_bypass(target, params, param, analysis.context, req_headers, req_cookies, body_format)
 
+            browser_verification_required = (not escaped) and (analysis.context in VERIFIABLE_CONTEXTS)
+
             return self.builder.finding(
                 type="stored_xss_candidate_limited",
                 url=check_url,
                 source_url=url,
-                method="POST",
+                method=method,
                 param=param,
                 marker=marker,
                 reflected=True,
@@ -117,16 +125,16 @@ class StoredXSSScanner:
                 escaped=escaped,
                 payload=payload,
                 browser_verified=False,
-                browser_verification_required=False,
+                browser_verification_required=browser_verification_required,
                 waf_detected=waf,
                 waf_bypass_possible=bypass_payload is not None,
                 waf_bypass_payload=bypass_payload,
                 risk=risk,
                 evidence={
-                    "submit_status": post_resp.status_code,
+                    "submit_status": submit_resp.status_code,
                     "checked_url": check_url,
                     "snippet": analysis.snippet,
-                    "reason": "marker submitted through a safe POST form and later observed on a reachable page",
+                    "reason": f"marker submitted through a safe {method} form and later observed on a reachable page",
                     "scope_note": "limited stored XSS check; not a full stored-XSS workflow crawler",
                 },
             )
@@ -138,12 +146,14 @@ class StoredXSSScanner:
 
     def _find_waf_bypass(self, target: dict, params: dict, param: str, context: str | None, headers: dict, cookies: dict, body_format: str) -> str | None:
         url = target["url"]
+        method = target.get("method", "GET").upper()
         for payload in WAF_BYPASS_PAYLOADS.get(context or "unknown", WAF_BYPASS_PAYLOADS["unknown"]):
             test_data = dict(params)
             test_data[param] = payload
-            self._inject_csrf(url, test_data, headers, cookies)
+            if method == "POST":
+                self._inject_csrf(url, test_data, headers, cookies)
             try:
-                resp = self._post(url, test_data, body_format, headers, cookies)
+                resp = self._submit(method, url, test_data, body_format, headers, cookies)
                 if not self._detect_waf(resp):
                     logger.info("WAF bypass candidate found (stored): %s [%s]", url, param)
                     return payload
@@ -171,20 +181,34 @@ class StoredXSSScanner:
     #  Helpers                                                             #
     # ------------------------------------------------------------------ #
 
+    def _submit(self, method: str, url: str, data: dict, body_format: str, headers: dict, cookies: dict):
+        if method == "GET":
+            return self._get_with_params(url, data, headers, cookies)
+        return self._post(url, data, body_format, headers, cookies)
+
     def _post(self, url: str, data: dict, body_format: str, headers: dict, cookies: dict):
         if body_format == "json":
             return self.client.post(url, json=data, headers=headers, cookies=cookies)
         return self.client.post(url, data=data, headers=headers, cookies=cookies)
 
+    def _get_with_params(self, url: str, data: dict, headers: dict, cookies: dict):
+        parsed = urlparse(url)
+        existing = {k: v[0] if v else "" for k, v in parse_qs(parsed.query, keep_blank_values=True).items()}
+        existing.update(data)
+        new_url = urlunparse(parsed._replace(query=urlencode(existing)))
+        return self.client.get(new_url, headers=headers, cookies=cookies)
+
     def _check_special_encoding(self, target: dict, params: dict, param: str, check_urls: list[str], marker: str) -> bool:
         data = dict(params)
         data[param] = f"{marker}{SPECIAL_PROBE}"
+        method = target.get("method", "GET").upper()
         body_format = target.get("body_format", "form")
         headers = target.get("headers") or {}
         cookies = target.get("cookies") or {}
-        self._inject_csrf(target["url"], data, headers, cookies)
+        if method == "POST":
+            self._inject_csrf(target["url"], data, headers, cookies)
         try:
-            self._post(target["url"], data, body_format, headers, cookies)
+            self._submit(method, target["url"], data, body_format, headers, cookies)
             for url in check_urls:
                 resp = self.client.get(url, headers=headers, cookies=cookies)
                 analysis = self.analyzer.analyze(resp.text, marker, probe=SPECIAL_PROBE)

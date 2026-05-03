@@ -43,6 +43,10 @@ class TargetExtractor:
                 if isinstance(url, str):
                     targets.append(self._from_url_string(url, source=key))
 
+        for item in self.input_data.get("stored_targets", []):
+            if isinstance(item, dict) and item.get("url"):
+                targets.append(self._from_item(item, source="stored_targets"))
+
         # Deduplicate by method + defragmented URL + params + type.
         seen = set()
         unique: list[dict] = []

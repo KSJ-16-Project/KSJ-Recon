@@ -24,7 +24,7 @@ DEFAULT_OPTIONS = {
     "browser_verify": True,
     "stored_xss": True,
     "dom_hash_xss": True,
-    "dom_stored_xss": True,
+    "dom_stored_xss": False,
     "timeout": 10,
     "verify_tls": False,
 }
@@ -132,43 +132,36 @@ class XSSScanner:
             self.targets, self.client, self.builder,
             auth_refresher=self._refresh_auth,
         )
-        reflected_results = reflected.scan()
-        results.extend(reflected_results)
-
-        header_results = reflected.scan_headers()
-        results.extend(header_results)
-
+        results.extend(reflected.scan())
+        results.extend(reflected.scan_headers())
         self._partial_results = list(results)
         self.errors.extend(reflected.errors)
-
-        if self.options.get("browser_verify"):
-            verifier = BrowserVerifier(self.evidence_dir)
-            results = verifier.verify(results)
-            self._partial_results = list(results)
 
         if self.options.get("stored_xss"):
             stored = StoredXSSScanner(
                 self.targets, self.client, self.builder,
                 auth_refresher=self._refresh_auth,
             )
-            stored_results = stored.scan()
-            results.extend(stored_results)
+            results.extend(stored.scan())
             self._partial_results = list(results)
             self.errors.extend(stored.errors)
 
         if self.options.get("dom_hash_xss"):
             dom = DOMHashXSSVerifier(self.targets, self.builder, self.evidence_dir)
-            dom_results = dom.scan()
-            results.extend(dom_results)
+            results.extend(dom.scan())
             self._partial_results = list(results)
             self.errors.extend(dom.errors)
 
         if self.options.get("dom_stored_xss"):
             dom_stored = DOMStoredXSSVerifier(self.targets, self.builder, self.evidence_dir)
-            dom_stored_results = dom_stored.scan()
-            results.extend(dom_stored_results)
+            results.extend(dom_stored.scan())
             self._partial_results = list(results)
             self.errors.extend(dom_stored.errors)
+
+        if self.options.get("browser_verify"):
+            verifier = BrowserVerifier(self.evidence_dir)
+            results = verifier.verify(results)
+            self._partial_results = list(results)
 
         return self.builder.build(
             base_url=self.base_url,
