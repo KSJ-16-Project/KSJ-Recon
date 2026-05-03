@@ -1,4 +1,5 @@
 import sys
+import asyncio
 import os
 import requests
 from urllib.parse import urlparse
@@ -21,6 +22,7 @@ if root_path not in sys.path:
 import ksj_nmap.ksj_nmap 
 from ffuf_module.fuzzer_module import FuzzOrchestrator
 from ksj_llm.ksj_llm import LLMReporter
+from crawler.engine import crawl_target , CrawlerConfig
 
 # Rich 콘솔 초기화
 console = Console()
@@ -109,9 +111,7 @@ order = sys.stdin.readline().strip()
 start = time.time()
 if check_isOrder(order):
 
-    # Nmap 모듈 호출
-    scanner=ksj_nmap.ksj_nmap.NmapScanner()
-    fuzzer=FuzzOrchestrator()
+    mid_core = Middle_core()
 
     # 1. ThreadPoolExecutor 생성
     with Progress(
@@ -120,9 +120,32 @@ if check_isOrder(order):
     transient=False, # 완료 후 진행바 남기기
     ) as progress:
         
+        # Crawler 설정 (config 생성)
+        config = CrawlerConfig(
+            target_url=url # check_isOrder에서 검증된 url
+            
+        )
+        # Crawler 전용 프로그레스 바
+        crawl_task = progress.add_task("[red]Crawler 모듈 동작중 (Target 분석)...", total=1)
+        # 비동기 함수인 crawl_target 실행 및 결과 수령
+        crawl_data = asyncio.run(crawl_target(config))
+        mid_core.get_crawler_data(crawl_data)
+
+        # page 객체에서 url 속성만 뽑아서 리스트로 만듭니다.
+        # discovered_urls = [p.url for p in crawl_result.public_pages]
+        
+        progress.update(crawl_task, advance=1, description="[bold red]✔ Crawler 분석 완료")
+        
+        
         # 개별 작업 바 생성
         task1 = progress.add_task("[cyan]Nmap 모듈 동작중...", total=1)
         task2 = progress.add_task("[magenta]Fuzzer 모듈 동작중...", total=1)
+        
+         # Nmap 모듈 생성
+        scanner=ksj_nmap.ksj_nmap.NmapScanner()
+
+        # Fuzzer 모듈 생성
+        fuzzer=FuzzOrchestrator()
         
         nmap_data, fuzzer_data = {}, []
 
@@ -145,17 +168,17 @@ if check_isOrder(order):
                     
                     if target == "nmap":
                         nmap_data = result
-                        progress.update(task1, advance=1, description="[bold green]✔ Nmap 스캔 완료")
+                        progress.update(task1, advance=1, description="[cyan]✔ Nmap 스캔 완료")
                     elif target == "fuzzer":
                         fuzzer_data = result
-                        progress.update(task2, advance=1, description="[bold green]✔ Fuzzer 완료")
+                        progress.update(task2, advance=1, description="[magenta]✔ Fuzzer 완료")
         
         except Exception as e:
             console.print(f"[bold red] KSJ-RECON 실행 중 오류 발생: {e}")
    
         # --- 5. Middle Core 연동 (Progress 밖에서 실행) ---
         middle_core_task = progress.add_task("[yellow]모듈 데이터 통합 중...", total=1)
-        mid_core = Middle_core()
+        
 
         mid_core.get_nmap_data(nmap_data)
         mid_core.get_fuzzer_data(fuzzer_data)
