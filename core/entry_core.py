@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import as_completed
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn ,BarColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn 
 import pyfiglet
 
 # 1. 현재 파일(entry_core.py)의 부모의 부모인 'KSJ-RECON' 폴더 경로를 찾습니다.
@@ -21,6 +21,7 @@ if root_path not in sys.path:
 import ksj_nmap.ksj_nmap 
 from ffuf_module.fuzzer_module import FuzzOrchestrator
 from ksj_llm.ksj_llm import LLMReporter
+
 # Rich 콘솔 초기화
 console = Console()
 
@@ -116,7 +117,6 @@ if check_isOrder(order):
     with Progress(
     SpinnerColumn(),
     TextColumn("[progress.description]{task.description}"),
-    BarColumn(),
     transient=False, # 완료 후 진행바 남기기
     ) as progress:
         
@@ -127,7 +127,7 @@ if check_isOrder(order):
         nmap_data, fuzzer_data = {}, []
 
         try:
-            with ThreadPoolExecutor(max_workers=3) as executor:
+            with ThreadPoolExecutor(max_workers=2) as executor:
                 future_nmap=executor.submit(scanner.scan,url,level)
                 future_fuzzer=executor.submit(
                     fuzzer.run,
@@ -153,19 +153,23 @@ if check_isOrder(order):
         except Exception as e:
             console.print(f"[bold red] KSJ-RECON 실행 중 오류 발생: {e}")
    
-    # --- 5. Middle Core 연동 (Progress 밖에서 실행) ---
-    console.print("\n[bold blue]>>> Middle core 분석 및 데이터 통합 시작[/bold blue]")
-    mid_core = Middle_core()
+        # --- 5. Middle Core 연동 (Progress 밖에서 실행) ---
+        middle_core_task = progress.add_task("[yellow]모듈 데이터 통합 중...", total=1)
+        mid_core = Middle_core()
 
-    mid_core.get_nmap_data(nmap_data)
-    mid_core.get_fuzzer_data(fuzzer_data)
+        mid_core.get_nmap_data(nmap_data)
+        mid_core.get_fuzzer_data(fuzzer_data)
 
-    results = mid_core.get_all_results()
+        results = mid_core.get_all_results()
+        progress.update(middle_core_task, advance=1, description="[yellow]✔ 모듈 데이터 통합 완료")
 
-    console.print("\n[bold blue]>>> LLM 기반 보고서 생성[/bold blue]")
-    reporter = LLMReporter()
-    report = reporter.generate_report_from_data(results)
-    reporter.save_report(report)
+    
+        report_task = progress.add_task("[bold blue]LLM 기반 보고서 생성 중...", total=1)
+        reporter = LLMReporter()
+        reporter.generate_dashboard_from_data(results)
+        # report = reporter.generate_report_from_data(results)
+        # reporter.save_report(report)
+        progress.update(report_task, advance=1, description="[bold blue]✔ LLM 보고서 생성 및 저장 완료")
 
 # 결과물 출력 최적화 (Rich 전용 JSON 출력)
     console.print(Panel("[bold white]최종 통합 결과 데이터 (JSON)[/bold white]", border_style="yellow"))
