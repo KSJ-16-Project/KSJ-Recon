@@ -17,6 +17,7 @@ from .detector import find_login_page
 from .form_analyzer import analyze_login_form
 from .login import perform_login
 from .layer import run_auth_layer
+# from .layer import refresh_session  # browser + saved_auth 필요, 공격 모듈 연동 시 활성화
 
 __all__ = [
     "AuthConfig",
@@ -26,4 +27,5 @@ __all__ = [
     "analyze_login_form",
     "perform_login",
     "run_auth_layer",
+    # "refresh_session",
 ]

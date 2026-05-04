@@ -81,14 +81,21 @@ async def perform_login(
             return AuthResult(success=False, attempted=True, login_url=login_url,
                               error=f"submit 클릭 실패: {e}")
 
-        # 4. 네비게이션 대기 (실패해도 무시 — 성공 판별 단계가 처리)
+        # 4. 네비게이션 대기 — JS 폼 제출 후 리다이렉트가 늦게 시작되는 경우를 위해
+        # URL 변경을 먼저 기다리고, 안 바뀌면 networkidle 로 폴백
         try:
-            await page.wait_for_load_state("networkidle", timeout=10_000)
+            await page.wait_for_url(
+                lambda url: url.rstrip("/") != before_url.rstrip("/"),
+                timeout=10_000,
+            )
         except PlaywrightTimeoutError:
             try:
-                await page.wait_for_timeout(1_000)
-            except PlaywrightError:
-                pass
+                await page.wait_for_load_state("networkidle", timeout=5_000)
+            except PlaywrightTimeoutError:
+                try:
+                    await page.wait_for_timeout(1_000)
+                except PlaywrightError:
+                    pass
 
         # 5. 성공 판별
         if not await _is_login_success(page, before_url, config.success_url_pattern):
@@ -133,9 +140,14 @@ async def _submit_login_form(page, selectors: FormSelectors) -> None:
             el => {
                 const form = el.closest('form');
                 if (!form) return null;
-                return form.querySelector(
+                // 1순위: 폼 안의 표준 submit 버튼
+                let btn = form.querySelector(
                     "button[type='submit'], input[type='submit'], button, [role='button']"
                 );
+                if (btn) return btn;
+                // 2순위: 폼 부모 컨테이너의 onclick 요소 (JS 기반 submit 패턴)
+                const parent = form.parentElement || document.body;
+                return parent.querySelector("a[onclick], button[onclick]");
             }
         """)
         submit_el = submit_handle.as_element()

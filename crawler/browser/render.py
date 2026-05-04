@@ -300,7 +300,7 @@ async def _run(
         if enable_dynamic_discovery:
             try:
                 from_history = await history_urls(page, url)
-                from_clicks = await click_walk(page, url)
+                from_clicks = await click_walk(page, url, timeout=max(5, timeout - 5))
                 seen_discovered: set[str] = set()
                 for discovered in [*from_history, *from_clicks]:
                     if discovered not in seen_discovered:

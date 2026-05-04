@@ -14,12 +14,6 @@ from typing import Optional
 from urllib.parse import parse_qs, urljoin, urlparse
 
 
-# 테스트용 타깃 URL
-# core/models.py 의 Config 가 확정되면 이 상수를 삭제하고
-# core 로부터 target_url 을 전달받는 방식으로 교체한다.
-TARGET_URL = "https://www.hotspotfan.online"
-
-
 # ── 임시 데이터 모델 ─────────────────────────────────────────
 # core/models.py 확정 후 아래 두 클래스를 삭제하고
 # from core.models import FormField, FormInfo 로 교체한다.
