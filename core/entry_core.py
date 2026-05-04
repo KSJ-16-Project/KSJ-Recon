@@ -27,14 +27,11 @@ import ksj_nmap.ksj_nmap
 from ffuf_module.fuzzer_module import FuzzOrchestrator
 from ksj_llm.ksj_llm import LLMReporter
 from crawler.engine import crawl_target , CrawlerConfig
+from crawler.auth.models import AuthConfig
+
 
 # Rich 콘솔 초기화
 console = Console()
-
-# KSJ-Recon 배너
-def print_banner():
-    ascii_banner = pyfiglet.figlet_format("KSJ-RECON", font="slant")
-    console.print(Panel(f"[bold cyan]{ascii_banner}[/bold cyan]", subtitle="[yellow]v1.0.0 - Modular Recon Platform[/yellow]"))
 
 # Url 검사 로직
 def check_Url(recon_url):
@@ -65,6 +62,10 @@ def check_Url(recon_url):
         console.print(f"[bold red]✘ URL에 접근할 수 없습니다.[/bold red]")
         return False
 
+# KSJ-Recon 배너
+def print_banner():
+    ascii_banner = pyfiglet.figlet_format("KSJ-RECON", font="slant")
+    console.print(Panel(f"[bold cyan]{ascii_banner}[/bold cyan]", subtitle="[yellow]v1.0.0 - Modular Recon Platform[/yellow]"))
 
 
 # level 1 -> nmap low , fuzzer low
@@ -89,6 +90,28 @@ custom_style = Style([
     ('pointer', 'fg:#ff5252 bold'),
 ])
 
+mode_choice = questionary.select(
+    "Mode를 선택하세요",
+    choices=[
+        Choice(title="Mode A : Recon", value=1),
+        Choice(title="Mode B : Recon + Attack", value=2)
+    ],
+    style=custom_style,
+    pointer='▶',
+    instruction=" "
+).ask()
+
+sys.stdout.write("\033[A\033[K")
+
+mode_explain=""
+if mode_choice == 1:
+    mode_explain = "Mode A : Recon"
+else:
+    mode_explain = "Mode B : Recon + Attack"
+
+console.print(f"[bold green]✔[/] 선택한 Mode : [orange1]{mode_explain}[/]")
+
+print()
 # 레벨 선택
 level_choice = questionary.select(
     "진단 레벨을 선택하세요",
@@ -106,26 +129,59 @@ level_choice = questionary.select(
 
 sys.stdout.write("\033[A\033[K")
 
-explain=""
+level_explain=""
 if level_choice == 1:
-    explain = "Level 1 (Nmap: Low / Fuzzer: Low)"
+    level_explain = "Level 1 (Nmap: Low / Fuzzer: Low)"
 elif level_choice == 2:
-    explain = "Level 2 (Nmap: Hard / Fuzzer: Low)"
+    level_explain = "Level 2 (Nmap: Hard / Fuzzer: Low)"
 elif level_choice == 3:
-    explain = "Level 3 (Nmap: Low / Fuzzer: Hard)"
+    level_explain = "Level 3 (Nmap: Low / Fuzzer: Hard)"
 else:
-    explain = "Level 4 (Nmap: Hard / Fuzzer: Hard)"
+    level_explain = "Level 4 (Nmap: Hard / Fuzzer: Hard)"
 
-console.print(f"[bold green]✔[/] 선택한 진단 레벨: [orange1]{explain}[/]")
+console.print(f"[bold green]✔[/] 선택한 진단 레벨: [orange1]{level_explain}[/]")
 
 # 선택한 레벨에 맞게 nmap , fuzzer 레벨 설정
 nmap_level=level_mode[level_choice-1][0]
 fuzzer_level=level_mode[level_choice-1][1]
 
+print()
+# 로그인 페이지 존재 여부 
+login_choice = questionary.select(
+    "로그인이 필요한 도메인입니까??",
+    choices=[
+        Choice(title="로그인이 필요합니다.", value=1),
+        Choice(title="로그인이 필요하지 않습니다.", value=2)
+    ],
+    style=custom_style,
+    pointer='▶',
+    instruction=" "
+).ask()
+
+sys.stdout.write("\033[A\033[K")
+
+login_explain=""
+user_id=""
+user_password=""
+if login_choice == 1:
+    login_explain = "로그인 정보 입력 완료"
+    # URL 입력
+    console.print("\n[bold yellow]아이디를 입력하세요[/bold yellow]")
+    user_id = sys.stdin.readline().strip()
+    console.print("\n[bold yellow]패스워드를 입력하세요[/bold yellow]")
+    user_password = sys.stdin.readline().strip()
+    print()
+else:
+    login_explain = "로그인이 필요하지 않은 도메인입니다."
+
+console.print(f"[bold green]✔[/] 로그인 필요 여부: [orange1]{login_explain}[/]")
+
 # URL 입력
 console.print("\n[bold yellow]URL를 입력하세요[/bold yellow]")
 recon_url = sys.stdin.readline().strip()
 print()
+
+
 
 #검사 시간 측정
 start = time.time()
@@ -140,11 +196,22 @@ if check_Url(recon_url):
     transient=False, 
     ) as progress:
         
-        # Crawler 설정 (config 생성)
-        config = CrawlerConfig(
-            target_url=recon_url # check_isOrder에서 검증된 url
-            
-        )
+        
+        if login_choice==1:
+            # 로그인이 필요한 도메인이면
+            config = CrawlerConfig(
+                target_url=recon_url, # check_isOrder에서 검증된 url
+                auth = AuthConfig(
+                    username = user_id,
+                    password = user_password,
+                )
+            )
+        else:
+            # Crawler 설정 (config 생성)
+            config = CrawlerConfig(
+                target_url=recon_url # check_isOrder에서 검증된 url
+            )
+
 
         # Crawler 전용 프로그레스 바
         crawl_task = progress.add_task("[red]Crawler 모듈 동작중 (Target 분석)...", total=1)
@@ -152,7 +219,37 @@ if check_Url(recon_url):
         crawl_data = asyncio.run(crawl_target(config))
         #json으로 변환
         final_crawl_data=dataclasses.asdict(crawl_data)
-        
+        # 1. URL을 담을 리스트 초기화
+        spider_urls = []
+
+        # 2. final_crawl_data가 딕셔너리이므로 ['key'] 형식으로 접근
+        # .get()을 사용하면 혹시나 해당 키가 없어도 에러 없이 안전하게 넘어갑니다.
+        public_pages = final_crawl_data.get('public_pages', [])
+
+        for page in public_pages:
+            # 페이지 기본 URL 추가
+            if 'url' in page:
+                spider_urls.append(page['url'])
+            
+            # 폼(forms) 데이터가 있다면 action URL 추출
+            forms = page.get('forms', [])
+            for form in forms:
+                action_url = form.get('action')
+                if action_url:
+                    spider_urls.append(action_url)
+                    
+            # 링크(links) 데이터가 있다면 추가 수집
+            links = page.get('links', [])
+            for link in links:
+                spider_urls.append(link)
+
+        # 3. 중복 제거
+        spider_urls = list(set(spider_urls))
+
+        print(f"[*] 추출된 spider_urls: {spider_urls}")
+
+        # spider_urls = [p.url for p in final_crawl_data.pages]
+        # print(spider_urls)
         # 수정 후
         mid_core.get_crawler_data(final_crawl_data)
 
@@ -182,8 +279,8 @@ if check_Url(recon_url):
                 # Fuzzer 모듈 작동
                 future_fuzzer=executor.submit(
                     fuzzer.run,
-                    base_url    = "http://gym.contentshub.kr:58252/",  # 필수
-                    spider_urls = ["http://gym.contentshub.kr:58252/kisec", "http://gym.contentshub.kr:58252/kisec/main"],  # 필수 (없으면 [])
+                    base_url    = recon_url,  # 필수
+                    spider_urls = spider_urls,  # 필수 (없으면 [])
                     difficulty  = fuzzer_level,  # 필수: 1(이지) or 2(하드)
                 )
 
