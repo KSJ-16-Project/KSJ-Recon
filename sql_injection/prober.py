@@ -78,7 +78,35 @@ async def fetch_csrf_token(
     return tokens
 
 
+# ── 파라미터 컨텍스트 판정 / 페이로드 변환 ─────────────────────
+
+def _to_integer_context(payload: str) -> str:
+    """문자열 컨텍스트 페이로드(`' AND ...`)를 정수 컨텍스트(` AND ...`)로 변환한다.
+    선행 단따옴표를 제거해 정수 비교문 뒤에 자연스럽게 이어지도록 한다.
+    """
+    if payload.startswith("' "):
+        return payload[1:]
+    if payload.startswith("'"):
+        return " " + payload[1:].lstrip()
+    return payload
+
+
 # ── 파라미터 주입 ───────────────────────────────────────────────
+
+def _build_baseline_request(url: str, params: list[Parameter]) -> tuple[str, dict]:
+    """모든 파라미터 원본 값으로 baseline URL과 body를 구성한다."""
+    current_url = url
+    body: dict[str, str] = {}
+    for param in params:
+        if param.location == ParamLocation.QUERY:
+            parsed = urlparse(current_url)
+            qs = parse_qs(parsed.query, keep_blank_values=True)
+            qs[param.name] = [param.value]
+            current_url = urlunparse(parsed._replace(query=urlencode({k: v[0] for k, v in qs.items()})))
+        elif param.location == ParamLocation.BODY:
+            body[param.name] = param.value
+    return current_url, body
+
 
 def _inject_param(url: str, param: Parameter, payload: str) -> tuple[str, dict]:
     """
@@ -156,7 +184,9 @@ async def send_probe(
 ) -> ProbeLog:
     injected_url, body = _inject_param(url, param, payload)
     headers = _build_headers(param, payload, auth)
-    cookies = _build_cookies(auth) 
+    # COOKIE 파라미터는 _build_headers가 Cookie 헤더를 완전히 구성하므로
+    # cookies= 파라미터에 중복으로 넘기지 않는다
+    cookies = {} if param.location == ParamLocation.COOKIE else _build_cookies(auth)
 
     # CSRF 토큰을 POST body에 추가
     if csrf_tokens:
@@ -172,6 +202,10 @@ async def send_probe(
         elapsed_ms = (time.monotonic() - start) * 1000
         matched = match_error_pattern(resp.text)
 
+        # 인증 만료 감지: auth가 제공된 상태에서 401/403이면 세션 만료로 간주.
+        # auth가 비어있으면 만료 개념 없음 (공개 페이지)
+        auth_expired = bool(auth) and resp.status_code in (401, 403)
+
         return ProbeLog(
             param=param.name,
             payload=payload,
@@ -179,6 +213,7 @@ async def send_probe(
             response_length=len(resp.content),
             matched_pattern=matched,
             elapsed_ms=round(elapsed_ms, 2),
+            auth_expired=auth_expired,
         )
     except httpx.RequestError:
         elapsed_ms = (time.monotonic() - start) * 1000

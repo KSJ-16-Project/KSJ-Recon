@@ -1,10 +1,12 @@
+import asyncio
+
 from .models import (
     ScanInput, ScanOutput, TechniqueQueries,
     ProbeLog, ParamLocation, DBMSType, Confidence,
 )
 from .fingerprint import detect_dbms, DBMSDetectResult
 from .version import extract_version
-from .payloads import POSSIBLE_QUERIES
+from .payloads import POSSIBLE_QUERIES, BOOLEAN_PROBES, ERROR_PROBES
 
 
 # ── 기법 선별 ───────────────────────────────────────────────────
@@ -19,14 +21,19 @@ def _select_techniques(
     possible: dict[str, list[str]] = {}
     dbms_queries = POSSIBLE_QUERIES.get(dbms, {})
 
-    # confirmed: 에러 패턴이 실제로 매칭된 페이로드
-    error_payloads = [log.payload for log in all_logs if log.matched_pattern]
+    # confirmed: Phase 1 ERROR_PROBES 중 실제 에러 패턴이 매칭된 페이로드만
+    # (버전 프로브 등 다른 Phase 페이로드가 우연히 에러를 내도 포함하지 않음)
+    error_payloads = [log.payload for log in all_logs if log.matched_pattern and log.payload in ERROR_PROBES]
     if error_payloads:
         confirmed["Error-based"] = error_payloads
 
     # confirmed: Phase 2 Boolean 차이가 확인된 경우
+    # 실제 매칭에 사용된 BOOLEAN_PROBES 페이로드만 기록 (canned 쿼리 X)
     if detect_result.confidence == Confidence.MEDIUM:
-        confirmed["Boolean-based blind"] = dbms_queries.get("Boolean-based blind", [])
+        for probe_dbms, true_p, false_p in BOOLEAN_PROBES:
+            if probe_dbms == dbms:
+                confirmed["Boolean-based blind"] = [true_p, false_p]
+                break
 
     # possible: Union-based (주입 포인트 확인된 경우)
     if detect_result.injectable_params:
@@ -67,31 +74,85 @@ def _check_auth_expired(all_logs: list[ProbeLog]) -> bool:
 
 async def run_scan(scan_input: ScanInput) -> ScanOutput:
     auth = scan_input.auth
-
-    # 프로빙할 URL 목록: target_url + fuzzer_data
-    target_urls = [scan_input.target_url] + scan_input.fuzzer_data
-
     all_logs: list[ProbeLog] = []
-    best_result: DBMSDetectResult | None = None
 
-    # DBMS 탐지 — 첫 번째로 UNKNOWN 아닌 결과 채택
-    for url in target_urls:
-        result = await detect_dbms(
-            url=url,
-            params=scan_input.crawler_data,
+    # 빈 params 가드
+    if not scan_input.crawler_data:
+        return ScanOutput(
+            dbms_type=DBMSType.UNKNOWN,
+            dbms_version=None,
+            confidence=Confidence.LOW,
+            injectable_params=[],
+            technique_queries=TechniqueQueries(confirmed={}, possible={}),
+            probe_log=[],
+            auth_expired=False,
+        )
+
+    try:
+        # 프로빙할 URL 목록: target_url + fuzzer_data
+        target_urls = [scan_input.target_url] + scan_input.fuzzer_data
+        best_result: DBMSDetectResult | None = None
+
+        # DBMS 탐지 — 첫 번째로 UNKNOWN 아닌 결과 채택
+        for url in target_urls:
+            result = await detect_dbms(
+                url=url,
+                params=scan_input.crawler_data,
+                auth=auth,
+                nmap_data=scan_input.nmap_data,
+            )
+            all_logs.extend(result.probe_log)
+
+            if best_result is None:
+                best_result = result
+            if result.dbms != DBMSType.UNKNOWN:
+                best_result = result
+                break
+
+        # 세션 만료 감지 → 즉시 반환 (오케스트레이터가 Login 모듈 재호출)
+        if _check_auth_expired(all_logs):
+            return ScanOutput(
+                dbms_type=DBMSType.UNKNOWN,
+                dbms_version=None,
+                confidence=Confidence.LOW,
+                injectable_params=[],
+                technique_queries=TechniqueQueries(confirmed={}, possible={}),
+                probe_log=all_logs,
+                auth_expired=True,
+            )
+
+        # 버전 추출 — DBMS가 실제로 식별된 URL을 사용해야 함
+        # (메인 타겟이 막혀 있고 fuzzer URL에서 식별된 경우, 메인으로 가면 항상 실패)
+        injectable_names = set(best_result.injectable_params)
+        injectable_params = [p for p in scan_input.crawler_data if p.name in injectable_names]
+        version, version_logs = await extract_version(
+            dbms=best_result.dbms,
+            url=best_result.url or scan_input.target_url,
+            params=injectable_params or scan_input.crawler_data,
             auth=auth,
             nmap_data=scan_input.nmap_data,
         )
-        all_logs.extend(result.probe_log)
+        all_logs.extend(version_logs)
 
-        if best_result is None:
-            best_result = result
-        if result.dbms != DBMSType.UNKNOWN:
-            best_result = result
-            break
+        # 기법 선별
+        techniques = _select_techniques(
+            dbms=best_result.dbms,
+            detect_result=best_result,
+            all_logs=all_logs,
+            scan_input=scan_input,
+        )
 
-    # 세션 만료 감지 → 즉시 반환 (오케스트레이터가 Login 모듈 재호출)
-    if _check_auth_expired(all_logs):
+        return ScanOutput(
+            dbms_type=best_result.dbms,
+            dbms_version=version,
+            confidence=best_result.confidence,
+            injectable_params=best_result.injectable_params,
+            technique_queries=techniques,
+            probe_log=all_logs,
+            auth_expired=False,
+        )
+
+    except asyncio.CancelledError:
         return ScanOutput(
             dbms_type=DBMSType.UNKNOWN,
             dbms_version=None,
@@ -99,33 +160,5 @@ async def run_scan(scan_input: ScanInput) -> ScanOutput:
             injectable_params=[],
             technique_queries=TechniqueQueries(confirmed={}, possible={}),
             probe_log=all_logs,
-            auth_expired=True,
+            auth_expired=False,
         )
-
-    # 버전 추출
-    version, version_logs = await extract_version(
-        dbms=best_result.dbms,
-        url=scan_input.target_url,
-        params=scan_input.crawler_data,
-        auth=auth,
-        nmap_data=scan_input.nmap_data,
-    )
-    all_logs.extend(version_logs)
-
-    # 기법 선별
-    techniques = _select_techniques(
-        dbms=best_result.dbms,
-        detect_result=best_result,
-        all_logs=all_logs,
-        scan_input=scan_input,
-    )
-
-    return ScanOutput(
-        dbms_type=best_result.dbms,
-        dbms_version=version,
-        confidence=best_result.confidence,
-        injectable_params=best_result.injectable_params,
-        technique_queries=techniques,
-        probe_log=all_logs,
-        auth_expired=False,
-    )
