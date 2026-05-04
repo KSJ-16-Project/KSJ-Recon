@@ -152,11 +152,6 @@ async def _submit_login_form(page, selectors: FormSelectors) -> None:
         """)
         submit_el = submit_handle.as_element()
         if submit_el is not None:
-            try:
-                btn_text = ((await submit_el.text_content()) or "")[:40]
-            except PlaywrightError:
-                btn_text = "?"
-            print(f"        [debug] submit form button: '{btn_text}'")
             await submit_el.click(timeout=5_000)
             return
     except PlaywrightError:
@@ -164,17 +159,11 @@ async def _submit_login_form(page, selectors: FormSelectors) -> None:
 
     try:
         submit_btn = page.locator(selectors.submit).first
-        try:
-            btn_text = (await submit_btn.inner_text(timeout=1_000))[:40]
-        except PlaywrightError:
-            btn_text = "?"
-        print(f"        [debug] submit selector button: '{btn_text}'")
         await submit_btn.click(timeout=5_000)
         return
     except PlaywrightError:
         pass
 
-    print("        [debug] submit fallback: press Enter in password field")
     await password.press("Enter", timeout=5_000)
 
 
@@ -199,21 +188,17 @@ async def _is_login_success(page, before_url: str, pattern: str) -> bool:
       4. 위 어느 것도 충족 안 되면 실패
     """
     after_url = page.url.lower()
-    print(f"        [debug] before: {before_url}")
-    print(f"        [debug] after:  {page.url}")
 
     # 1. 명시적 성공 URL 패턴
     if pattern:
         try:
             if re.search(pattern, after_url, re.IGNORECASE):
-                print(f"        [debug] success: pattern matched")
                 return True
         except re.error:
-            pass  # 잘못된 정규식은 무시하고 다음 단계로
+            pass
 
     # 2. URL 변경 + 로그인 페이지 키워드 미포함
     if after_url != before_url.lower() and not any(ind in after_url for ind in _LOGIN_INDICATORS):
-        print(f"        [debug] success: URL changed, no login keyword")
         return True
 
     # 3. 본문에 오류 메시지가 있으면 실패
@@ -221,10 +206,8 @@ async def _is_login_success(page, before_url: str, pattern: str) -> bool:
         body = (await page.content()).lower()
         for kw in _ERROR_KEYWORDS:
             if kw in body:
-                print(f"        [debug] failure: error keyword '{kw}' found")
                 return False
     except PlaywrightError:
         pass
 
-    print(f"        [debug] failure: URL still on login page or no clear signal")
     return False
