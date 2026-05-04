@@ -14,6 +14,7 @@ import pyfiglet
 import questionary
 from questionary import Choice
 from questionary import Style
+import dataclasses
 
 # 1. 현재 파일(entry_core.py)의 부모의 부모인 'KSJ-RECON' 폴더 경로를 찾습니다.
 root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -149,8 +150,11 @@ if check_Url(recon_url):
         crawl_task = progress.add_task("[red]Crawler 모듈 동작중 (Target 분석)...", total=1)
         # 비동기 함수인 crawl_target 실행 및 결과 수령
         crawl_data = asyncio.run(crawl_target(config))
+        #json으로 변환
+        final_crawl_data=dataclasses.asdict(crawl_data)
         
-        mid_core.get_crawler_data(crawl_data)
+        # 수정 후
+        mid_core.get_crawler_data(final_crawl_data)
 
        
         
