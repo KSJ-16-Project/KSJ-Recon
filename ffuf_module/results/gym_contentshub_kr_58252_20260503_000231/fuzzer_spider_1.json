@@ -1,0 +1,11 @@
+{
+  "status": "ok",
+  "module": "fuzzer_portable",
+  "mode": "directory",
+  "target": "http://gym.contentshub.kr:58252/kisec",
+  "timestamp": "2026-05-03T00:12:31.295451",
+  "results": [],
+  "warnings": [
+    "타임아웃: http://gym.contentshub.kr:58252/kisec/FUZZ"
+  ]
+}

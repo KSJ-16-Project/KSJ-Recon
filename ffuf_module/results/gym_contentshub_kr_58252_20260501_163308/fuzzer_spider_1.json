@@ -1,0 +1,69 @@
+{
+  "status": "ok",
+  "module": "fuzzer_portable",
+  "mode": "directory",
+  "target": "http://gym.contentshub.kr:58252/kisec",
+  "timestamp": "2026-05-01T16:34:53.378559",
+  "results": [
+    {
+      "url": "http://gym.contentshub.kr:58252/kisec/images",
+      "status": 301,
+      "length": 253,
+      "risk": "LOW"
+    },
+    {
+      "url": "http://gym.contentshub.kr:58252/kisec/js",
+      "status": 301,
+      "length": 249,
+      "risk": "LOW"
+    },
+    {
+      "url": "http://gym.contentshub.kr:58252/kisec/member",
+      "status": 301,
+      "length": 253,
+      "risk": "LOW"
+    },
+    {
+      "url": "http://gym.contentshub.kr:58252/kisec/main",
+      "status": 301,
+      "length": 251,
+      "risk": "LOW"
+    },
+    {
+      "url": "http://gym.contentshub.kr:58252/kisec/.",
+      "status": 302,
+      "length": 0,
+      "risk": "LOW"
+    },
+    {
+      "url": "http://gym.contentshub.kr:58252/kisec/css",
+      "status": 301,
+      "length": 250,
+      "risk": "LOW"
+    },
+    {
+      "url": "http://gym.contentshub.kr:58252/kisec/_inc",
+      "status": 301,
+      "length": 251,
+      "risk": "LOW"
+    },
+    {
+      "url": "http://gym.contentshub.kr:58252/kisec/mypage",
+      "status": 301,
+      "length": 253,
+      "risk": "LOW"
+    },
+    {
+      "url": "http://gym.contentshub.kr:58252/kisec/_html",
+      "status": 301,
+      "length": 252,
+      "risk": "LOW"
+    },
+    {
+      "url": "http://gym.contentshub.kr:58252/kisec/_action",
+      "status": 301,
+      "length": 254,
+      "risk": "LOW"
+    }
+  ]
+}
