@@ -214,43 +214,18 @@ if check_Url(recon_url):
 
 
         # Crawler 전용 프로그레스 바
-        crawl_task = progress.add_task("[red]Crawler 모듈 동작중 (Target 분석)...", total=1)
+        crawl_task = progress.add_task("[red]Crawler 모듈 동작중...", total=1)
+        
         # 비동기 함수인 crawl_target 실행 및 결과 수령
         crawl_data = asyncio.run(crawl_target(config))
+        
         #json으로 변환
         final_crawl_data=dataclasses.asdict(crawl_data)
-        # 1. URL을 담을 리스트 초기화
-        spider_urls = []
-
-        # 2. final_crawl_data가 딕셔너리이므로 ['key'] 형식으로 접근
-        # .get()을 사용하면 혹시나 해당 키가 없어도 에러 없이 안전하게 넘어갑니다.
-        public_pages = final_crawl_data.get('public_pages', [])
-
-        for page in public_pages:
-            # 페이지 기본 URL 추가
-            if 'url' in page:
-                spider_urls.append(page['url'])
-            
-            # 폼(forms) 데이터가 있다면 action URL 추출
-            forms = page.get('forms', [])
-            for form in forms:
-                action_url = form.get('action')
-                if action_url:
-                    spider_urls.append(action_url)
-                    
-            # 링크(links) 데이터가 있다면 추가 수집
-            links = page.get('links', [])
-            for link in links:
-                spider_urls.append(link)
-
-        # 3. 중복 제거
-        spider_urls = list(set(spider_urls))
-
-        print(f"[*] 추출된 spider_urls: {spider_urls}")
-
-        # spider_urls = [p.url for p in final_crawl_data.pages]
-        # print(spider_urls)
-        # 수정 후
+       
+        # 크롤러 데이터에서 Fuzzer 모듈을 위한 URL 리스트 뽑기 ( 미들 코어에서 )
+        spider_urls=asyncio.run(mid_core.make_url_list(final_crawl_data))
+        
+        # print("미들 코어에서 나온",spider_urls)
         mid_core.get_crawler_data(final_crawl_data)
 
        
