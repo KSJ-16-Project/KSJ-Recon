@@ -40,7 +40,7 @@ class LLMReporter:
         self.renderer = DashboardRenderer(base_dir=self.base_dir)
 
     def load_prompt_template(self):
-        prompt_path = self.base_dir / "prompt.txt"
+        prompt_path = self.base_dir / "prompts" / "report_prompt.txt"
 
         with open(prompt_path, "r", encoding="utf-8") as f:
             return f.read()
