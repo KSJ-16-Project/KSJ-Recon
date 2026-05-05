@@ -5,11 +5,11 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 class DashboardRenderer:
     def __init__(self, base_dir=None):
-        #base_dir은 project 루트로 받는 것을 기준으로 함
-        # llm.py에서 DashboardRenderer(base_dir=self.base_dir) 형태로 호출
+        # base_dir은 project 루트로 받는 것을 기준으로 함
+        # report_llm.py에서 DashboardRenderer(base_dir=self.base_dir) 형태로 호출
         self.base_dir = Path(base_dir).resolve() if base_dir else Path(__file__).resolve().parent.parent
 
-        #"../templates" 대신 project/templates 로 명확하게 고정
+        # claude/templates 경로로 명확하게 고정
         self.template_dir = Path(__file__).resolve().parent / "templates"
         self.env = Environment(
             loader=FileSystemLoader(self.template_dir),
@@ -25,6 +25,11 @@ class DashboardRenderer:
             "low": sum(1 for item in findings if item.get("risk") == "LOW"),
             "network": sum(1 for item in findings if item.get("category") == "Network"),
             "web": sum(1 for item in findings if item.get("category") == "Web"),
+            "sqli": sum(1 for item in findings if item.get("category") == "SQLi"),
+            "xss": sum(1 for item in findings if item.get("category") == "XSS"),
+            "filedownload": sum(1 for item in findings if item.get("category") == "FileDownload"),
+            "ssrf": sum(1 for item in findings if item.get("category") == "SSRF"),
+            "other": sum(1 for item in findings if item.get("category") == "Other"),
         }
 
     # renderer 입력 검증 및 기본값 보정
@@ -84,4 +89,3 @@ class DashboardRenderer:
         output_path.write_text(html, encoding="utf-8")
 
         return output_path
-

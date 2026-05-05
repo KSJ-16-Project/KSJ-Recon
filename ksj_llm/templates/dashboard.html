@@ -254,6 +254,11 @@ td {
       <option value="ALL">구분 전체</option>
       <option value="Network">Network</option>
       <option value="Web">Web</option>
+      <option value="SQLi">SQLi</option>
+      <option value="XSS">XSS</option>
+      <option value="FileDownload">FileDownload</option>
+      <option value="SSRF">SSRF</option>
+      <option value="Other">Other</option>
     </select>
 
     <select id="sortSelect">
@@ -280,6 +285,7 @@ td {
           <th>Category</th>
           <th>Title</th>
           <th>Evidence</th>
+          <th>Payload</th>
           <th>Recommendation</th>
         </tr>
       </thead>
@@ -311,6 +317,7 @@ function getFilteredAndSorted() {
     const haystack = (
       item.title + " " +
       item.evidence + " " +
+      item.payload_example + " " +
       item.recommendation + " " +
       item.target
     ).toLowerCase();
@@ -344,6 +351,7 @@ function render() {
       <h3>${escapeHtml(item.title)}</h3>
       <p><strong>Target:</strong> ${escapeHtml(item.target)}</p>
       <p><strong>Evidence:</strong> ${escapeHtml(item.evidence)}</p>
+      <p><strong>Payload:</strong> ${escapeHtml(item.payload_example)}</p>
       <p><strong>Recommendation:</strong> ${escapeHtml(item.recommendation)}</p>
     </div>
   `).join("");
@@ -354,6 +362,7 @@ function render() {
       <td>${escapeHtml(item.category)}</td>
       <td>${escapeHtml(item.title)}</td>
       <td>${escapeHtml(item.evidence)}</td>
+      <td>${escapeHtml(item.payload_example)}</td>
       <td>${escapeHtml(item.recommendation)}</td>
     </tr>
   `).join("");
