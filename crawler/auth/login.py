@@ -55,6 +55,24 @@ async def perform_login(
         )
         page = await ctx.new_page()
 
+        # 로그인 과정의 모든 POST 요청 캡처
+        captured_requests: list = []
+
+        def _on_request(req):
+            if req.method.upper() != "POST":
+                return
+            try:
+                captured_requests.append({
+                    "url":     req.url,
+                    "method":  req.method,
+                    "headers": dict(req.headers),
+                    "body":    req.post_data or "",
+                })
+            except Exception:
+                pass
+
+        page.on("request", _on_request)
+
         # 1. 로그인 페이지 로딩 (load 실패 시 domcontentloaded 폴백)
         try:
             await page.goto(login_url, wait_until="load", timeout=30_000)
@@ -116,6 +134,7 @@ async def perform_login(
             local_storage=storage["local_storage"],
             session_storage=storage["session_storage"],
             reason="login_success",
+            login_requests=captured_requests,
         )
 
     except PlaywrightError as e:
