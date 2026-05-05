@@ -8,6 +8,7 @@ import signal
 import sys
 from pathlib import Path
 from datetime import datetime
+from typing import Callable
 
 from .browser_verifier import BrowserVerifier
 from .dom_hash_xss import DOMHashXSSVerifier
@@ -43,15 +44,16 @@ def _handle_sigint(_sig, _frame):
 signal.signal(signal.SIGINT, _handle_sigint)
 
 
-def run_xss_scan(input_json: dict) -> dict:
-    scanner = XSSScanner(input_json)
+def run_xss_scan(input_json: dict, *, cookies_refresher: Callable[[], dict] | None = None) -> dict:
+    scanner = XSSScanner(input_json, cookies_refresher=cookies_refresher)
     return scanner.run()
 
 
 class XSSScanner:
-    def __init__(self, input_data: dict):
+    def __init__(self, input_data: dict, *, cookies_refresher: Callable[[], dict] | None = None):
         global _current_scanner
         _current_scanner = self
+        self._cookies_refresher = cookies_refresher
 
         self.input_data = input_data
         self.base_url = input_data.get("base_url", "")
@@ -97,7 +99,16 @@ class XSSScanner:
         self.client.update_auth(session_id=session_id, token=token)
 
     def _refresh_auth(self) -> None:
-        """Re-run login.py and update the live session."""
+        """Refresh session via cookies_refresher (ksj_login) or fallback to login.py."""
+        if self._cookies_refresher is not None:
+            try:
+                new_cookies = self._cookies_refresher()
+                self.client.update_auth(cookies=new_cookies)
+                logger.info("session refreshed via cookies_refresher")
+            except Exception as e:
+                logger.warning("cookies_refresher failed: %s", e)
+            return
+
         try:
             from .login import get_auth
             auth = get_auth(self._login_mock_path)

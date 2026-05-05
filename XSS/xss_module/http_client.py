@@ -34,10 +34,12 @@ class HttpClient:
     def post(self, url: str, *, data: dict | None = None, json: dict | None = None, headers: dict | None = None, cookies: dict | None = None):
         return self.session.post(url, data=data, json=json, headers=headers, cookies=cookies, timeout=self.timeout, verify=self.verify_tls, allow_redirects=True)
 
-    def update_auth(self, *, session_id: str | None = None, token: str | None = None) -> None:
+    def update_auth(self, *, session_id: str | None = None, token: str | None = None, cookies: dict | None = None) -> None:
         """Apply refreshed credentials to the live session."""
         if session_id:
             self.session.cookies.set("session_id", session_id)
         if token:
             self.session.headers["Authorization"] = f"Bearer {token}"
+        if cookies:
+            self.session.cookies.update(cookies)
         logger.debug("session auth updated")
