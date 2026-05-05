@@ -235,27 +235,14 @@ async def send_probes_concurrent(
     auth: dict[str, str],
     method: str = "GET",
 ) -> list[ProbeLog]:
-    """
-    파라미터 × 페이로드 전체 조합을 동시에 전송한다.
-
-    CSRF 토큰 계약:
-      - Login 모듈이 로그인 완료 후 auth["csrf_token"]에 토큰을 채워서 전달한다.
-      - 이 모듈은 auth에서 꺼내 쓰기만 하며, 직접 취득하지 않는다.
-      - 토큰 만료 시 auth_expired 감지 → 오케스트레이터 → Login 모듈 재호출 경로로 처리한다.
-
-    TODO: Login 모듈 미구현 상태. 구현 완료 후 아래 주석을 제거하고 auth 기반으로 전환할 것.
-    """
+    """파라미터 × 페이로드 전체 조합을 동시에 전송한다."""
     async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT, follow_redirects=True) as client:
         csrf_tokens: dict[str, str] = {}
 
-        # [TEMP] Login 모듈 구현 전 임시: 페이지에서 직접 CSRF 토큰을 추출한다.
-        # Login 모듈 완성 후 아래 블록을 제거하고 auth["csrf_token"] 방식으로 교체할 것.
+        # POST 전 현재 세션으로 페이지를 GET해 최신 CSRF 토큰을 취득한다.
+        # CSRF 토큰은 요청마다 회전할 수 있으므로 login 모듈이 아닌 여기서 직접 취득한다.
         if method == "POST" or any(p.location == ParamLocation.BODY for p in params):
             csrf_tokens = await fetch_csrf_token(client, url, auth)
-
-        # [FUTURE] Login 모듈 완성 후 위 블록 대신 아래 코드를 사용한다.
-        # if "csrf_token" in auth:
-        #     csrf_tokens = {"csrf_token": auth["csrf_token"]}
 
         tasks = [
             send_probe(client, url, param, payload, auth, method, csrf_tokens or None)
