@@ -290,7 +290,9 @@ if check_Url(recon_url):
         # LLM 기반 보고서 생성 모듈 호출
         report_task = progress.add_task("[bold blue]LLM 기반 보고서 생성 중...", total=1)
         reporter = LLMReporter()
-        reporter.generate_dashboard_from_data(results)
+        # preprocessor -> core가 받고 -> 공격 모듈에 뿌려주기 -> 모드 B에서만
+        #공격 모듈이 데이터 주면 그거를 json으로 통합 ( 형식 디코 확인 ) 후 LLM generate_dashboard_from_data -> mode_a , mode_b 인자로 들어가야함
+        #reporter.generate_dashboard_from_data(results)
         progress.update(report_task, advance=1, description="[bold blue]✔ LLM 보고서 생성 및 저장 완료")
 
 # 결과물 출력 최적화 (Rich 전용 JSON 출력)
