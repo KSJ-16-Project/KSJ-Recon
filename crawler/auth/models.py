@@ -39,3 +39,4 @@ class AuthResult:
     selectors: Optional[FormSelectors] = None
     reason: str = ""
     error: str = ""
+    login_requests: list = field(default_factory=list)  # 로그인 과정 POST 요청 전체
