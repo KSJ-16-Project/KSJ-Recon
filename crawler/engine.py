@@ -14,12 +14,14 @@ from crawler.models import CrawlResult, CrawlerConfig, EndpointHint, PageSnapsho
 from crawler.parser import (
     detect_render_type,
     detect_technologies,
+    extract_comments,
     extract_endpoints,
     extract_forms,
     extract_links,
     extract_manifest_url,
     extract_routes_from_js,
     extract_scripts,
+    extract_url_params,
 )
 from crawler.sitemap import fetch_robots, fetch_sitemap, fetch_url
 
@@ -242,6 +244,8 @@ def _snapshot_from_raw(raw: RawPageData, depth: int) -> PageSnapshot:
         request_headers=raw.request_headers,
         response_headers=raw.response_headers,
         cookies=raw.cookies,
+        comments=extract_comments(html),
+        url_params=extract_url_params(raw.url),
     )
     snapshot.routes = _dedupe_strings([*snapshot.routes, *getattr(raw, "discovered_urls", [])])
     return snapshot

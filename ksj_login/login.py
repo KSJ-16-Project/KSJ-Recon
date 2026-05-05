@@ -55,24 +55,6 @@ async def perform_login(
         )
         page = await ctx.new_page()
 
-        # 로그인 과정의 모든 POST 요청 캡처
-        captured_requests: list = []
-
-        def _on_request(req):
-            if req.method.upper() != "POST":
-                return
-            try:
-                captured_requests.append({
-                    "url":     req.url,
-                    "method":  req.method,
-                    "headers": dict(req.headers),
-                    "body":    req.post_data or "",
-                })
-            except Exception:
-                pass
-
-        page.on("request", _on_request)
-
         # 1. 로그인 페이지 로딩 (load 실패 시 domcontentloaded 폴백)
         try:
             await page.goto(login_url, wait_until="load", timeout=30_000)
@@ -99,21 +81,14 @@ async def perform_login(
             return AuthResult(success=False, attempted=True, login_url=login_url,
                               error=f"submit 클릭 실패: {e}")
 
-        # 4. 네비게이션 대기 — JS 폼 제출 후 리다이렉트가 늦게 시작되는 경우를 위해
-        # URL 변경을 먼저 기다리고, 안 바뀌면 networkidle 로 폴백
+        # 4. 네비게이션 대기 (실패해도 무시 — 성공 판별 단계가 처리)
         try:
-            await page.wait_for_url(
-                lambda url: url.rstrip("/") != before_url.rstrip("/"),
-                timeout=10_000,
-            )
+            await page.wait_for_load_state("networkidle", timeout=10_000)
         except PlaywrightTimeoutError:
             try:
-                await page.wait_for_load_state("networkidle", timeout=5_000)
-            except PlaywrightTimeoutError:
-                try:
-                    await page.wait_for_timeout(1_000)
-                except PlaywrightError:
-                    pass
+                await page.wait_for_timeout(1_000)
+            except PlaywrightError:
+                pass
 
         # 5. 성공 판별
         if not await _is_login_success(page, before_url, config.success_url_pattern):
@@ -134,7 +109,6 @@ async def perform_login(
             local_storage=storage["local_storage"],
             session_storage=storage["session_storage"],
             reason="login_success",
-            login_requests=captured_requests,
         )
 
     except PlaywrightError as e:
@@ -159,18 +133,18 @@ async def _submit_login_form(page, selectors: FormSelectors) -> None:
             el => {
                 const form = el.closest('form');
                 if (!form) return null;
-                // 1순위: 폼 안의 표준 submit 버튼
-                let btn = form.querySelector(
+                return form.querySelector(
                     "button[type='submit'], input[type='submit'], button, [role='button']"
                 );
-                if (btn) return btn;
-                // 2순위: 폼 부모 컨테이너의 onclick 요소 (JS 기반 submit 패턴)
-                const parent = form.parentElement || document.body;
-                return parent.querySelector("a[onclick], button[onclick]");
             }
         """)
         submit_el = submit_handle.as_element()
         if submit_el is not None:
+            try:
+                btn_text = ((await submit_el.text_content()) or "")[:40]
+            except PlaywrightError:
+                btn_text = "?"
+            print(f"        [debug] submit form button: '{btn_text}'")
             await submit_el.click(timeout=5_000)
             return
     except PlaywrightError:
@@ -178,15 +152,18 @@ async def _submit_login_form(page, selectors: FormSelectors) -> None:
 
     try:
         submit_btn = page.locator(selectors.submit).first
+        try:
+            btn_text = (await submit_btn.inner_text(timeout=1_000))[:40]
+        except PlaywrightError:
+            btn_text = "?"
+        print(f"        [debug] submit selector button: '{btn_text}'")
         await submit_btn.click(timeout=5_000)
         return
     except PlaywrightError:
         pass
 
-    try:
-        await password.press("Enter", timeout=5_000)
-    except PlaywrightError as e:
-        raise PlaywrightError(f"submit 클릭 실패: {e}") from e
+    print("        [debug] submit fallback: press Enter in password field")
+    await password.press("Enter", timeout=5_000)
 
 
 async def _read_storage(page) -> dict:
@@ -204,17 +181,30 @@ async def _read_storage(page) -> dict:
 async def _is_login_success(page, before_url: str, pattern: str) -> bool:
     """
     3단계 휴리스틱으로 로그인 성공 여부 판별:
-      1. 본문 오류 키워드 탐지 → 실패 (URL 변경 여부와 무관하게 우선 판단)
-      2. success_url_pattern 정규식 매칭 (사용자 지정) → 성공
-      3. URL이 변경됐고 login/signin 키워드 미포함 → 성공
+      1. success_url_pattern 정규식 매칭 (사용자 지정)
+      2. URL이 변경됐고 login/signin 키워드 미포함
+      3. 페이지 본문에 오류 키워드 탐지 → 실패
       4. 위 어느 것도 충족 안 되면 실패
     """
     after_url = page.url.lower()
-
     print(f"        [debug] before: {before_url}")
     print(f"        [debug] after:  {page.url}")
 
-    # 1. 본문 오류 키워드 검사 — URL이 바뀌었더라도 오류 페이지면 실패
+    # 1. 명시적 성공 URL 패턴
+    if pattern:
+        try:
+            if re.search(pattern, after_url, re.IGNORECASE):
+                print(f"        [debug] success: pattern matched")
+                return True
+        except re.error:
+            pass  # 잘못된 정규식은 무시하고 다음 단계로
+
+    # 2. URL 변경 + 로그인 페이지 키워드 미포함
+    if after_url != before_url.lower() and not any(ind in after_url for ind in _LOGIN_INDICATORS):
+        print(f"        [debug] success: URL changed, no login keyword")
+        return True
+
+    # 3. 본문에 오류 메시지가 있으면 실패
     try:
         body = (await page.content()).lower()
         for kw in _ERROR_KEYWORDS:
@@ -223,20 +213,6 @@ async def _is_login_success(page, before_url: str, pattern: str) -> bool:
                 return False
     except PlaywrightError:
         pass
-
-    # 2. 명시적 성공 URL 패턴
-    if pattern:
-        try:
-            if re.search(pattern, after_url, re.IGNORECASE):
-                print(f"        [debug] success: pattern matched")
-                return True
-        except re.error:
-            pass
-
-    # 3. URL 변경 + 로그인 페이지 키워드 미포함
-    if after_url != before_url.lower() and not any(ind in after_url for ind in _LOGIN_INDICATORS):
-        print(f"        [debug] success: URL changed, no login keyword")
-        return True
 
     print(f"        [debug] failure: URL still on login page or no clear signal")
     return False

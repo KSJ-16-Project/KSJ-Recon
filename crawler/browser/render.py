@@ -8,7 +8,7 @@ from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
 )
 
-from crawler.discovery import HISTORY_SHIM, click_walk, history_urls
+from crawler.discovery import HISTORY_SHIM, click_walk, frame_links, history_urls
 
 from .browser import BrowserManager, RawPageData, WSRecord, XHRRecord
 
@@ -306,6 +306,19 @@ async def _run(
                     if discovered not in seen_discovered:
                         seen_discovered.add(discovered)
                         discovered_urls.append(discovered)
+            except Exception:
+                pass
+
+        # iframe 링크 수집 (메인 프레임 제외)
+        seen_frame: set[str] = set(discovered_urls)
+        for frame in page.frames[1:]:
+            try:
+                frame_html = await frame.content()
+                frame_base = frame.url or url
+                for link in frame_links(frame_html, frame_base):
+                    if link not in seen_frame:
+                        seen_frame.add(link)
+                        discovered_urls.append(link)
             except Exception:
                 pass
 

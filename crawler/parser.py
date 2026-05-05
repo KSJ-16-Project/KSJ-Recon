@@ -8,37 +8,11 @@ piscovery 참고: piscovery/spider/parse.py
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from typing import Optional
 from urllib.parse import parse_qs, urljoin, urlparse
 
-
-# ── 임시 데이터 모델 ─────────────────────────────────────────
-# core/models.py 확정 후 아래 두 클래스를 삭제하고
-# from core.models import FormField, FormInfo 로 교체한다.
-
-@dataclass
-class FormField:
-    name: str = ""
-    field_type: str = "text"
-    id: str = ""
-    placeholder: str = ""
-    aria_label: str = ""
-    value: str = ""
-    required: bool = False
-
-    @property
-    def type(self) -> str:
-        return self.field_type
-
-
-@dataclass
-class FormInfo:
-    action: str = ""
-    method: str = "GET"
-    enctype: str = ""
-    fields: list[FormField] = field(default_factory=list)
+from crawler.models import FormField, FormInfo
 
 
 # ── 내부용 HTML 파서 ──────────────────────────────────────
@@ -113,23 +87,6 @@ class _PageParser(HTMLParser):
     def handle_data(self, data: str) -> None:
         if self._in_title:
             self.title += data.strip()
-
-
-# ── CSR 프레임워크 탐지 패턴 ────────────────────────────────
-_CSR_PATTERNS: dict[str, str] = {
-    "React":   r"data-reactroot|_reactFiber|__REACT_DEVTOOLS_GLOBAL_HOOK__",
-    "Vue":     r"__vue__|data-v-[a-f0-9]{7,8}",
-    "Angular": r"ng-version=|ng-app=|ng-controller=",
-    "Svelte":  r"__svelte|svelte-[a-z0-9]+",
-}
-
-
-def detect_csr_framework(html: str) -> Optional[str]:
-    """React / Vue / Angular / Svelte 중 사용 프레임워크 반환. 탐지 실패 시 None."""
-    for name, pattern in _CSR_PATTERNS.items():
-        if re.search(pattern, html, re.IGNORECASE):
-            return name
-    return None
 
 
 # ── 기술 스택 탐지 패턴 ──────────────────────────────────────
@@ -263,23 +220,6 @@ def detect_render_type(raw_html: str, rendered_html: str) -> str:
         return "CSR"
 
     return "SSR"
-
-
-def parse_cookies(cookie_header: str) -> dict[str, str]:
-    """
-    Set-Cookie 헤더 문자열을 {이름: 값} 딕셔너리로 파싱.
-    예) "session=abc123; Path=/; HttpOnly" → {"session": "abc123"}
-    """
-    cookies: dict[str, str] = {}
-    for part in cookie_header.split(";"):
-        part = part.strip()
-        if "=" in part:
-            key, _, val = part.partition("=")
-            key = key.strip()
-            if key.lower() not in ("path", "domain", "expires", "max-age",
-                                   "samesite", "httponly", "secure"):
-                cookies[key] = val.strip()
-    return cookies
 
 
 # [LLM 필터링 대상] 파라미터 이름·값의 보안 민감도 판단 (SQLi/XSS 공격 가능성)

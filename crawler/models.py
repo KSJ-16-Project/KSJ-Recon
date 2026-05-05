@@ -1,9 +1,32 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from urllib.parse import urlparse
 
 from crawler.auth.models import AuthConfig, AuthResult
-from crawler.parser import FormInfo
+
+
+@dataclass
+class FormField:
+    name: str = ""
+    field_type: str = "text"
+    id: str = ""
+    placeholder: str = ""
+    aria_label: str = ""
+    value: str = ""
+    required: bool = False
+
+    @property
+    def type(self) -> str:
+        return self.field_type
+
+
+@dataclass
+class FormInfo:
+    action: str = ""
+    method: str = "GET"
+    enctype: str = ""
+    fields: list[FormField] = field(default_factory=list)
 
 
 @dataclass
@@ -50,6 +73,8 @@ class PageSnapshot:
     request_headers: dict = field(default_factory=dict)
     response_headers: dict = field(default_factory=dict)
     cookies: list = field(default_factory=list)
+    comments: list[str] = field(default_factory=list)
+    url_params: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -66,3 +91,23 @@ class CrawlResult:
     @property
     def pages(self) -> list[PageSnapshot]:
         return self.public_pages + self.authenticated_pages
+
+    def _target_netloc(self) -> str:
+        return urlparse(self.target_url).netloc
+
+    def scoped_links(self) -> list[str]:
+        """target_url 도메인 내 링크만 중복 없이 반환. core/공격 모듈 전달용."""
+        netloc = self._target_netloc()
+        seen: set[str] = set()
+        result: list[str] = []
+        for page in self.pages:
+            for link in page.links:
+                if urlparse(link).netloc == netloc and link not in seen:
+                    seen.add(link)
+                    result.append(link)
+        return result
+
+    def scoped_endpoint_hints(self) -> list[EndpointHint]:
+        """target_url 도메인 내 endpoint_hints만 반환. core/공격 모듈 전달용."""
+        netloc = self._target_netloc()
+        return [h for h in self.endpoint_hints if urlparse(h.url).netloc == netloc]
