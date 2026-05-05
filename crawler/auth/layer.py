@@ -46,6 +46,27 @@ async def run_auth_layer(
     return result
 
 
+# async def refresh_session(
+#     browser: Browser,
+#     auth_result: AuthResult,
+#     config: AuthConfig,
+# ) -> AuthResult:
+#     """Re-login using already-known login_url and selectors, skipping page detection."""
+#     if not auth_result.login_url:
+#         return AuthResult(success=False, reason="refresh_no_login_url")
+#     if auth_result.selectors is None:
+#         return AuthResult(success=False, reason="refresh_no_selectors")
+#
+#     result = await perform_login(
+#         browser, auth_result.login_url, auth_result.selectors, config
+#     )
+#     if result.success:
+#         result.selectors = auth_result.selectors
+#         if not result.reason:
+#             result.reason = "session_refreshed"
+#     return result
+
+
 def _normalise_pages(pages: list[Any]) -> list[dict]:
     out: list[dict] = []
     for page in pages:
