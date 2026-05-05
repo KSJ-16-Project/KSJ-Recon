@@ -224,7 +224,7 @@ if check_Url(recon_url):
        
         # 크롤러 데이터에서 Fuzzer 모듈을 위한 URL 리스트 뽑기 ( 미들 코어에서 )
         spider_urls=asyncio.run(mid_core.make_url_list(final_crawl_data))
-        
+        print("스파이더",spider_urls)
         # print("미들 코어에서 나온",spider_urls)
         mid_core.get_crawler_data(final_crawl_data)
 
