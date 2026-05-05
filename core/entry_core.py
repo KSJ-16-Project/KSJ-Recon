@@ -25,13 +25,39 @@ if root_path not in sys.path:
 
 import ksj_nmap.ksj_nmap 
 from ffuf_module.fuzzer_module import FuzzOrchestrator
-from ksj_llm.ksj_llm import LLMReporter
+# from ksj_llm.ksj_llm import LLMReporter
 from crawler.engine import crawl_target , CrawlerConfig
 from crawler.auth.models import AuthConfig
-
-
+# from ksj_llm.preprocessor import LLMPreprocessor
+# # from sql_injection.scanner import  run_scan
+# from XSS.xss_module.xss_scanner import run_xss_scan
+# from attacker_module_3.file_download.module import FileDownloadModule
+# from attacker_module_3.ssrf.module import SSRFModule
 # Rich 콘솔 초기화
 console = Console()
+
+# def save_to_txt(target_full_path, content):
+#     """
+#     target_full_path: 저장할 파일의 전체 경로 (예: 'C:/output/test.txt')
+#     content: 저장할 내용 (문자열)
+#     """
+#     try:
+#         # 1. 파일이 저장될 폴더 경로 추출
+#         directory = os.path.dirname(target_full_path)
+
+#         # 2. 폴더가 없으면 생성 (exist_ok=True는 이미 폴더가 있어도 에러를 내지 않음)
+#         if directory and not os.path.exists(directory):
+#             os.makedirs(directory, exist_ok=True)
+#             print(f"새로운 디렉토리를 생성했습니다: {directory}")
+
+#         # 3. 파일 쓰기 (utf-8 인코딩으로 한글 깨짐 방지)
+#         with open(target_full_path, 'w', encoding='utf-8') as f:
+#             f.write(content)
+        
+#         print(f"성공적으로 파일을 저장했습니다: {target_full_path}")
+        
+#     except Exception as e:
+#         print(f"파일 저장 중 오류 발생: {e}")
 
 # Url 검사 로직
 def check_Url(recon_url):
@@ -90,6 +116,7 @@ custom_style = Style([
     ('pointer', 'fg:#ff5252 bold'),
 ])
 
+recon_mode=""
 mode_choice = questionary.select(
     "Mode를 선택하세요",
     choices=[
@@ -106,8 +133,10 @@ sys.stdout.write("\033[A\033[K")
 mode_explain=""
 if mode_choice == 1:
     mode_explain = "Mode A : Recon"
+    recon_mode="mode_a"
 else:
     mode_explain = "Mode B : Recon + Attack"
+    recon_mode="mode_b"
 
 console.print(f"[bold green]✔[/] 선택한 Mode : [orange1]{mode_explain}[/]")
 
@@ -188,7 +217,7 @@ start = time.time()
 
 if check_Url(recon_url):
 
-    mid_core = Middle_core()
+    mid_core = Middle_core(recon_url)
 
     with Progress(
     SpinnerColumn(),
@@ -226,7 +255,7 @@ if check_Url(recon_url):
         spider_urls=asyncio.run(mid_core.make_url_list(final_crawl_data))
         print("스파이더",spider_urls)
         # print("미들 코어에서 나온",spider_urls)
-        mid_core.get_crawler_data(final_crawl_data)
+        mid_core.set_crawler_data(final_crawl_data)
 
        
         
@@ -252,17 +281,17 @@ if check_Url(recon_url):
                 future_nmap=executor.submit(scanner.scan,recon_url,nmap_level)
                 
                 # Fuzzer 모듈 작동
-                future_fuzzer=executor.submit(
-                    fuzzer.run,
-                    base_url    = recon_url,  # 필수
-                    spider_urls = spider_urls,  # 필수 (없으면 [])
-                    difficulty  = fuzzer_level,  # 필수: 1(이지) or 2(하드)
-                )
+                # future_fuzzer=executor.submit(
+                #     fuzzer.run,
+                #     base_url    = recon_url,  # 필수
+                #     spider_urls = spider_urls,  # 필수 (없으면 [])
+                #     difficulty  = fuzzer_level,  # 필수: 1(이지) or 2(하드)
+                # )
 
                 # 완료되는 순서대로 처리 (as_completed 사용)
                 from concurrent.futures import as_completed
-                futures = {future_nmap: "nmap", future_fuzzer: "fuzzer"}
-
+                # futures = {future_nmap: "nmap", future_fuzzer: "fuzzer"}
+                futures = {future_nmap: "nmap"}
                 for future in as_completed(futures):
                     target = futures[future]
                     result = future.result()
@@ -270,9 +299,9 @@ if check_Url(recon_url):
                     if target == "nmap":
                         nmap_data = result
                         progress.update(task1, advance=1, description="[cyan]✔ Nmap 스캔 완료")
-                    elif target == "fuzzer":
-                        fuzzer_data = result
-                        progress.update(task2, advance=1, description="[magenta]✔ Fuzzer 완료")
+                    # elif target == "fuzzer":
+                    #     fuzzer_data = result
+                    #     progress.update(task2, advance=1, description="[magenta]✔ Fuzzer 완료")
         
         except Exception as e:
             console.print(f"[bold red] KSJ-RECON 실행 중 오류 발생: {e}")
@@ -281,26 +310,68 @@ if check_Url(recon_url):
         middle_core_task = progress.add_task("[yellow]모듈 데이터 통합 중...", total=1)
         
 
-        mid_core.get_nmap_data(nmap_data)
-        mid_core.get_fuzzer_data(fuzzer_data)
+        mid_core.set_nmap_data(nmap_data)
+        # mid_core.set_fuzzer_data(fuzzer_data)
 
-        results = mid_core.get_all_results()
+        recon_results = mid_core.get_all_recon_results()
+        # save_path = "C:\Ksj-Recon\KSJ-Recon\output\middle_core_data.txt"
+        # save_to_txt(save_path, results)
+        print("Recon 데이터 결과",recon_results)
+        print("모듈 통합 데이터 저장 완료")
         progress.update(middle_core_task, advance=1, description="[yellow]✔ 모듈 데이터 통합 완료")
+        if recon_mode=="mode_a":
+            #reporter = LLMReporter()
+            #reporter.generate_dashboard_from_data(recon_results,recon_mode)
+            pass
+        elif recon_mode=="mode_b":
+            # preprocessor = LLMPreprocessor()
+            # pre_data = preprocessor.generate_preprocess_data(recon_results)
 
-        # LLM 기반 보고서 생성 모듈 호출
-        report_task = progress.add_task("[bold blue]LLM 기반 보고서 생성 중...", total=1)
-        reporter = LLMReporter()
+            # 공격 모듈에 데이터 넣기
+            # sql_data = pre_data["sql_data"]
+            # sql_results=asyncio.run(run_scan(sql_data))
+            # mid_core.set_sqli_data(sql_results)
+            # print("SQLi 모듈", sql_results)
+
+            # xss_data = pre_data["xss_data"]
+            # xss_results=asyncio.run(run_xss_scan(xss_data))
+            # mid_core.set_xss_data(xss_results)
+            # print("XSS 모듈", xss_results)
+
+
+            # fileDownloadModule=FileDownloadModule()
+            # sSRFModule=SSRFModule()
+
+            # filedown_data = pre_data["filedown_data"]
+            # filedownload_results=asyncio.run(fileDownloadModule.run_json(filedown_data))
+            # mid_core.set_file_download_data(filedownload_results)
+            # print("filedownload 모듈", filedownload_results)
+
+            # ssrf_data = pre_data["ssrf_data"]
+            # ssrf_results=asyncio.run(sSRFModule.run_json(ssrf_data))
+            # mid_core.set_ssrf_data(ssrf_results)
+            # print("ssrf_result",ssrf_results)
+            end = time.time()
+            final_time=end - start
+            mid_core.set_time(final_time)
+            console.print(f"[bold magenta]⏱ 소요 시간:[/] [bold cyan]{end - start:.2f}초[/]")
+            integrated_results=mid_core.get_integrated_results()
+            #reporter = LLMReporter()
+            #reporter.generate_dashboard_from_data(integrated_results,recon_mode)
+            pass
+        
+
+        #report_task = progress.add_task("[bold blue]LLM 기반 보고서 생성 중...", total=1)
+
         # preprocessor -> core가 받고 -> 공격 모듈에 뿌려주기 -> 모드 B에서만
         #공격 모듈이 데이터 주면 그거를 json으로 통합 ( 형식 디코 확인 ) 후 LLM generate_dashboard_from_data -> mode_a , mode_b 인자로 들어가야함
-        #reporter.generate_dashboard_from_data(results)
-        progress.update(report_task, advance=1, description="[bold blue]✔ LLM 보고서 생성 및 저장 완료")
+        #reporter.generate_dashboard_from_data(integrated_results,recon_mode)
+        #progress.update(report_task, advance=1, description="[bold blue]✔ LLM 보고서 생성 및 저장 완료")
 
 # 결과물 출력 최적화 (Rich 전용 JSON 출력)
-    console.print(Panel("[bold white]최종 통합 결과 데이터 (JSON)[/bold white]", border_style="yellow"))
-    console.print_json(data=results)
-    console.print("[bold green]Middle_core 테스트 끝[/bold green]")
-    end = time.time()
-    console.print(f"[bold magenta]⏱ 소요 시간:[/] [bold cyan]{end - start:.2f}초[/]")
+    # console.print(Panel("[bold white]최종 통합 결과 데이터 (JSON)[/bold white]", border_style="yellow"))
+    # console.print_json(data=results)
+    # console.print("[bold green]Middle_core 테스트 끝[/bold green]")
 else:
     console.print("[bold red]✘ Error: URL를 다시 입력하세요.[/bold red]")
 
