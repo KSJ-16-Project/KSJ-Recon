@@ -161,7 +161,7 @@ async def _crawl_once(
             if len(pages) >= config.max_pages:
                 break
 
-            page = _snapshot_from_raw(item[0], item[1])
+            page = _snapshot_from_raw(item[0], item[1], config.target_url)
             await _enrich_from_scripts(page, config, js_cache)
             pages.append(page)
 
@@ -209,7 +209,7 @@ async def _render_one(
         return raw, depth
 
 
-def _snapshot_from_raw(raw: RawPageData, depth: int) -> PageSnapshot:
+def _snapshot_from_raw(raw: RawPageData, depth: int, target_url: str) -> PageSnapshot:
     html = raw.rendered_html or raw.raw_html
     endpoint_hints = [
         EndpointHint(
@@ -224,6 +224,10 @@ def _snapshot_from_raw(raw: RawPageData, depth: int) -> PageSnapshot:
         EndpointHint(url=w.url, method="WS", source="websocket", page_url=raw.url)
         for w in raw.ws_list
     )
+    endpoint_hints = [
+        hint for hint in endpoint_hints
+        if _is_in_scope(_normalise_url(target_url, hint.url), target_url)
+    ]
 
     snapshot = PageSnapshot(
         url=raw.url,
@@ -231,8 +235,8 @@ def _snapshot_from_raw(raw: RawPageData, depth: int) -> PageSnapshot:
         status=raw.status,
         raw_html=raw.raw_html,
         rendered_html=raw.rendered_html,
-        links=extract_links(html, raw.url),
-        scripts=extract_scripts(html, raw.url),
+        links=_scope_urls(extract_links(html, raw.url), target_url),
+        scripts=_scope_urls(extract_scripts(html, raw.url), target_url),
         forms=extract_forms(html, raw.url),
         technologies=detect_technologies(html, raw.response_headers),
         render_type=detect_render_type(raw.raw_html, raw.rendered_html),
@@ -243,7 +247,10 @@ def _snapshot_from_raw(raw: RawPageData, depth: int) -> PageSnapshot:
         response_headers=raw.response_headers,
         cookies=raw.cookies,
     )
-    snapshot.routes = _dedupe_strings([*snapshot.routes, *getattr(raw, "discovered_urls", [])])
+    snapshot.routes = _scope_urls(
+        [*snapshot.routes, *getattr(raw, "discovered_urls", [])],
+        target_url,
+    )
     return snapshot
 
 
@@ -340,6 +347,13 @@ def _is_in_scope(url: str, target_url: str) -> bool:
     parsed = urlparse(url)
     target = urlparse(target_url)
     return parsed.scheme in ("http", "https") and parsed.netloc == target.netloc
+
+
+def _scope_urls(urls, target_url: str) -> list[str]:
+    return _dedupe_strings(
+        url for url in urls
+        if _is_in_scope(_normalise_url(target_url, url), target_url)
+    )
 
 
 def _path_too_deep(url: str, limit: int) -> bool:
