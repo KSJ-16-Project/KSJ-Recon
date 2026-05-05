@@ -81,14 +81,17 @@ async def perform_login(
             return AuthResult(success=False, attempted=True, login_url=login_url,
                               error=f"submit 클릭 실패: {e}")
 
-        # 4. 네비게이션 대기 (실패해도 무시 — 성공 판별 단계가 처리)
+        # 4. 네비게이션 대기 — URL 변경 감지 우선, 실패 시 networkidle 폴백
         try:
-            await page.wait_for_load_state("networkidle", timeout=10_000)
+            await page.wait_for_url(lambda url: url != before_url, timeout=10_000)
         except PlaywrightTimeoutError:
             try:
-                await page.wait_for_timeout(1_000)
-            except PlaywrightError:
-                pass
+                await page.wait_for_load_state("networkidle", timeout=5_000)
+            except PlaywrightTimeoutError:
+                try:
+                    await page.wait_for_timeout(1_000)
+                except PlaywrightError:
+                    pass
 
         # 5. 성공 판별
         if not await _is_login_success(page, before_url, config.success_url_pattern):
@@ -132,19 +135,20 @@ async def _submit_login_form(page, selectors: FormSelectors) -> None:
         submit_handle = await password.evaluate_handle("""
             el => {
                 const form = el.closest('form');
-                if (!form) return null;
-                return form.querySelector(
-                    "button[type='submit'], input[type='submit'], button, [role='button']"
+                if (form) {
+                    const btn = form.querySelector(
+                        "button[type='submit'], input[type='submit'], button, [role='button']"
+                    );
+                    if (btn) return btn;
+                }
+                const parent = (form && form.parentElement) || el.closest('div, section, main') || document.body;
+                return parent.querySelector(
+                    "button[onclick], a[onclick], button[type='submit'], input[type='submit']"
                 );
             }
         """)
         submit_el = submit_handle.as_element()
         if submit_el is not None:
-            try:
-                btn_text = ((await submit_el.text_content()) or "")[:40]
-            except PlaywrightError:
-                btn_text = "?"
-            print(f"        [debug] submit form button: '{btn_text}'")
             await submit_el.click(timeout=5_000)
             return
     except PlaywrightError:
@@ -152,17 +156,11 @@ async def _submit_login_form(page, selectors: FormSelectors) -> None:
 
     try:
         submit_btn = page.locator(selectors.submit).first
-        try:
-            btn_text = (await submit_btn.inner_text(timeout=1_000))[:40]
-        except PlaywrightError:
-            btn_text = "?"
-        print(f"        [debug] submit selector button: '{btn_text}'")
         await submit_btn.click(timeout=5_000)
         return
     except PlaywrightError:
         pass
 
-    print("        [debug] submit fallback: press Enter in password field")
     await password.press("Enter", timeout=5_000)
 
 
