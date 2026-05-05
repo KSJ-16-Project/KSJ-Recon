@@ -28,7 +28,7 @@ from ffuf_module.fuzzer_module import FuzzOrchestrator
 # from ksj_llm.ksj_llm import LLMReporter
 from crawler.engine import crawl_target , CrawlerConfig
 from crawler.auth.models import AuthConfig
-# from ksj_llm.preprocessor import LLMPreprocessor
+from ksj_llm.preprocessor import LLMPreprocessor
 # # from sql_injection.scanner import  run_scan
 # from XSS.xss_module.xss_scanner import run_xss_scan
 # from attacker_module_3.file_download.module import FileDownloadModule
@@ -36,28 +36,28 @@ from crawler.auth.models import AuthConfig
 # Rich 콘솔 초기화
 console = Console()
 
-# def save_to_txt(target_full_path, content):
-#     """
-#     target_full_path: 저장할 파일의 전체 경로 (예: 'C:/output/test.txt')
-#     content: 저장할 내용 (문자열)
-#     """
-#     try:
-#         # 1. 파일이 저장될 폴더 경로 추출
-#         directory = os.path.dirname(target_full_path)
+async def save_to_txt(target_full_path, content):
+    """
+    target_full_path: 저장할 파일의 전체 경로 (예: 'C:/output/test.txt')
+    content: 저장할 내용 (문자열)
+    """
+    try:
+        # 1. 파일이 저장될 폴더 경로 추출
+        directory = os.path.dirname(target_full_path)
 
-#         # 2. 폴더가 없으면 생성 (exist_ok=True는 이미 폴더가 있어도 에러를 내지 않음)
-#         if directory and not os.path.exists(directory):
-#             os.makedirs(directory, exist_ok=True)
-#             print(f"새로운 디렉토리를 생성했습니다: {directory}")
+        # 2. 폴더가 없으면 생성 (exist_ok=True는 이미 폴더가 있어도 에러를 내지 않음)
+        if directory and not os.path.exists(directory):
+            os.makedirs(directory, exist_ok=True)
+            print(f"새로운 디렉토리를 생성했습니다: {directory}")
 
-#         # 3. 파일 쓰기 (utf-8 인코딩으로 한글 깨짐 방지)
-#         with open(target_full_path, 'w', encoding='utf-8') as f:
-#             f.write(content)
+        # 3. 파일 쓰기 (utf-8 인코딩으로 한글 깨짐 방지)
+        with open(target_full_path, 'w', encoding='utf-8') as f:
+            f.write(content)
         
-#         print(f"성공적으로 파일을 저장했습니다: {target_full_path}")
+        print(f"성공적으로 파일을 저장했습니다: {target_full_path}")
         
-#     except Exception as e:
-#         print(f"파일 저장 중 오류 발생: {e}")
+    except Exception as e:
+        print(f"파일 저장 중 오류 발생: {e}")
 
 # Url 검사 로직
 def check_Url(recon_url):
@@ -253,8 +253,8 @@ if check_Url(recon_url):
        
         # 크롤러 데이터에서 Fuzzer 모듈을 위한 URL 리스트 뽑기 ( 미들 코어에서 )
         spider_urls=asyncio.run(mid_core.make_url_list(final_crawl_data))
-        print("스파이더",spider_urls)
-        # print("미들 코어에서 나온",spider_urls)
+        # print("스파이더",spider_urls)
+        print("미들 코어에서 나온",spider_urls)
         mid_core.set_crawler_data(final_crawl_data)
 
        
@@ -281,17 +281,17 @@ if check_Url(recon_url):
                 future_nmap=executor.submit(scanner.scan,recon_url,nmap_level)
                 
                 # Fuzzer 모듈 작동
-                # future_fuzzer=executor.submit(
-                #     fuzzer.run,
-                #     base_url    = recon_url,  # 필수
-                #     spider_urls = spider_urls,  # 필수 (없으면 [])
-                #     difficulty  = fuzzer_level,  # 필수: 1(이지) or 2(하드)
-                # )
+                future_fuzzer=executor.submit(
+                    fuzzer.run,
+                    base_url    = recon_url,  # 필수
+                    spider_urls = spider_urls,  # 필수 (없으면 [])
+                    difficulty  = fuzzer_level,  # 필수: 1(이지) or 2(하드)
+                )
 
                 # 완료되는 순서대로 처리 (as_completed 사용)
                 from concurrent.futures import as_completed
-                # futures = {future_nmap: "nmap", future_fuzzer: "fuzzer"}
-                futures = {future_nmap: "nmap"}
+                futures = {future_nmap: "nmap", future_fuzzer: "fuzzer"}
+                # futures = {future_nmap: "nmap"}
                 for future in as_completed(futures):
                     target = futures[future]
                     result = future.result()
@@ -299,9 +299,9 @@ if check_Url(recon_url):
                     if target == "nmap":
                         nmap_data = result
                         progress.update(task1, advance=1, description="[cyan]✔ Nmap 스캔 완료")
-                    # elif target == "fuzzer":
-                    #     fuzzer_data = result
-                    #     progress.update(task2, advance=1, description="[magenta]✔ Fuzzer 완료")
+                    elif target == "fuzzer":
+                        fuzzer_data = result
+                        progress.update(task2, advance=1, description="[magenta]✔ Fuzzer 완료")
         
         except Exception as e:
             console.print(f"[bold red] KSJ-RECON 실행 중 오류 발생: {e}")
@@ -311,12 +311,14 @@ if check_Url(recon_url):
         
 
         mid_core.set_nmap_data(nmap_data)
-        # mid_core.set_fuzzer_data(fuzzer_data)
+        mid_core.set_fuzzer_data(fuzzer_data)
 
         recon_results = mid_core.get_all_recon_results()
-        # save_path = "C:\Ksj-Recon\KSJ-Recon\output\middle_core_data.txt"
-        # save_to_txt(save_path, results)
-        print("Recon 데이터 결과",recon_results)
+        save_path1 = "C:/Ksj-Recon/KSJ-Recon/output/middle_core_data.txt"
+        asyncio.run(save_to_txt(save_path1, recon_results))
+        print("Recon 데이터 결과")
+        print()
+        print(recon_results)
         print("모듈 통합 데이터 저장 완료")
         progress.update(middle_core_task, advance=1, description="[yellow]✔ 모듈 데이터 통합 완료")
         if recon_mode=="mode_a":
@@ -324,10 +326,18 @@ if check_Url(recon_url):
             #reporter.generate_dashboard_from_data(recon_results,recon_mode)
             pass
         elif recon_mode=="mode_b":
-            # preprocessor = LLMPreprocessor()
-            # pre_data = preprocessor.generate_preprocess_data(recon_results)
-
+            preprocess_task = progress.add_task("[bold blue]각 공격 모듈에 맞는 통합 데이터 전처리 중...", total=1)
+            preprocessor = LLMPreprocessor()
+            pre_data = preprocessor.generate_preprocess_data(recon_results)
+            save_path2 = "C:/Ksj-Recon/KSJ-Recon/output/pre_data.txt"
+            asyncio.run(save_to_txt(save_path2, pre_data))
+            print("데이터 전처리끝")
+            print()
+            print(pre_data)
+            progress.update(preprocess_task, advance=1, description="[bold blue]✔ 각 공격 모듈에 맞는 통합 데이터 전처리 완료")
+            
             # 공격 모듈에 데이터 넣기
+
             # sql_data = pre_data["sql_data"]
             # sql_results=asyncio.run(run_scan(sql_data))
             # mid_core.set_sqli_data(sql_results)
