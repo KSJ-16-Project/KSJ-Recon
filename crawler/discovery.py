@@ -168,7 +168,7 @@ async def click_walk(page, base_url: str, timeout: int = 120) -> list[str]:
             if page.url != before_url:
                 await page.goto(before_url)
                 await page.wait_for_load_state("networkidle", timeout=3000)
-                count = await locator.count()  # 복귀 후 요소 수 재확인
+   
         except Exception:
             continue
 
