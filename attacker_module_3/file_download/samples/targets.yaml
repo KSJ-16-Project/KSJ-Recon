@@ -1,0 +1,14 @@
+# 파일 다운로드 / 경로 순회 모듈 샘플 대상 목록.
+
+- url: https://example.com/download
+  method: GET
+  params:
+    id: "1"
+  inject_params: [id]
+
+- url: https://example.com/file
+  method: POST
+  data:
+    id: "1"
+    token: demo
+  inject_params: [id]
