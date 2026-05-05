@@ -41,7 +41,7 @@ def _rel_path(url: str, base: str) -> str:
     return path
 
 
-def _render_text(result: CrawlResult, target_url: str):
+def _render_text(result: CrawlResult, target_url: str)->None:
     bar = "=" * 64
 
     print(bar)
@@ -76,14 +76,14 @@ def _render_text(result: CrawlResult, target_url: str):
     print()
     print("  Pages")
     print(f"    {'DEP':>3}  {'STAT':>4}  {'FORMS':>5}  {'EP':>4}  PATH")
-    core_result=[]
+    
     for p in result.pages:
         path = _rel_path(p.url, target_url)
-        core_result.append(path)
+       
         print(f"    {p.depth:>3}  {p.status:>4}  "
               f"{len(p.forms):>5}  {len(p.endpoint_hints):>4}  {path}")
     
-    return core_result
+  
 
 def _render_json(result: CrawlResult) -> None:
     payload = dataclasses.asdict(result)
