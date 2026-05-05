@@ -13,10 +13,18 @@ logger = logging.getLogger(__name__)
 
 
 class BrowserVerifier:
-    def __init__(self, evidence_dir: Path, timeout_ms: int = 8000):
+    def __init__(
+        self,
+        evidence_dir: Path,
+        timeout_ms: int = 8000,
+        auth_cookies: dict | None = None,
+        auth_headers: dict | None = None,
+    ):
         self.evidence_dir = evidence_dir
         self.evidence_dir.mkdir(parents=True, exist_ok=True)
         self.timeout_ms = timeout_ms
+        self._auth_cookies: dict = auth_cookies or {}
+        self._auth_headers: dict = auth_headers or {}
 
     def verify(self, findings: list[dict]) -> list[dict]:
         candidates = [
@@ -83,7 +91,7 @@ class BrowserVerifier:
 
     def _try_reflected_payload(self, browser, finding: dict, payload: str) -> tuple[bool, Path | None, str]:
         url = self._payload_url(finding["url"], finding["param"], payload)
-        context = browser.new_context(ignore_https_errors=True)
+        context = self._new_auth_context(browser, finding)
         page = context.new_page()
         triggered = False
         screenshot = None
@@ -153,10 +161,7 @@ class BrowserVerifier:
         finding.setdefault("evidence", {})["browser_reason"] = "payloads_tested_but_no_dialog"
 
     def _try_header_payload(self, browser, url: str, header_name: str, payload: str, finding: dict) -> tuple[bool, Path | None]:
-        ctx = browser.new_context(
-            ignore_https_errors=True,
-            extra_http_headers={header_name: payload},
-        )
+        ctx = self._new_auth_context(browser, finding, extra_headers={header_name: payload})
         page = ctx.new_page()
         triggered = False
         screenshot = None
@@ -201,7 +206,7 @@ class BrowserVerifier:
         if not url:
             return
 
-        ctx = browser.new_context(ignore_https_errors=True)
+        ctx = self._new_auth_context(browser, finding)
         page = ctx.new_page()
         triggered = False
         screenshot = None
@@ -255,6 +260,46 @@ class BrowserVerifier:
     # ------------------------------------------------------------------ #
     #  Helpers                                                             #
     # ------------------------------------------------------------------ #
+
+    def _new_auth_context(self, browser, finding: dict | None = None, extra_headers: dict | None = None):
+        """Create a Playwright context with auth cookies/headers applied.
+
+        Priority: extra_headers > per-finding headers > global auth headers.
+        Per-finding cookies override global auth cookies.
+        """
+        cookies = {**self._auth_cookies}
+        if finding:
+            cookies.update(finding.get("cookies", {}))
+
+        headers = {**self._auth_headers}
+        if finding:
+            headers.update(finding.get("headers", {}))
+        if extra_headers:
+            headers.update(extra_headers)
+
+        ctx_kwargs: dict = {"ignore_https_errors": True}
+        if headers:
+            ctx_kwargs["extra_http_headers"] = headers
+
+        ctx = browser.new_context(**ctx_kwargs)
+
+        if cookies:
+            url = finding.get("url") if finding else None
+            playwright_cookies = self._to_playwright_cookies(cookies, url)
+            if playwright_cookies:
+                try:
+                    ctx.add_cookies(playwright_cookies)
+                except Exception as e:
+                    logger.warning("add_cookies failed: %s", e)
+
+        return ctx
+
+    def _to_playwright_cookies(self, cookies: dict, url: str | None) -> list[dict]:
+        if not cookies or not url:
+            return []
+        parsed = urlparse(url)
+        base_url = f"{parsed.scheme}://{parsed.netloc}"
+        return [{"name": str(k), "value": str(v), "url": base_url} for k, v in cookies.items()]
 
     def _click_javascript_href(self, page, finding: dict) -> bool:
         try:

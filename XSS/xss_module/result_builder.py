@@ -33,7 +33,7 @@ class ResultBuilder:
                 ],
                 "excluded_or_limited": [
                     "Full DOM XSS data-flow analysis is not implemented",
-                    "WAF bypass and large payload fuzzing are not implemented",
+                    "Basic WAF detection and bypass payload retry are supported, but advanced WAF bypass is not implemented",
                     "Stored XSS verification is limited to observable post-submit reflections",
                     "Authenticated workflows require cookies/headers in input JSON",
                     "DOM Stored XSS (dom_stored_xss) is disabled by default due to auto-form-submission side effects; enable explicitly with options.dom_stored_xss=true",

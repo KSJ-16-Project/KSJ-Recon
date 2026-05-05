@@ -170,7 +170,13 @@ class XSSScanner:
             self.errors.extend(dom_stored.errors)
 
         if self.options.get("browser_verify"):
-            verifier = BrowserVerifier(self.evidence_dir)
+            auth_cookies = dict(self.client.session.cookies)
+            auth_headers = dict(self.client.session.headers)
+            verifier = BrowserVerifier(
+                self.evidence_dir,
+                auth_cookies=auth_cookies,
+                auth_headers=auth_headers,
+            )
             results = verifier.verify(results)
             self._partial_results = list(results)
 
