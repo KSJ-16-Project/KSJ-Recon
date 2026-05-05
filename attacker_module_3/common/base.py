@@ -1,12 +1,21 @@
 """모든 공격 모듈이 상속하는 공통 베이스 클래스."""
 from __future__ import annotations
 
+import asyncio
+import os
+import sys
+import threading
 import time
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, ClassVar, Iterable, Sequence
+
+# ksj_login은 repo 루트의 형제 패키지 — 필요 시 경로 추가
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 from common.detector import match
 #HTTP 요청을 보내고 응답을 담는 공통 래퍼
@@ -23,6 +32,52 @@ from common.result import (
     severity_rank,
 )
 from common.target import Target
+
+
+async def _do_relogin_async(auth_result: Any) -> Any:
+    """Playwright로 재로그인 후 새 AuthResult 반환."""
+    from playwright.async_api import async_playwright
+    from ksj_login import relogin
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        try:
+            return await relogin(browser, auth_result)
+        finally:
+            await browser.close()
+
+
+def _auth_result_from_doc(doc: dict[str, Any] | None) -> Any:
+    """auth 딕셔너리를 ksj_login.AuthResult 객체로 변환한다."""
+    if doc is None:
+        return None
+    from ksj_login.models import AuthConfig, AuthResult, FormSelectors
+    selectors = None
+    if doc.get("selectors"):
+        s = doc["selectors"]
+        selectors = FormSelectors(username=s["username"], password=s["password"], submit=s["submit"])
+    config = None
+    if doc.get("config"):
+        c = doc["config"]
+        config = AuthConfig(
+            username=c.get("username", ""),
+            password=c.get("password", ""),
+            success_url_pattern=c.get("success_url_pattern", ""),
+            enabled=c.get("enabled", True),
+        )
+    return AuthResult(
+        success=doc.get("success", False),
+        attempted=doc.get("attempted", False),
+        login_url=doc.get("login_url", ""),
+        final_url=doc.get("final_url", ""),
+        cookies=doc.get("cookies", []),
+        local_storage=doc.get("local_storage", {}),
+        session_storage=doc.get("session_storage", {}),
+        selectors=selectors,
+        reason=doc.get("reason", ""),
+        error=doc.get("error", ""),
+        login_requests=doc.get("login_requests", []),
+        config=config,
+    )
 
 
 #ScanReport를 위한 현재 시간 변환
@@ -57,10 +112,14 @@ class AttackModule(ABC):
         max_workers: int = 8,
         #실행할 페이로드 개수 제한(None 이면 무제한)
         payload_limit: int | None = None,
+        auth_result: Any | None = None,
     ) -> None:
         self.http = http
         self.max_workers = max(1, int(max_workers))
         self.payload_limit = payload_limit
+        self._auth_result = auth_result
+        self._relogin_lock = threading.Lock()
+        self._session_version = 0
 
     # ---- 공개 API ---------------------------------------------------------
 
@@ -76,11 +135,18 @@ class AttackModule(ABC):
         try:
             req = load_request(request) #JSON 요청을 프로젝트 내부에서 쓰기 좋은 형태로 파싱
             http = HttpClient(**req.http_kwargs) #HTTP 클라이언트 생성
-            module = cls(http=http, **req.module_kwargs) #공격 모듈 객체 생성
+            auth_result = _auth_result_from_doc(req.auth_doc)
+            # 초기 로그인 쿠키가 있으면 세션에 미리 주입
+            if auth_result is not None and auth_result.cookies:
+                from ksj_login import to_cookie_dict
+                http.session.cookies.update(to_cookie_dict(auth_result.cookies))
+            module = cls(http=http, auth_result=auth_result, **req.module_kwargs) #공격 모듈 객체 생성
             report = module._run_with_report(req.target) #스캔 실행 후 JSON 반환
             return dump_report(report)
         except AuthenticationError as e:
             return dump_error("auth_required", e.status_code)
+        except ImportError:
+            return dump_error("ksj_login_unavailable", 0)
         except (ValueError, TypeError):
             return dump_error("invalid_request", 0)
 
@@ -182,11 +248,19 @@ class AttackModule(ABC):
     ) -> tuple[HttpResponse, Finding | None]:
         #특정 파라미터에 페이로드를 주입
         kwargs = inject(target, probe.payload_value, probe.parameter)
+        # 요청 전에 버전을 캡처 — "이 쿠키로 보낸 요청"의 기준점
+        session_ver = self._session_version
         #실제로 요청 전송
         resp = self.http.request(**kwargs)
-        # 401/403 은 토큰 만료 — 부모 DAST에 재인증 요청 신호
         if resp.status_code in (401, 403):
-            raise AuthenticationError(resp.status_code)
+            if self._auth_result is None:
+                # auth 정보 없음 — 부모 DAST에 재인증 요청 신호
+                raise AuthenticationError(resp.status_code)
+            # 세션 만료 — ksj_login으로 재로그인 후 한 번 재시도
+            self._refresh_session(session_ver)
+            resp = self.http.request(**kwargs)
+            if resp.status_code in (401, 403):
+                raise AuthenticationError(resp.status_code)
         #응답이 실패하면, finding 없이 끝내기
         if not resp.ok:
             return resp, None
@@ -197,3 +271,18 @@ class AttackModule(ABC):
             return resp, None
         #시그니처 있으면 Finding 객체 만들어서 반환
         return resp, self._build_finding(target, probe, sig, kwargs, resp)
+
+    def _refresh_session(self, session_version: int) -> None:
+        """ksj_login으로 재로그인해 세션 쿠키를 갱신한다. 다른 스레드가 이미 갱신했으면 건너뛴다."""
+        with self._relogin_lock:
+            # 다른 스레드가 먼저 갱신 완료한 경우 재로그인 불필요
+            if self._session_version != session_version:
+                return
+            new_result = asyncio.run(_do_relogin_async(self._auth_result))
+            if not new_result.success:
+                raise AuthenticationError(401)
+            from ksj_login import to_cookie_dict
+            self.http.session.cookies.clear()
+            self.http.session.cookies.update(to_cookie_dict(new_result.cookies))
+            self._auth_result = new_result
+            self._session_version += 1
