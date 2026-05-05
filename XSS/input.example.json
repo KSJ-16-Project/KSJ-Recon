@@ -1,0 +1,34 @@
+{
+  "base_url": "https://target.com",
+  "spider_urls": [
+    "https://target.com/search?q=test",
+    "https://target.com/page#1"
+  ],
+  "fuzzer_urls": [
+    "https://target.com/admin"
+  ],
+  "urls": [
+    {
+      "url": "https://target.com/comment",
+      "method": "POST",
+      "type": "form",
+      "safe_to_submit": true,
+      "params": {
+        "comment": "hello",
+        "name": "tester"
+      },
+      "check_urls": [
+        "https://target.com/post/1"
+      ]
+    }
+  ],
+  "headers": {},
+  "cookies": {},
+  "options": {
+    "browser_verify": true,
+    "stored_xss": true,
+    "dom_hash_xss": true,
+    "timeout": 10,
+    "verify_tls": false
+  }
+}
