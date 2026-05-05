@@ -211,6 +211,19 @@ td {
   overflow-wrap: anywhere;
 }
 
+.risk-cell {
+  width: 96px;
+  min-width: 96px;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.risk-cell .badge {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
 @media (max-width: 900px) {
   .grid {
     grid-template-columns: repeat(2, 1fr);
@@ -358,7 +371,7 @@ function render() {
 
   document.getElementById("tableBody").innerHTML = rows.map(item => `
     <tr>
-      <td><span class="badge risk-${escapeHtml(item.risk)}">${escapeHtml(item.risk)}</span></td>
+      <td class="risk-cell"><span class="badge risk-${escapeHtml(item.risk)}">${escapeHtml(item.risk)}</span></td>
       <td>${escapeHtml(item.category)}</td>
       <td>${escapeHtml(item.title)}</td>
       <td>${escapeHtml(item.evidence)}</td>
