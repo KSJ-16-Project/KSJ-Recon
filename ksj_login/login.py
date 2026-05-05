@@ -181,38 +181,32 @@ async def _read_storage(page) -> dict:
 async def _is_login_success(page, before_url: str, pattern: str) -> bool:
     """
     3단계 휴리스틱으로 로그인 성공 여부 판별:
-      1. success_url_pattern 정규식 매칭 (사용자 지정)
-      2. URL이 변경됐고 login/signin 키워드 미포함
-      3. 페이지 본문에 오류 키워드 탐지 → 실패
+      1. 페이지 본문에 오류 키워드 탐지 → 실패 (리다이렉트 여부 무관)
+      2. success_url_pattern 정규식 매칭 (사용자 지정) → 성공
+      3. URL이 변경됐고 login/signin 키워드 미포함 → 성공
       4. 위 어느 것도 충족 안 되면 실패
     """
     after_url = page.url.lower()
-    print(f"        [debug] before: {before_url}")
-    print(f"        [debug] after:  {page.url}")
 
-    # 1. 명시적 성공 URL 패턴
-    if pattern:
-        try:
-            if re.search(pattern, after_url, re.IGNORECASE):
-                print(f"        [debug] success: pattern matched")
-                return True
-        except re.error:
-            pass  # 잘못된 정규식은 무시하고 다음 단계로
-
-    # 2. URL 변경 + 로그인 페이지 키워드 미포함
-    if after_url != before_url.lower() and not any(ind in after_url for ind in _LOGIN_INDICATORS):
-        print(f"        [debug] success: URL changed, no login keyword")
-        return True
-
-    # 3. 본문에 오류 메시지가 있으면 실패
+    # 1. 본문에 오류 메시지가 있으면 실패 (URL 변경 여부 무관하게 먼저 검사)
     try:
         body = (await page.content()).lower()
         for kw in _ERROR_KEYWORDS:
             if kw in body:
-                print(f"        [debug] failure: error keyword '{kw}' found")
                 return False
     except PlaywrightError:
         pass
 
-    print(f"        [debug] failure: URL still on login page or no clear signal")
+    # 2. 명시적 성공 URL 패턴
+    if pattern:
+        try:
+            if re.search(pattern, after_url, re.IGNORECASE):
+                return True
+        except re.error:
+            pass
+
+    # 3. URL 변경 + 로그인 페이지 키워드 미포함
+    if after_url != before_url.lower() and not any(ind in after_url for ind in _LOGIN_INDICATORS):
+        return True
+
     return False
