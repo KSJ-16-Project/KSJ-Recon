@@ -145,7 +145,9 @@ class XSSScanner:
         """Refresh session via cookies_refresher (ksj_login) or fallback to login.py."""
         if self._cookies_refresher is not None:
             try:
-                new_cookies = self._cookies_refresher()
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                    new_cookies = ex.submit(self._cookies_refresher).result()
                 self.client.update_auth(cookies=new_cookies)
                 logger.info("session refreshed via cookies_refresher")
             except Exception as e:
