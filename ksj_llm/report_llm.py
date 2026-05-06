@@ -408,15 +408,15 @@ class LLMReporter:
         if mode == "mode_b":
             prompt_template += """
 
-[MODE B 추가 분석 규칙]
-- scan_summary와 attack_results를 함께 분석한다.
-- attack_results는 SQLi, XSS, FileDownload, SSRF 또는 기타 공격 모듈의 실행 결과이다.
-- confirmed, vulnerable, success, detected 등으로 확인된 공격 결과는 단순 정찰 힌트보다 우선하여 findings에 반영한다.
-- inconclusive, failed, not_confirmed 또는 결과가 없는 항목은 확정 취약점으로 단정하지 않는다.
-- mode_b에서 findings[].category는 Network, Web, SQLi, XSS, FileDownload, SSRF, Other 중 하나를 사용할 수 있다.
-- 위 category 규칙은 mode_b에서 기존 report_prompt.txt의 category 제한보다 우선한다.
-- findings[].payload_example에는 취약점 동작 확인에 필요한 비파괴 검증 payload 예시만 작성한다.
-- 최종 보고서에는 자동화 공격 코드, 우회 절차, 데이터 탈취·파괴로 이어지는 절차를 포함하지 않는다.
+[MODE B Additional Analysis Rules]
+- Analyze scan_summary and attack_results together.
+- attack_results contains execution results from SQLi, XSS, FileDownload, SSRF, or other attack modules.
+- Results marked as confirmed, vulnerable, success, detected, or equivalent must take priority over reconnaissance-only hints in findings.
+- Items marked as inconclusive, failed, not_confirmed, or with no result must not be described as confirmed vulnerabilities.
+- In mode_b, findings[].category may be one of "Network", "Web", "SQLi", "XSS", "FileDownload", "SSRF", or "Other".
+- This category rule overrides the mode_a category restriction from report_prompt.txt.
+- Write all human-readable report fields in Korean.
+- Do not include automated attack code, bypass procedures, destructive steps, or data exfiltration procedures in the final report.
 """
 
         safe_scan_data = self.make_json_safe(scan_data)
@@ -427,16 +427,17 @@ class LLMReporter:
             separators=(",", ":")
         )
 
-        # LLM이 Markdown 보고서가 아니라 JSON만 출력하도록 추가 지시를 붙임
         json_output_rule = """
-[최종 출력 규칙 / STRICT JSON OUTPUT]
-반드시 JSON 객체만 출력하라.
-Markdown, 설명문, 코드블록, 주석은 출력하지 마라.
-report_prompt.txt의 출력 JSON 스키마를 그대로 따른다.
-trailing comma를 절대 넣지 마라.
+[Final Output Rules / STRICT JSON OUTPUT]
+Return only one valid JSON object.
+Do not output markdown, explanations, code fences, or comments.
+Follow the output JSON schema from report_prompt.txt exactly.
+Do not add trailing commas.
+Keep JSON keys and enum values in English.
+Write human-readable report fields such as "summary", "title", "evidence", "impact", "recommendation", "entry_point", "steps", and "limitations" in Korean.
 """
 
-        return f"{prompt_template}\n\n{json_output_rule}\n\n[스캔 데이터]\n{combined_data}"
+        return f"{prompt_template}\n\n{json_output_rule}\n\n[Scan Data]\n{combined_data}"
     
     # Claude 응답에서 JSON 객체만 안전하게 파싱
     def parse_llm_json(self, response_text: str):
@@ -480,7 +481,7 @@ trailing comma를 절대 넣지 마라.
 
         response = self.client.messages.create(
             model=self.model.strip(),
-            max_tokens=4096,
+            max_tokens=8192,
             messages=[
                 {"role": "user", "content": prompt}
             ]

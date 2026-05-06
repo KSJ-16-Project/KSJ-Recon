@@ -244,17 +244,19 @@ class LLMPreprocessor:
         )
 
         json_output_rule = """
-[최종 출력 규칙 / STRICT JSON OUTPUT]
-반드시 JSON 객체만 출력하라.
-Markdown, 설명문, 코드블록(```json), 주석은 출력하지 마라.
-JSON 문법을 엄격히 지켜라.
-객체나 배열의 마지막 항목 뒤에 trailing comma를 절대 넣지 마라.
-모든 key와 문자열 value는 반드시 큰따옴표(")로 감싸라.
-Python dict 문법이 아니라 순수 JSON 문법으로 출력하라.
-None, True, False 대신 null, true, false를 사용하라.
+[Final Output Rules / STRICT JSON OUTPUT]
+Return only one valid JSON object.
+Do not output markdown, explanations, code fences, or comments.
+Follow strict JSON syntax.
+Do not add trailing commas after the last item in an object or array.
+Wrap every JSON key and every string value in double quotes.
+Use pure JSON syntax, not Python dict syntax.
+Use null, true, and false instead of None, True, and False.
+Keep JSON keys and enum values in English.
+Write only human-readable explanation fields such as "reason" and "limitations" in Korean.
 """
 
-        return f"{prompt_template}\n\n{json_output_rule}\n\n[스캔 데이터]\n{combined_data}"
+        return f"{prompt_template}\n\n{json_output_rule}\n\n[Scan Data]\n{combined_data}"
 
     def parse_llm_json(self, response_text: str):
         text = response_text.strip()
@@ -293,7 +295,7 @@ None, True, False 대신 null, true, false를 사용하라.
 
         response = self.client.messages.create(
             model=self.model,
-            max_tokens=4096,
+            max_tokens=8192,
             messages=[
                 {
                     "role": "user",
