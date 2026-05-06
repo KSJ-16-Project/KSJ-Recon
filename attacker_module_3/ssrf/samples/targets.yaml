@@ -1,0 +1,16 @@
+# SSRF 모듈 샘플 대상 목록.
+# 부모 DAST 가 JSON 으로 넘기는 형식과 동일한 키 구조를 따른다.
+
+- url: https://example.com/api/fetch
+  method: GET
+  params:
+    url: https://placeholder.local
+    trace: "0"
+  inject_params: [url]
+
+- url: https://example.com/proxy
+  method: POST
+  data:
+    target: https://placeholder.local
+    token: demo
+  inject_params: [target]
