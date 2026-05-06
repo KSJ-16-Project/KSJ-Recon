@@ -8,7 +8,7 @@ from playwright.async_api import Browser, Error as PlaywrightError, TimeoutError
 from .detector import find_login_page
 from .form_analyzer import analyze_login_form
 from .login import perform_login
-from .models import AuthConfig, AuthResult
+from .models import AuthConfig, AuthResult, FormSelectors
 
 
 async def run_login(
