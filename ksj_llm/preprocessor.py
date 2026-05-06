@@ -102,6 +102,9 @@ class LLMPreprocessor:
 
         return extracted
 
+    def safe_list(self, value):
+        return value if isinstance(value, list) else []
+
     def minimize_scan_data(self, scan_data: dict):
         """
         LLM 전처리에 필요한 핵심 필드만 남겨 입력 토큰을 줄임
@@ -113,29 +116,30 @@ class LLMPreprocessor:
 
         pages = []
         query_source_urls = []
-        for page in crawler.get("public_pages", []):
+        for page in self.safe_list(crawler.get("public_pages")):
+            page = page if isinstance(page, dict) else {}
             response_headers = page.get("response_headers") or {}
             page_urls = [
                 page.get("url"),
-                *page.get("links", []),
-                *page.get("routes", []),
-                *page.get("xhr_list", []),
-                *page.get("ws_list", []),
-                *page.get("endpoint_hints", [])
+                *self.safe_list(page.get("links")),
+                *self.safe_list(page.get("routes")),
+                *self.safe_list(page.get("xhr_list")),
+                *self.safe_list(page.get("ws_list")),
+                *self.safe_list(page.get("endpoint_hints"))
             ]
             query_source_urls.extend(page_urls)
             pages.append({
                 "url": page.get("url"),
                 "status": page.get("status"),
-                "links": page.get("links", []),
-                "routes": page.get("routes", []),
-                "forms": page.get("forms", []),
-                "technologies": page.get("technologies", []),
+                "links": self.safe_list(page.get("links")),
+                "routes": self.safe_list(page.get("routes")),
+                "forms": self.safe_list(page.get("forms")),
+                "technologies": self.safe_list(page.get("technologies")),
                 "render_type": page.get("render_type"),
-                "xhr_list": page.get("xhr_list", []),
-                "ws_list": page.get("ws_list", []),
-                "endpoint_hints": page.get("endpoint_hints", []),
-                "cookies": page.get("cookies", []),
+                "xhr_list": self.safe_list(page.get("xhr_list")),
+                "ws_list": self.safe_list(page.get("ws_list")),
+                "endpoint_hints": self.safe_list(page.get("endpoint_hints")),
+                "cookies": self.safe_list(page.get("cookies")),
                 "response_headers": {
                     "server": response_headers.get("server"),
                     "set-cookie": response_headers.get("set-cookie"),
@@ -144,27 +148,28 @@ class LLMPreprocessor:
             })
 
         authenticated_pages = []
-        for page in crawler.get("authenticated_pages", []):
+        for page in self.safe_list(crawler.get("authenticated_pages")):
+            page = page if isinstance(page, dict) else {}
             response_headers = page.get("response_headers") or {}
             page_urls = [
                 page.get("url"),
-                *page.get("links", []),
-                *page.get("routes", []),
-                *page.get("xhr_list", []),
-                *page.get("ws_list", []),
-                *page.get("endpoint_hints", [])
+                *self.safe_list(page.get("links")),
+                *self.safe_list(page.get("routes")),
+                *self.safe_list(page.get("xhr_list")),
+                *self.safe_list(page.get("ws_list")),
+                *self.safe_list(page.get("endpoint_hints"))
             ]
             query_source_urls.extend(page_urls)
             authenticated_pages.append({
                 "url": page.get("url"),
                 "status": page.get("status"),
-                "links": page.get("links", []),
-                "routes": page.get("routes", []),
-                "forms": page.get("forms", []),
-                "xhr_list": page.get("xhr_list", []),
-                "ws_list": page.get("ws_list", []),
-                "endpoint_hints": page.get("endpoint_hints", []),
-                "cookies": page.get("cookies", []),
+                "links": self.safe_list(page.get("links")),
+                "routes": self.safe_list(page.get("routes")),
+                "forms": self.safe_list(page.get("forms")),
+                "xhr_list": self.safe_list(page.get("xhr_list")),
+                "ws_list": self.safe_list(page.get("ws_list")),
+                "endpoint_hints": self.safe_list(page.get("endpoint_hints")),
+                "cookies": self.safe_list(page.get("cookies")),
                 "response_headers": {
                     "server": response_headers.get("server"),
                     "set-cookie": response_headers.get("set-cookie"),
@@ -173,8 +178,10 @@ class LLMPreprocessor:
             })
 
         fuzzer_results = []
-        for group in fuzzer.get("results", []):
-            for item in group.get("results", []):
+        for group in self.safe_list(fuzzer.get("results")):
+            group = group if isinstance(group, dict) else {}
+            for item in self.safe_list(group.get("results")):
+                item = item if isinstance(item, dict) else {}
                 fuzzer_results.append({
                     "url": item.get("url"),
                     "status": item.get("status"),
@@ -184,8 +191,10 @@ class LLMPreprocessor:
                 query_source_urls.append(item.get("url"))
 
         ports = []
-        for host in nmap.get("hosts", []):
-            for port in host.get("ports", []):
+        for host in self.safe_list(nmap.get("hosts")):
+            host = host if isinstance(host, dict) else {}
+            for port in self.safe_list(host.get("ports")):
+                port = port if isinstance(port, dict) else {}
                 ports.append({
                     "port": port.get("port"),
                     "protocol": port.get("protocol"),
@@ -206,7 +215,8 @@ class LLMPreprocessor:
                         "ip": host.get("ip"),
                         "status": host.get("status")
                     }
-                    for host in nmap.get("hosts", [])
+                    for host in self.safe_list(nmap.get("hosts"))
+                    if isinstance(host, dict)
                 ],
                 "ports": ports
             },
@@ -216,17 +226,17 @@ class LLMPreprocessor:
                 "authenticated_pages": authenticated_pages,
                 "query_params": self.extract_query_params(query_source_urls),
                 "auth": crawler.get("auth"),
-                "sitemap_urls": crawler.get("sitemap_urls", []),
+                "sitemap_urls": self.safe_list(crawler.get("sitemap_urls")),
                 "robots_info": {
-                    "disallowed": robots_info.get("disallowed", []),
-                    "sitemaps": robots_info.get("sitemaps", [])
+                    "disallowed": self.safe_list(robots_info.get("disallowed")),
+                    "sitemaps": self.safe_list(robots_info.get("sitemaps"))
                 },
-                "endpoint_hints": crawler.get("endpoint_hints", []),
-                "errors": crawler.get("errors", [])
+                "endpoint_hints": self.safe_list(crawler.get("endpoint_hints")),
+                "errors": self.safe_list(crawler.get("errors"))
             },
             "fuzzer": {
                 "base_url": fuzzer.get("base_url"),
-                "spider_urls": fuzzer.get("spider_urls", []),
+                "spider_urls": self.safe_list(fuzzer.get("spider_urls")),
                 "results": fuzzer_results
             }
         }
@@ -286,6 +296,200 @@ Write only human-readable explanation fields such as "reason" and "limitations" 
 
             raise ValueError("LLM 전처리 응답이 올바른 JSON 형식이 아닙니다.")
 
+    def _as_dict(self, value):
+        return value if isinstance(value, dict) else {}
+
+    def _as_list(self, value):
+        return value if isinstance(value, list) else []
+
+    def _as_str(self, value):
+        if value is None:
+            return ""
+        return value if isinstance(value, str) else str(value)
+
+    def _as_bool(self, value, default=False):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in ("true", "1", "yes", "y"):
+                return True
+            if normalized in ("false", "0", "no", "n"):
+                return False
+        if value is None:
+            return default
+        return bool(value)
+
+    def _as_int(self, value, default=0):
+        if isinstance(value, bool):
+            return default
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _as_float(self, value, default=0.0):
+        if isinstance(value, bool):
+            return default
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _as_string_list(self, value):
+        return [
+            self._as_str(item)
+            for item in self._as_list(value)
+            if item is not None
+        ]
+
+    def _normalize_options(self, value, defaults):
+        options = self._as_dict(value).copy()
+        for key, default_value in defaults.items():
+            current_value = options.get(key)
+            if isinstance(default_value, bool):
+                options[key] = self._as_bool(current_value, default_value)
+            elif isinstance(default_value, int) and not isinstance(default_value, bool):
+                options[key] = self._as_int(current_value, default_value)
+            elif isinstance(default_value, float):
+                options[key] = self._as_float(current_value, default_value)
+            elif isinstance(default_value, dict):
+                options[key] = self._as_dict(current_value)
+            elif current_value is None:
+                options[key] = default_value
+        return options
+
+    def _normalize_sql_param(self, item):
+        param = self._as_dict(item).copy()
+        param["name"] = self._as_str(param.get("name"))
+        param["location"] = self._as_str(param.get("location") or "unknown")
+        if param["location"] not in ("query", "body", "path", "header", "unknown"):
+            param["location"] = "unknown"
+        param["value"] = self._as_str(param.get("value"))
+        return param
+
+    def _normalize_xss_target(self, item):
+        target = self._as_dict(item).copy()
+        target["url"] = self._as_str(target.get("url"))
+        target["method"] = self._as_str(target.get("method") or "GET").upper()
+        if target["method"] not in ("GET", "POST"):
+            target["method"] = "GET"
+        target["body_format"] = self._as_str(target.get("body_format") or "unknown")
+        if target["body_format"] not in ("form", "json", "raw", "unknown"):
+            target["body_format"] = "unknown"
+        target["params"] = self._as_dict(target.get("params"))
+        target["check_urls"] = self._as_string_list(target.get("check_urls"))
+        target["safe_to_submit"] = self._as_bool(target.get("safe_to_submit"), False)
+        target["cookies"] = self._as_dict(target.get("cookies"))
+        target["headers"] = self._as_dict(target.get("headers"))
+        target["priority"] = self._as_str(target.get("priority") or "MEDIUM").upper()
+        if target["priority"] not in ("HIGH", "MEDIUM", "LOW"):
+            target["priority"] = "MEDIUM"
+        target["reason"] = self._as_str(target.get("reason"))
+        return target
+
+    def _normalize_attack_target(self, item):
+        target = self._as_dict(item).copy()
+        target["url"] = self._as_str(target.get("url"))
+        target["method"] = self._as_str(target.get("method") or "GET").upper()
+        if target["method"] not in ("GET", "POST"):
+            target["method"] = "GET"
+        target["params"] = self._as_dict(target.get("params"))
+        target["data"] = self._as_dict(target.get("data"))
+        target["headers"] = self._as_dict(target.get("headers"))
+        target["inject_params"] = self._as_string_list(target.get("inject_params"))
+        try:
+            target["timeout"] = float(target.get("timeout", 5.0))
+        except (TypeError, ValueError):
+            target["timeout"] = 5.0
+        target["priority"] = self._as_str(target.get("priority") or "MEDIUM").upper()
+        if target["priority"] not in ("HIGH", "MEDIUM", "LOW"):
+            target["priority"] = "MEDIUM"
+        target["reason"] = self._as_str(target.get("reason"))
+        return target
+
+    def normalize_preprocess_data(self, pre_data: dict):
+        """
+        LLM 응답이 일부 필드를 누락해도 후속 모듈이 같은 JSON 계약을 받도록 보정한다.
+        후보를 새로 만들지는 않고, 기존 값의 타입과 기본 키만 정리한다.
+        """
+        pre_data = self._as_dict(pre_data)
+
+        sql_data = self._as_dict(pre_data.get("sql_data")).copy()
+        auth = self._as_dict(sql_data.get("auth")).copy()
+        nmap_data = self._as_dict(sql_data.get("nmap_data")).copy()
+
+        normalized = {
+            "sql_data": {
+                "target_url": self._as_str(sql_data.get("target_url")),
+                "crawler_data": [
+                    self._normalize_sql_param(item)
+                    for item in self._as_list(sql_data.get("crawler_data"))
+                ],
+                "auth": {
+                    "cookie": self._as_str(auth.get("cookie")),
+                    "Authorization": self._as_str(auth.get("Authorization")),
+                    "Referer": self._as_str(auth.get("Referer")),
+                    "Accept-Language": self._as_str(auth.get("Accept-Language"))
+                },
+                "nmap_data": {
+                    "port": self._as_str(nmap_data.get("port")),
+                    "service": self._as_str(nmap_data.get("service")),
+                    "version": self._as_str(nmap_data.get("version"))
+                },
+                "fuzzer_data": self._as_string_list(sql_data.get("fuzzer_data"))
+            },
+            "xss_data": {},
+            "filedown_data": {},
+            "ssrf_data": {},
+            "limitations": self._as_list(pre_data.get("limitations"))
+        }
+
+        xss_data = self._as_dict(pre_data.get("xss_data")).copy()
+        xss_options = {
+            "browser_verify": True,
+            "stored_xss": True,
+            "dom_hash_xss": True,
+            "dom_stored_xss": False,
+            "timeout": 10,
+            "verify_tls": False
+        }
+        normalized["xss_data"] = {
+            "base_url": self._as_str(xss_data.get("base_url")),
+            "session_id": self._as_str(xss_data.get("session_id")),
+            "token": self._as_str(xss_data.get("token")),
+            "login_mock_path": self._as_str(xss_data.get("login_mock_path")),
+            "spider_urls": self._as_string_list(xss_data.get("spider_urls")),
+            "stored_targets": [
+                self._normalize_xss_target(item)
+                for item in self._as_list(xss_data.get("stored_targets"))
+            ],
+            "options": self._normalize_options(xss_data.get("options"), xss_options),
+            "evidence_dir": self._as_str(xss_data.get("evidence_dir") or "evidence"),
+            "results_dir": self._as_str(xss_data.get("results_dir") or "results")
+        }
+
+        module_options = {
+            "max_workers": 4,
+            "payload_limit": 3,
+            "timeout": 10.0,
+            "verify": False,
+            "allow_redirects": False,
+            "proxies": {},
+            "user_agent": "KSJ-DAST-Scanner/1.0"
+        }
+        for key in ("filedown_data", "ssrf_data"):
+            module_data = self._as_dict(pre_data.get(key)).copy()
+            normalized[key] = {
+                "targets": [
+                    self._normalize_attack_target(item)
+                    for item in self._as_list(module_data.get("targets"))
+                ],
+                "options": self._normalize_options(module_data.get("options"), module_options)
+            }
+
+        return normalized
+
     def generate_preprocess_data(self, scan_data: dict):
         """
         Core 연동용 함수.
@@ -305,7 +509,8 @@ Write only human-readable explanation fields such as "reason" and "limitations" 
         )
 
         response_text = response.content[0].text
-        return self.parse_llm_json(response_text)
+        pre_data = self.parse_llm_json(response_text)
+        return self.normalize_preprocess_data(pre_data)
 
     def load_scan_result(self, filepath: str):
         """
@@ -333,7 +538,8 @@ Write only human-readable explanation fields such as "reason" and "limitations" 
         output_path = output_dir / filename
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        safe_pre_data = self.make_json_safe(pre_data)
+        safe_pre_data = self.normalize_preprocess_data(pre_data)
+        safe_pre_data = self.make_json_safe(safe_pre_data)
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(safe_pre_data, f, ensure_ascii=False, indent=2)
 
