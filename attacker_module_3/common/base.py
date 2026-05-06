@@ -27,6 +27,7 @@ from attacker_module_3.common.result import (
     Confidence,
     Finding,
     ScanReport,
+    ScanStatus,
     Severity,
     confidence_rank,
     severity_rank,
@@ -130,10 +131,14 @@ class AttackModule(ABC):
 
     #부모 DAST 가 직접 호출하는 경로
     @classmethod
-    def run_json(cls, request: str | bytes | bytearray | dict[str, Any]) -> str:
+    async def run_json(cls, request: str | bytes | bytearray | dict[str, Any]) -> str:
         """JSON-in / JSON-out 진입점."""
         try:
             req = load_request(request) #JSON 요청을 프로젝트 내부에서 쓰기 좋은 형태로 파싱
+        except (ValueError, TypeError):
+            return dump_error("invalid_request", 0)
+
+        try:
             http = HttpClient(**req.http_kwargs) #HTTP 클라이언트 생성
             auth_result = _auth_result_from_doc(req.auth_doc)
             # 초기 로그인 쿠키가 있으면 세션에 미리 주입
@@ -147,8 +152,6 @@ class AttackModule(ABC):
             return dump_error("auth_required", e.status_code)
         except ImportError:
             return dump_error("ksj_login_unavailable", 0)
-        except (ValueError, TypeError):
-            return dump_error("invalid_request", 0)
 
     # ---- 하위 클래스가 구현해야 하는 훅 ------------------------------------
 
@@ -188,13 +191,22 @@ class AttackModule(ABC):
         requests_made = 0  #실제 보낸 요청 수
         errors = 0
 
+        is_partial = False
         #입력값 주입을 할 곳이 있을 때만 스캔 진행
         if self._candidate_params(target):
             probes = list(self._probes(target))
-            
-            #payload_limit이 설정되어 있으면 그 수만큼의 Probe만 사용
+
+            # payload_limit은 파라미터별 페이로드 수 제한
             if self.payload_limit is not None:
-                probes = probes[: self.payload_limit]
+                by_param: dict[str, list[Probe]] = {}
+                for p in probes:
+                    by_param.setdefault(p.parameter, []).append(p)
+                limited = []
+                for param_probes in by_param.values():
+                    limited.extend(param_probes[: self.payload_limit])
+                if len(limited) < len(probes):
+                    is_partial = True
+                probes = limited
 
             #병렬 실행 준비
             with ThreadPoolExecutor(max_workers=self.max_workers) as ex:
@@ -224,14 +236,21 @@ class AttackModule(ABC):
 
 
         finished = _now_iso()
-        #스캔에 걸린 시간 계산
         elapsed_ms = (time.perf_counter() - wall_start) * 1000.0
-        #ScanReport 객체 생성하여 반환
+
+        if findings:
+            status = ScanStatus.VULNERABLE
+        elif is_partial:
+            status = ScanStatus.PARTIAL
+        else:
+            status = ScanStatus.SAFE
+
         return ScanReport(
             module=self.name,
             target_url=target.url,
             started_at=started,
             finished_at=finished,
+            status=status,
             findings=findings,
             stats={
                 "requests": requests_made,
