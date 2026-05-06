@@ -7,6 +7,7 @@ login.py — Playwright로 로그인 폼 자동 입력 및 세션 쿠키 획득
 
 from __future__ import annotations
 
+import asyncio
 import re
 from typing import Optional
 
@@ -73,7 +74,8 @@ async def perform_login(
             return AuthResult(success=False, attempted=True, login_url=login_url,
                               error=f"폼 입력 실패: {e}")
 
-        # 3. 제출
+        # 3. dialog 핸들러 등록 (alert/confirm 자동 수락) + 제출
+        page.on("dialog", lambda d: asyncio.ensure_future(d.accept()))
         before_url = page.url
         try:
             await _submit_login_form(page, selectors)
