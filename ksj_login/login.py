@@ -181,23 +181,15 @@ async def _read_storage(page) -> dict:
 async def _is_login_success(page, before_url: str, pattern: str) -> bool:
     """
     3단계 휴리스틱으로 로그인 성공 여부 판별:
-      1. 페이지 본문에 오류 키워드 탐지 → 실패 (리다이렉트 여부 무관)
-      2. success_url_pattern 정규식 매칭 (사용자 지정) → 성공
-      3. URL이 변경됐고 login/signin 키워드 미포함 → 성공
+      1. success_url_pattern 정규식 매칭 (사용자 지정) → 성공
+      2. URL이 변경됐고 login/signin 키워드 미포함 → 성공
+         (리다이렉트 성공 → 메인 페이지 내용을 에러 키워드로 오판하지 않도록 여기서 반환)
+      3. URL이 안 바뀌었거나 아직 로그인 페이지에 있는 경우에만 에러 키워드 검사 → 실패
       4. 위 어느 것도 충족 안 되면 실패
     """
     after_url = page.url.lower()
 
-    # 1. 본문에 오류 메시지가 있으면 실패 (URL 변경 여부 무관하게 먼저 검사)
-    try:
-        body = (await page.content()).lower()
-        for kw in _ERROR_KEYWORDS:
-            if kw in body:
-                return False
-    except PlaywrightError:
-        pass
-
-    # 2. 명시적 성공 URL 패턴
+    # 1. 명시적 성공 URL 패턴
     if pattern:
         try:
             if re.search(pattern, after_url, re.IGNORECASE):
@@ -205,8 +197,17 @@ async def _is_login_success(page, before_url: str, pattern: str) -> bool:
         except re.error:
             pass
 
-    # 3. URL 변경 + 로그인 페이지 키워드 미포함
+    # 2. URL 변경 + 로그인 페이지 키워드 미포함 → 성공으로 판단, 이하 검사 불필요
     if after_url != before_url.lower() and not any(ind in after_url for ind in _LOGIN_INDICATORS):
         return True
+
+    # 3. 아직 로그인 페이지에 머물러 있는 경우에만 에러 키워드 검사
+    try:
+        body = (await page.evaluate("document.body.innerText")).lower()
+        for kw in _ERROR_KEYWORDS:
+            if kw in body:
+                return False
+    except PlaywrightError:
+        pass
 
     return False
