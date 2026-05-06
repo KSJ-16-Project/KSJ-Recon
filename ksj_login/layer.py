@@ -142,10 +142,10 @@ async def _detect_form_with_playwright(
                     if (!username) return null;
 
                     function toSel(el) {
-                        if (el.name) return `input[name='${el.name.replace(/\\\\/g, '\\\\\\\\').replace(/'/g, "\\\\'")}']`;
-                        if (el.id)   return `#${CSS.escape(el.id)}`;
-                        if (el.placeholder) return `input[placeholder='${el.placeholder.replace(/'/g, "\\\\'")}']`;
-                        return `input[type='${el.type || "text"}']`;
+                        if (el.name) return "input[name='" + el.name + "']";
+                        if (el.id)   return "#" + el.id;
+                        if (el.placeholder) return "input[placeholder='" + el.placeholder + "']";
+                        return "input[type='" + (el.type || "text") + "']";
                     }
 
                     return { username: toSel(username), password: toSel(pw) };
