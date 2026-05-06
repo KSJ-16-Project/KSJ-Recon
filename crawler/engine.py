@@ -8,7 +8,7 @@ from urllib.parse import urljoin, urlparse, urlunparse
 
 from playwright.async_api import Browser
 
-from crawler.auth.layer import run_auth_layer
+import ksj_login
 from crawler.browser import BrowserManager, RawPageData, render
 from crawler.models import CrawlResult, CrawlerConfig, EndpointHint, PageSnapshot
 from crawler.parser import (
@@ -61,20 +61,15 @@ async def _crawl_with_browser(browser: Browser, config: CrawlerConfig) -> CrawlR
     result.robots_info = robots_info
     result.errors.extend(errors)
 
-    if config.auth is not None:
-        result.auth = await run_auth_layer(browser, public_pages, config.auth)
-        if result.auth.success:
-            seeds = [config.target_url]
-            if result.auth.final_url:
-                seeds.append(result.auth.final_url)
+    if ksj_login.has_credentials():
+        auth_result = await ksj_login.get_session(browser)
+        if auth_result.success:
             auth_pages, _, _, auth_errors = await _crawl_once(
                 browser,
                 config,
-                seeds=seeds,
+                seeds=[config.target_url],
                 phase="authenticated",
-                cookies=result.auth.cookies,
-                local_storage=result.auth.local_storage,
-                session_storage=result.auth.session_storage,
+                cookies=auth_result.cookies,
             )
             public_signatures = {(p.url, p.status) for p in public_pages}
             result.authenticated_pages = [

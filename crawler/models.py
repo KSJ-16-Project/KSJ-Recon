@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from crawler.auth.models import AuthConfig, AuthResult
-
 
 @dataclass
 class FormField:
@@ -41,7 +39,6 @@ class CrawlerConfig:
     path_depth_limit: int = 12
     query_variants_limit: int = 3
     block_heavy_resources: bool = True
-    auth: AuthConfig | None = None
 
 
 @dataclass
@@ -81,7 +78,6 @@ class CrawlResult:
     target_url: str
     public_pages: list[PageSnapshot] = field(default_factory=list)
     authenticated_pages: list[PageSnapshot] = field(default_factory=list)
-    auth: AuthResult | None = None
     sitemap_urls: list[str] = field(default_factory=list)
     robots_info: dict = field(default_factory=dict)
     endpoint_hints: list[EndpointHint] = field(default_factory=list)
