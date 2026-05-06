@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from playwright.async_api import Browser, Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
+
 from .models import FormSelectors
 
 
@@ -28,6 +30,79 @@ _SUBMIT_SELECTOR = (
     "button:has-text('Log in'), a:has-text('Log in'), "
     "[role=button]:has-text('Login'), [role=button]:has-text('Sign in')"
 )
+
+_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+)
+
+_DOM_SELECTOR_JS = """
+    () => {
+        const pw = document.querySelector("input[type='password']");
+        if (!pw) return null;
+
+        const candidates = Array.from(document.querySelectorAll(
+            "input[type='text'], input[type='email'], input[type='tel'], input:not([type])"
+        )).filter(el => !el.disabled && el.type !== 'hidden');
+
+        const allInputs = Array.from(document.querySelectorAll('input'));
+        const pwIndex = allInputs.indexOf(pw);
+        let username = null;
+        for (let i = candidates.length - 1; i >= 0; i--) {
+            if (allInputs.indexOf(candidates[i]) < pwIndex) {
+                username = candidates[i];
+                break;
+            }
+        }
+        if (!username && candidates.length > 0) username = candidates[0];
+        if (!username) return null;
+
+        function toSel(el) {
+            if (el.name) return "input[name='" + el.name + "']";
+            if (el.id)   return "#" + el.id;
+            if (el.placeholder) return "input[placeholder='" + el.placeholder + "']";
+            return "input[type='" + (el.type || "text") + "']";
+        }
+
+        return { username: toSel(username), password: toSel(pw) };
+    }
+"""
+
+
+async def detect_selectors_via_dom(browser: Browser, url: str) -> FormSelectors | None:
+    """Playwright로 URL을 직접 방문해 password input 기반으로 FormSelectors를 추론한다.
+    <form> 태그 밖 input도 탐지 가능. networkidle 우선, load 폴백."""
+    ctx = None
+    try:
+        ctx = await browser.new_context(
+            ignore_https_errors=True,
+            user_agent=_UA,
+        )
+        page = await ctx.new_page()
+        try:
+            await page.goto(url, wait_until="networkidle", timeout=30_000)
+        except PlaywrightTimeoutError:
+            try:
+                await page.goto(url, wait_until="load", timeout=15_000)
+            except PlaywrightError:
+                return None
+
+        result = await page.evaluate(_DOM_SELECTOR_JS)
+        if result:
+            return FormSelectors(
+                username=result["username"],
+                password=result["password"],
+                submit=_SUBMIT_SELECTOR,
+            )
+        return None
+    except (PlaywrightError, Exception):
+        return None
+    finally:
+        if ctx is not None:
+            try:
+                await ctx.close()
+            except PlaywrightError:
+                pass
 
 
 def analyze_login_form(page: dict) -> FormSelectors:

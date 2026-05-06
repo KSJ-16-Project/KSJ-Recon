@@ -8,11 +8,11 @@ get_session()은 브라우저를 내부에서 직접 생성하므로 호출자�
 
 from __future__ import annotations
 
-from playwright.async_api import async_playwright, Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import async_playwright
 
-from .form_analyzer import _SUBMIT_SELECTOR
+from .form_analyzer import detect_selectors_via_dom
 from .login import perform_login
-from .models import AuthConfig, AuthResult, FormSelectors
+from .models import AuthConfig, AuthResult
 
 _stored_login_url: str = ""
 _stored_config: AuthConfig | None = None
@@ -48,7 +48,7 @@ async def get_session() -> AuthResult:
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=True)
         try:
-            selectors = await _detect_selectors(browser, _stored_login_url)
+            selectors = await detect_selectors_via_dom(browser, _stored_login_url)
             if selectors is None:
                 return AuthResult(
                     success=False,
@@ -66,71 +66,3 @@ async def get_session() -> AuthResult:
             return result
         finally:
             await browser.close()
-
-
-async def _detect_selectors(browser, url: str) -> FormSelectors | None:
-    """
-    Playwright로 URL을 직접 방문해 FormSelectors를 추론한다.
-    <form> 태그 밖에 있는 input도 DOM 전체에서 탐색하므로 크롤러 데이터에 의존하지 않는다.
-    """
-    ctx = None
-    try:
-        ctx = await browser.new_context(ignore_https_errors=True)
-        page = await ctx.new_page()
-        try:
-            await page.goto(url, wait_until="networkidle", timeout=30_000)
-        except PlaywrightTimeoutError:
-            try:
-                await page.goto(url, wait_until="load", timeout=15_000)
-            except PlaywrightError:
-                return None
-
-        result = await page.evaluate("""
-            () => {
-                const pw = document.querySelector("input[type='password']");
-                if (!pw) return null;
-
-                // 비활성·hidden 제외한 text/email/tel input 목록
-                const candidates = Array.from(document.querySelectorAll(
-                    "input[type='text'], input[type='email'], input[type='tel'], input:not([type])"
-                )).filter(el => !el.disabled && el.type !== 'hidden');
-
-                // DOM 순서상 password 바로 앞에 오는 input을 username으로 선택
-                const allInputs = Array.from(document.querySelectorAll('input'));
-                const pwIndex = allInputs.indexOf(pw);
-                let username = null;
-                for (let i = candidates.length - 1; i >= 0; i--) {
-                    if (allInputs.indexOf(candidates[i]) < pwIndex) {
-                        username = candidates[i];
-                        break;
-                    }
-                }
-                if (!username && candidates.length > 0) username = candidates[0];
-                if (!username) return null;
-
-                function toSel(el) {
-                    if (el.name) return "input[name='" + el.name + "']";
-                    if (el.id)   return "#" + el.id;
-                    if (el.placeholder) return "input[placeholder='" + el.placeholder + "']";
-                    return "input[type='" + (el.type || "text") + "']";
-                }
-
-                return { username: toSel(username), password: toSel(pw) };
-            }
-        """)
-
-        if result:
-            return FormSelectors(
-                username=result["username"],
-                password=result["password"],
-                submit=_SUBMIT_SELECTOR,
-            )
-        return None
-    except (PlaywrightError, Exception):
-        return None
-    finally:
-        if ctx is not None:
-            try:
-                await ctx.close()
-            except PlaywrightError:
-                pass

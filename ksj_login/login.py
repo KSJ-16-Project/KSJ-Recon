@@ -32,7 +32,7 @@ _ERROR_KEYWORDS = (
 )
 
 # URL이 여전히 로그인 페이지임을 시사하는 키워드
-_LOGIN_INDICATORS = ("login", "signin", "sign-in", "auth/failure", "error")
+_LOGIN_INDICATORS = ("login", "signin", "sign-in", "auth/failure")
 
 
 async def perform_login(
