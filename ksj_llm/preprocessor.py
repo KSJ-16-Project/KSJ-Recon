@@ -323,6 +323,22 @@ Write only human-readable explanation fields such as "reason" and "limitations" 
         scan_data = self.load_scan_result(filepath)
         return self.generate_preprocess_data(scan_data)
 
+    def save_preprocess_data(self, pre_data: dict, filename: str = "preprocess_data.json"):
+        """
+        output 디렉터리에 전처리후 데이터를 저장하도록 함수 구성 테스트간 llm 사용량을 줄이기위함
+        """
+        output_dir = self.base_dir / "output"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        output_path = output_dir / filename
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        safe_pre_data = self.make_json_safe(pre_data)
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(safe_pre_data, f, ensure_ascii=False, indent=2)
+
+        return output_path
+
 
 """
 Core 연동 예시:
@@ -336,6 +352,14 @@ sql_data = pre_data["sql_data"]
 xss_data = pre_data["xss_data"]
 filedown_data = pre_data["filedown_data"]
 ssrf_data = pre_data["ssrf_data"]
+
+
+# 테스트 반복 시 LLM을 다시 호출하지 않도록 전처리 결과를 로컬에 저장
+# 기본 저장 위치: project_root/output/preprocess_data.json
+saved_path = preprocessor.save_preprocess_data(pre_data)
+
+# 파일명을 지정하고 싶으면 다음처럼 사용한다.
+saved_path = preprocessor.save_preprocess_data(pre_data, "파일명.json")
 """
 
 
