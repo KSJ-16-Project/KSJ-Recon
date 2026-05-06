@@ -47,7 +47,7 @@ def _handle_sigint(_sig, _frame):
 signal.signal(signal.SIGINT, _handle_sigint)
 
 
-def run_xss_scan(input_json: dict, *, cookies_refresher: Callable[[], dict] | None = None) -> dict:
+async def run_xss_scan(input_json: dict, *, cookies_refresher: Callable[[], dict] | None = None) -> dict:
     scanner = XSSScanner(input_json, cookies_refresher=cookies_refresher)
     output = scanner.run()
     scanner.mark_final_saved()
