@@ -78,10 +78,10 @@ async def _detect_selectors(browser, url: str) -> FormSelectors | None:
         ctx = await browser.new_context(ignore_https_errors=True)
         page = await ctx.new_page()
         try:
-            await page.goto(url, wait_until="load", timeout=30_000)
+            await page.goto(url, wait_until="networkidle", timeout=30_000)
         except PlaywrightTimeoutError:
             try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=15_000)
+                await page.goto(url, wait_until="load", timeout=15_000)
             except PlaywrightError:
                 return None
 
