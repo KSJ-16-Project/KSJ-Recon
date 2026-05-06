@@ -331,6 +331,7 @@ if check_Url(recon_url):
             console.print(f"[bold magenta]⏱ 소요 시간:[/] [bold cyan]{end - start:.2f}초[/]")
             pass
         elif recon_mode=="mode_b":
+            print("테스트 시작 , mode_b")
             # preprocess_task = progress.add_task("[bold blue]각 공격 모듈에 맞는 통합 데이터 전처리 중...", total=1)
             # preprocessor = LLMPreprocessor()
             # pre_data = preprocessor.generate_preprocess_data(recon_results)
