@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from common.target import Target
+from attacker_module_3.common.target import Target
 
 
 def inject(target: Target, payload: str, parameter: str) -> dict[str, Any]:

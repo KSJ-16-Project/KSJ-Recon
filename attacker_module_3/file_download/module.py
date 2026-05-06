@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from common.base import AttackModule, Probe
-from common.http import HttpResponse
-from common.result import Finding, Severity
-from common.target import Target
+from attacker_module_3.common.base import AttackModule, Probe
+from attacker_module_3.common.http import HttpResponse
+from attacker_module_3.common.result import Finding, Severity
+from attacker_module_3.common.target import Target
 
-from file_download.payloads import PAYLOADS
+from attacker_module_3.file_download.payloads import PAYLOADS
 
 
 class FileDownloadModule(AttackModule):

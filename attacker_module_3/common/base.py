@@ -17,13 +17,13 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__f
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from common.detector import match
+from attacker_module_3.common.detector import match
 #HTTP 요청을 보내고 응답을 담는 공통 래퍼
-from common.http import HttpClient, HttpResponse
-from common.injector import inject
-from common.exceptions import AuthenticationError
-from common.io import dump_error, dump_report, load_request
-from common.result import (
+from attacker_module_3.common.http import HttpClient, HttpResponse
+from attacker_module_3.common.injector import inject
+from attacker_module_3.common.exceptions import AuthenticationError
+from attacker_module_3.common.io import dump_error, dump_report, load_request
+from attacker_module_3.common.result import (
     Confidence,
     Finding,
     ScanReport,
@@ -31,7 +31,7 @@ from common.result import (
     confidence_rank,
     severity_rank,
 )
-from common.target import Target
+from attacker_module_3.common.target import Target
 
 
 async def _do_relogin_async(auth_result: Any) -> Any:

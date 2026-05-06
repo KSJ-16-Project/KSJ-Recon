@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from common.http import HttpResponse
+from attacker_module_3.common.http import HttpResponse
 
 #base.py의 _probe_one에서 사용되는 시그니처 매칭 함수
 def match(body: bytes, signatures: Iterable[bytes]) -> bytes | None:

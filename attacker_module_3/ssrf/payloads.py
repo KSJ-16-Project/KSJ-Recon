@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from common.result import Confidence
+from attacker_module_3.common.result import Confidence
 
 
 @dataclass(frozen=True)
