@@ -9,7 +9,7 @@ from common.result import ScanReport
 from common.target import Target
 
 
-_REQUEST_TOP_KEYS = frozenset({"target", "options"})
+_REQUEST_TOP_KEYS = frozenset({"target", "options", "auth"})
 _OPTIONS_KEYS = frozenset({
     "max_workers", "payload_limit",
     "user_agent", "verify", "proxies",
@@ -27,6 +27,7 @@ class ParsedRequest:
     target: Target
     http_kwargs: dict[str, Any] = field(default_factory=dict)
     module_kwargs: dict[str, Any] = field(default_factory=dict)
+    auth_doc: dict[str, Any] | None = None
 
 
 # JSON 요청을 파싱해 모듈 호출에 필요한 슬라이스로 분리하는 함수
@@ -73,7 +74,10 @@ def load_request(raw: str | bytes | bytearray | dict[str, Any]) -> ParsedRequest
         for k in _MODULE_OPTION_KEYS
         if k in options and options[k] is not None
     }
-    return ParsedRequest(target=target, http_kwargs=http_kwargs, module_kwargs=module_kwargs)
+    auth_doc = doc.get("auth")
+    if auth_doc is not None and not isinstance(auth_doc, dict):
+        raise ValueError("'auth' must be an object")
+    return ParsedRequest(target=target, http_kwargs=http_kwargs, module_kwargs=module_kwargs, auth_doc=auth_doc)
 
 
 def dump_error(error: str, status_code: int) -> str:
