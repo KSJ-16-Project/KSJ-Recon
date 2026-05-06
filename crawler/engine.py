@@ -80,6 +80,9 @@ async def _crawl_with_browser(browser: Browser, config: CrawlerConfig) -> CrawlR
     result.endpoint_hints = _dedupe_endpoints(
         hint for page in result.pages for hint in page.endpoint_hints
     )
+    result.external_endpoint_hints = _dedupe_endpoints(
+        hint for page in result.pages for hint in page.external_endpoint_hints
+    )
     return result
 
 
@@ -208,7 +211,7 @@ async def _render_one(
 
 def _snapshot_from_raw(raw: RawPageData, depth: int, target_url: str) -> PageSnapshot:
     html = raw.rendered_html or raw.raw_html
-    endpoint_hints = [
+    all_endpoint_hints = [
         EndpointHint(
             url=x.url,
             method=x.method,
@@ -217,11 +220,28 @@ def _snapshot_from_raw(raw: RawPageData, depth: int, target_url: str) -> PageSna
         )
         for x in raw.xhr_list
     ]
-    endpoint_hints.extend(
+    all_endpoint_hints.extend(
         EndpointHint(url=w.url, method="WS", source="websocket", page_url=raw.url)
         for w in raw.ws_list
     )
-    # 외부 도메인 힌트 포함 유지 — ssrf 모듈이 외부 URL로 향하는 XHR/WS를 타깃으로 사용
+    # Keep external observations separate so core only consumes in-scope endpoints.
+
+    endpoint_hints = [
+        hint for hint in all_endpoint_hints
+        if _is_endpoint_in_scope(hint.url, target_url)
+    ]
+    external_endpoint_hints = [
+        hint for hint in all_endpoint_hints
+        if not _is_endpoint_in_scope(hint.url, target_url)
+    ]
+    scoped_xhr_list = [
+        xhr for xhr in raw.xhr_list
+        if _is_endpoint_in_scope(xhr.url, target_url)
+    ]
+    scoped_ws_list = [
+        ws for ws in raw.ws_list
+        if _is_endpoint_in_scope(ws.url, target_url)
+    ]
 
     snapshot = PageSnapshot(
         url=raw.url,
@@ -234,9 +254,10 @@ def _snapshot_from_raw(raw: RawPageData, depth: int, target_url: str) -> PageSna
         forms=extract_forms(html, raw.url),
         technologies=detect_technologies(html, raw.response_headers),
         render_type=detect_render_type(raw.raw_html, raw.rendered_html),
-        xhr_list=raw.xhr_list,
-        ws_list=raw.ws_list,
+        xhr_list=scoped_xhr_list,
+        ws_list=scoped_ws_list,
         endpoint_hints=endpoint_hints,
+        external_endpoint_hints=external_endpoint_hints,
         request_headers=raw.request_headers,
         response_headers=raw.response_headers,
         cookies=raw.cookies,
@@ -258,6 +279,7 @@ async def _enrich_from_scripts(
 ) -> None:
     routes: set[str] = set(page.routes)
     hints: list[EndpointHint] = list(page.endpoint_hints)
+    external_hints: list[EndpointHint] = list(page.external_endpoint_hints)
 
     for script_url in page.scripts[:10]:
         if not _is_in_scope(script_url, config.target_url):
@@ -276,16 +298,20 @@ async def _enrich_from_scripts(
 
         for endpoint in extract_endpoints(js_body):
             full = _normalise_url(config.target_url, urljoin(page.url, endpoint))
-            if _is_in_scope(full, config.target_url):
-                hints.append(EndpointHint(
-                    url=full,
-                    method="GET",
-                    source="js-static",
-                    page_url=page.url,
-                ))
+            hint = EndpointHint(
+                url=full,
+                method="GET",
+                source="js-static",
+                page_url=page.url,
+            )
+            if _is_endpoint_in_scope(full, config.target_url):
+                hints.append(hint)
+            else:
+                external_hints.append(hint)
 
     page.routes = sorted(routes)
     page.endpoint_hints = _dedupe_endpoints(hints)
+    page.external_endpoint_hints = _dedupe_endpoints(external_hints)
 
 
 async def _manifest_links(manifest_url: str) -> list[str]:
@@ -344,6 +370,12 @@ def _is_in_scope(url: str, target_url: str) -> bool:
     parsed = urlparse(url)
     target = urlparse(target_url)
     return parsed.scheme in ("http", "https") and parsed.netloc == target.netloc
+
+
+def _is_endpoint_in_scope(url: str, target_url: str) -> bool:
+    parsed = urlparse(urljoin(target_url, url))
+    target = urlparse(target_url)
+    return parsed.scheme in ("http", "https", "ws", "wss") and parsed.netloc == target.netloc
 
 
 def _scope_urls(urls, target_url: str) -> list[str]:

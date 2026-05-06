@@ -65,6 +65,7 @@ class PageSnapshot:
     xhr_list: list = field(default_factory=list)
     ws_list: list = field(default_factory=list)
     endpoint_hints: list[EndpointHint] = field(default_factory=list)
+    external_endpoint_hints: list[EndpointHint] = field(default_factory=list)
     request_headers: dict = field(default_factory=dict)
     response_headers: dict = field(default_factory=dict)
     cookies: list = field(default_factory=list)
@@ -81,6 +82,7 @@ class CrawlResult:
     sitemap_urls: list[str] = field(default_factory=list)
     robots_info: dict = field(default_factory=dict)
     endpoint_hints: list[EndpointHint] = field(default_factory=list)
+    external_endpoint_hints: list[EndpointHint] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
     @property
