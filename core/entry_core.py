@@ -29,9 +29,9 @@ from ffuf_module.fuzzer_module import FuzzOrchestrator
 from crawler.engine import crawl_target , CrawlerConfig
 from crawler.auth.models import AuthConfig
 from ksj_llm.preprocessor import LLMPreprocessor
-# # from sql_injection.scanner import  run_scan
+from sql_injection.scanner import  run_scan,ScanInput
 # from XSS.xss_module.xss_scanner import run_xss_scan
-# from attacker_module_3.file_download.module import FileDownloadModule
+from attacker_module_3.file_download.module import FileDownloadModule
 # from attacker_module_3.ssrf.module import SSRFModule
 # Rich 콘솔 초기화
 console = Console()
@@ -217,7 +217,7 @@ start = time.time()
 
 if check_Url(recon_url):
 
-    mid_core = Middle_core(recon_url)
+    # mid_core = Middle_core(recon_url)
 
     with Progress(
     SpinnerColumn(),
@@ -226,102 +226,102 @@ if check_Url(recon_url):
     ) as progress:
         
         
-        if login_choice==1:
-            # 로그인이 필요한 도메인이면
-            config = CrawlerConfig(
-                target_url=recon_url, # check_isOrder에서 검증된 url
-                auth = AuthConfig(
-                    username = user_id,
-                    password = user_password,
-                )
-            )
-        else:
-            # Crawler 설정 (config 생성)
-            config = CrawlerConfig(
-                target_url=recon_url # check_isOrder에서 검증된 url
-            )
+    #     if login_choice==1:
+    #         # 로그인이 필요한 도메인이면
+    #         config = CrawlerConfig(
+    #             target_url=recon_url, # check_isOrder에서 검증된 url
+    #             auth = AuthConfig(
+    #                 username = user_id,
+    #                 password = user_password,
+    #             )
+    #         )
+    #     else:
+    #         # Crawler 설정 (config 생성)
+    #         config = CrawlerConfig(
+    #             target_url=recon_url # check_isOrder에서 검증된 url
+    #         )
 
 
-        # Crawler 전용 프로그레스 바
-        crawl_task = progress.add_task("[red]Crawler 모듈 동작중...", total=1)
+    #     # Crawler 전용 프로그레스 바
+    #     crawl_task = progress.add_task("[red]Crawler 모듈 동작중...", total=1)
         
-        # 비동기 함수인 crawl_target 실행 및 결과 수령
-        crawl_data = asyncio.run(crawl_target(config))
+    #     # 비동기 함수인 crawl_target 실행 및 결과 수령
+    #     crawl_data = asyncio.run(crawl_target(config))
         
-        #json으로 변환
-        final_crawl_data=dataclasses.asdict(crawl_data)
+    #     #json으로 변환
+    #     final_crawl_data=dataclasses.asdict(crawl_data)
        
-        # 크롤러 데이터에서 Fuzzer 모듈을 위한 URL 리스트 뽑기 ( 미들 코어에서 )
-        spider_urls=asyncio.run(mid_core.make_url_list(final_crawl_data))
-        # print("스파이더",spider_urls)
-        print("미들 코어에서 나온",spider_urls)
-        mid_core.set_crawler_data(final_crawl_data)
+    #     # 크롤러 데이터에서 Fuzzer 모듈을 위한 URL 리스트 뽑기 ( 미들 코어에서 )
+    #     spider_urls=asyncio.run(mid_core.make_url_list(final_crawl_data))
+    #     # print("스파이더",spider_urls)
+    #     print("미들 코어에서 나온",spider_urls)
+    #     mid_core.set_crawler_data(final_crawl_data)
 
        
         
-        progress.update(crawl_task, advance=1, description="[bold red]✔ Crawler 분석 완료")
+    #     progress.update(crawl_task, advance=1, description="[bold red]✔ Crawler 분석 완료")
         
         
-        # 개별 작업 바 생성
-        task1 = progress.add_task("[cyan]Nmap 모듈 동작중...", total=1)
-        task2 = progress.add_task("[magenta]Fuzzer 모듈 동작중...", total=1)
+    #     # 개별 작업 바 생성
+    #     task1 = progress.add_task("[cyan]Nmap 모듈 동작중...", total=1)
+    #     task2 = progress.add_task("[magenta]Fuzzer 모듈 동작중...", total=1)
         
-         # Nmap 모듈 생성
-        scanner=ksj_nmap.ksj_nmap.NmapScanner()
+    #      # Nmap 모듈 생성
+    #     scanner=ksj_nmap.ksj_nmap.NmapScanner()
 
-        # Fuzzer 모듈 생성
-        fuzzer=FuzzOrchestrator()
+    #     # Fuzzer 모듈 생성
+    #     fuzzer=FuzzOrchestrator()
         
-        nmap_data, fuzzer_data = {}, []
+    #     nmap_data, fuzzer_data = {}, []
 
-        try:
-            with ThreadPoolExecutor(max_workers=2) as executor:
+    #     try:
+    #         with ThreadPoolExecutor(max_workers=2) as executor:
 
-                # Nmap 모듈 작동
-                future_nmap=executor.submit(scanner.scan,recon_url,nmap_level)
+    #             # Nmap 모듈 작동
+    #             future_nmap=executor.submit(scanner.scan,recon_url,nmap_level)
                 
-                # Fuzzer 모듈 작동
-                future_fuzzer=executor.submit(
-                    fuzzer.run,
-                    base_url    = recon_url,  # 필수
-                    spider_urls = spider_urls,  # 필수 (없으면 [])
-                    difficulty  = fuzzer_level,  # 필수: 1(이지) or 2(하드)
-                )
+    #             # Fuzzer 모듈 작동
+    #             future_fuzzer=executor.submit(
+    #                 fuzzer.run,
+    #                 base_url    = recon_url,  # 필수
+    #                 spider_urls = spider_urls,  # 필수 (없으면 [])
+    #                 difficulty  = fuzzer_level,  # 필수: 1(이지) or 2(하드)
+    #             )
 
-                # 완료되는 순서대로 처리 (as_completed 사용)
-                from concurrent.futures import as_completed
-                futures = {future_nmap: "nmap", future_fuzzer: "fuzzer"}
-                # futures = {future_nmap: "nmap"}
-                for future in as_completed(futures):
-                    target = futures[future]
-                    result = future.result()
+    #             # 완료되는 순서대로 처리 (as_completed 사용)
+    #             from concurrent.futures import as_completed
+    #             futures = {future_nmap: "nmap", future_fuzzer: "fuzzer"}
+    #             # futures = {future_nmap: "nmap"}
+    #             for future in as_completed(futures):
+    #                 target = futures[future]
+    #                 result = future.result()
                     
-                    if target == "nmap":
-                        nmap_data = result
-                        print("nmap은",result)
-                        progress.update(task1, advance=1, description="[cyan]✔ Nmap 스캔 완료")
-                    elif target == "fuzzer":
-                        fuzzer_data = result
-                        progress.update(task2, advance=1, description="[magenta]✔ Fuzzer 완료")
+    #                 if target == "nmap":
+    #                     nmap_data = result
+    #                     print("nmap은",result)
+    #                     progress.update(task1, advance=1, description="[cyan]✔ Nmap 스캔 완료")
+    #                 elif target == "fuzzer":
+    #                     fuzzer_data = result
+    #                     progress.update(task2, advance=1, description="[magenta]✔ Fuzzer 완료")
         
-        except Exception as e:
-            console.print(f"[bold red] KSJ-RECON 실행 중 오류 발생: {e}")
+    #     except Exception as e:
+    #         console.print(f"[bold red] KSJ-RECON 실행 중 오류 발생: {e}")
    
-        # --- 5. Middle Core로 데이터 통합 ---
-        middle_core_task = progress.add_task("[yellow]모듈 데이터 통합 중...", total=1)
+    #     # --- 5. Middle Core로 데이터 통합 ---
+    #     middle_core_task = progress.add_task("[yellow]모듈 데이터 통합 중...", total=1)
         
 
-        mid_core.set_nmap_data(nmap_data)
-        mid_core.set_fuzzer_data(fuzzer_data)
+    #     mid_core.set_nmap_data(nmap_data)
+    #     mid_core.set_fuzzer_data(fuzzer_data)
 
-        recon_results = mid_core.get_all_recon_results()
-        # save_path1 = "C:/Ksj-Recon/KSJ-Recon/output/middle_core_data.txt"
-        # asyncio.run(save_to_txt(save_path1, recon_results))
-        # print("Recon 데이터 결과")
-        # print()
-        # print(recon_results)
-        print("모듈 통합 데이터 저장 완료")
-        progress.update(middle_core_task, advance=1, description="[yellow]✔ 모듈 데이터 통합 완료")
+    #     recon_results = mid_core.get_all_recon_results()
+    #     # save_path1 = "C:/Ksj-Recon/KSJ-Recon/output/middle_core_data.txt"
+    #     # asyncio.run(save_to_txt(save_path1, recon_results))
+    #     # print("Recon 데이터 결과")
+    #     # print()
+    #     # print(recon_results)
+    #     print("모듈 통합 데이터 저장 완료")
+    #     progress.update(middle_core_task, advance=1, description="[yellow]✔ 모듈 데이터 통합 완료")
         if recon_mode=="mode_a":
             #reporter = LLMReporter()
             #reporter.generate_dashboard_from_data(recon_results,recon_mode)
@@ -332,6 +332,302 @@ if check_Url(recon_url):
             pass
         elif recon_mode=="mode_b":
             print("테스트 시작 , mode_b")
+            pre_data={
+                        "sql_data": {
+                            "target_url": "https://hotspotfan.online/",
+                            "crawler_data": [
+                            {
+                                "name": "page",
+                                "location": "query",
+                                "value": "0"
+                            },
+                            {
+                                "name": "size",
+                                "location": "query",
+                                "value": "60"
+                            },
+                            {
+                                "name": "sort",
+                                "location": "query",
+                                "value": "createdAt,desc"
+                            },
+                            {
+                                "name": "position",
+                                "location": "query",
+                                "value": "MAIN"
+                            },
+                            {
+                                "name": "type",
+                                "location": "query",
+                                "value": "seller"
+                            }
+                            ],
+                            "auth": {
+                            "cookie": "",
+                            "Authorization": "",
+                            "Referer": "",
+                            "Accept-Language": ""
+                            },
+                            "nmap_data": {
+                            "port": "443",
+                            "service": "http",
+                            "version": ""
+                            },
+                            "fuzzer_data": [
+                            "https://hotspotfan.online/api/orders/me",
+                            "https://hotspotfan.online/api/products/:id/comments?page=0&size=20",
+                            "https://hotspotfan.online/api/products?page=0&size=60",
+                            "https://hotspotfan.online/api/orders/seller/me",
+                            "https://hotspotfan.online/api/categories?page=0&size=100",
+                            "https://hotspotfan.online/api/follows/my-followers",
+                            "https://hotspotfan.online/api/products/:id",
+                            "https://hotspotfan.online/api/users/managers/:id",
+                            "https://hotspotfan.online/api/auth/refresh",
+                            "https://hotspotfan.online/api/ranking/realtime?type=seller",
+                            "https://hotspotfan.online/api/ranking/weekly?type=seller",
+                            "https://hotspotfan.online/api/follows/followings?size=20",
+                            "https://hotspotfan.online/api/ranking/daily?type=seller",
+                            "https://hotspotfan.online/api/products?page=0&size=10&sort=createdAt,desc",
+                            "https://hotspotfan.online/api/ranking/monthly?type=seller",
+                            "https://hotspotfan.online/api/banners?position=MAIN",
+                            "https://hotspotfan.online/api/products/:id/likes",
+                            "https://hotspotfan.online/api/cart",
+                            "https://hotspotfan.online/users/admin/me",
+                            "https://hotspotfan.online/manager",
+                            "https://hotspotfan.online/search",
+                            "https://hotspotfan.online/ranking",
+                            "https://hotspotfan.online/products/:id",
+                            "https://hotspotfan.online/influencer/:id"
+                            ]
+                        },
+                        "xss_data": {
+                            "base_url": "https://hotspotfan.online/",
+                            "session_id": "",
+                            "token": "",
+                            "login_mock_path": "https://hotspotfan.online/auth",
+                            "spider_urls": [
+                            "https://hotspotfan.online/",
+                            "https://hotspotfan.online/auth",
+                            "https://hotspotfan.online/search",
+                            "https://hotspotfan.online/ranking",
+                            "https://hotspotfan.online/products/:id",
+                            "https://hotspotfan.online/influencer/:id",
+                            "https://hotspotfan.online/manager",
+                            "https://hotspotfan.online/me",
+                            "https://hotspotfan.online/mypage",
+                            "https://hotspotfan.online/seller/upload",
+                            "https://hotspotfan.online/users/admin/me",
+                            "https://hotspotfan.online/obs/widget",
+                            "https://hotspotfan.online/payment/fail",
+                            "https://hotspotfan.online/payment/success",
+                            "https://hotspotfan.online/api/products?page=0&size=60",
+                            "https://hotspotfan.online/api/products?page=0&size=10&sort=createdAt,desc",
+                            "https://hotspotfan.online/api/products/:id/comments?page=0&size=20",
+                            "https://hotspotfan.online/api/ranking/weekly?type=seller",
+                            "https://hotspotfan.online/api/ranking/realtime?type=seller",
+                            "https://hotspotfan.online/api/banners?position=MAIN"
+                            ],
+                            "urls": [
+                            {
+                                "url": "https://hotspotfan.online/search",
+                                "method": "GET",
+                                "type": "unknown",
+                                "body": {},
+                                "fields": {},
+                                "safe_to_submit": True,
+                                "cookies": {},
+                                "headers": {},
+                                "priority": "HIGH",
+                                "reason": "검색 관련 경로로, 사용자 입력이 반영될 가능성이 높은 XSS 후보 페이지입니다. scan_data의 라우트 목록에서 확인된 /search 경로이며, 쿼리 파라미터를 통한 검색어 반영 여부 테스트가 필요합니다."
+                            },
+                            {
+                                "url": "https://hotspotfan.online/api/products?page=0&size=60",
+                                "method": "GET",
+                                "type": "json",
+                                "body": {},
+                                "fields": {},
+                                "safe_to_submit": True,
+                                "cookies": {},
+                                "headers": {},
+                                "priority": "HIGH",
+                                "reason": "API 응답 본문에 '<img src=x onerror=alert(document.domain)>' 형태의 XSS 페이로드가 name 및 description 필드에 저장된 상품 데이터가 실제로 반환되는 것이 scan_data에서 확인되었습니다. 저장형 XSS 검증이 필요한 고위험 후보입니다."
+                            },
+                            {
+                                "url": "https://hotspotfan.online/api/products?page=0&size=10&sort=createdAt,desc",
+                                "method": "GET",
+                                "type": "json",
+                                "body": {},
+                                "fields": {},
+                                "safe_to_submit": True,
+                                "cookies": {},
+                                "headers": {},
+                                "priority": "HIGH",
+                                "reason": "API 응답에 XSS 페이로드 포함 상품 데이터가 반환됩니다. page, size, sort 파라미터가 존재하며, 응답 내용이 프론트엔드에 렌더링될 경우 저장형 XSS가 트리거될 수 있습니다."
+                            },
+                            {
+                                "url": "https://hotspotfan.online/api/products/:id/comments?page=0&size=20",
+                                "method": "GET",
+                                "type": "json",
+                                "body": {},
+                                "fields": {},
+                                "safe_to_submit": True,
+                                "cookies": {},
+                                "headers": {},
+                                "priority": "HIGH",
+                                "reason": "상품 댓글 목록을 반환하는 API로, comment/content 형태의 사용자 입력이 저장되어 반환될 수 있습니다. page, size 파라미터가 존재하며, 저장형 XSS 검증 후보입니다."
+                            },
+                            {
+                                "url": "https://hotspotfan.online/api/ranking/weekly?type=seller",
+                                "method": "GET",
+                                "type": "json",
+                                "body": {},
+                                "fields": {},
+                                "safe_to_submit": True,
+                                "cookies": {},
+                                "headers": {},
+                                "priority": "MEDIUM",
+                                "reason": "랭킹 API 응답에서 profileImageUrl 필드에 ftp://placehold.co/100 와 같이 비표준 프로토콜 URL이 반환되는 것이 scan_data에서 확인되었습니다. type 파라미터가 반영될 경우 XSS 가능성이 있습니다."
+                            },
+                            {
+                                "url": "https://hotspotfan.online/seller/upload",
+                                "method": "GET",
+                                "type": "form",
+                                "body": {},
+                                "fields": {},
+                                "safe_to_submit": False,
+                                "cookies": {},
+                                "headers": {},
+                                "priority": "HIGH",
+                                "reason": "판매자 상품 업로드 페이지로, 상품명/설명 입력 필드를 통해 XSS 페이로드가 저장될 수 있습니다. scan_data에서 XSS 페이로드가 포함된 상품이 실제로 API 응답에서 확인되어 해당 업로드 경로가 저장형 XSS의 입력 경로일 가능성이 높습니다."
+                            },
+                            {
+                                "url": "https://hotspotfan.online/users/admin/me",
+                                "method": "GET",
+                                "type": "form",
+                                "body": {},
+                                "fields": {},
+                                "safe_to_submit": False,
+                                "cookies": {},
+                                "headers": {},
+                                "priority": "HIGH",
+                                "reason": "관리자 경로(/users/admin/me)로 민감한 내부 페이지입니다. scan_data에서 확인된 경로이며, 관리자 입력 또는 프로필 데이터가 반영될 경우 XSS 위험이 있습니다."
+                            }
+                            ],
+                            "stored_targets": [
+                            {
+                                "submit_url": "https://hotspotfan.online/seller/upload",
+                                "view_url": "https://hotspotfan.online/api/products?page=0&size=60",
+                                "body": {},
+                                "safe_to_submit": False,
+                                "cookies": {},
+                                "headers": {},
+                                "priority": "HIGH",
+                                "reason": "scan_data의 API 응답에서 상품 name 및 description 필드에 '<img src=x onerror=alert(document.domain)>' 형태의 XSS 페이로드가 실제로 저장되어 반환되는 것이 확인되었습니다. 판매자 업로드 경로(/seller/upload)가 저장 입력 경로이고, /api/products 가 조회 경로입니다."
+                            },
+                            {
+                                "submit_url": "https://hotspotfan.online/seller/upload",
+                                "view_url": "https://hotspotfan.online/products/:id",
+                                "body": {},
+                                "safe_to_submit": False,
+                                "cookies": {},
+                                "headers": {},
+                                "priority": "HIGH",
+                                "reason": "상품 상세 페이지(/products/:id)에서 저장된 상품 name/description 데이터가 렌더링됩니다. scan_data에서 XSS 페이로드가 포함된 상품 데이터가 API를 통해 반환되는 것이 확인되었으므로, 해당 상세 페이지에서 저장형 XSS가 실행될 수 있습니다."
+                            }
+                            ],
+                            "options": {
+                            "browser_verify": True,
+                            "stored_xss": True,
+                            "dom_hash_xss": True,
+                            "dom_stored_xss": False,
+                            "timeout": 10,
+                            "verify_tls": False
+                            },
+                            "evidence_dir": "evidence",
+                            "results_dir": "results"
+                        },
+                        "filedown_data": {
+                            "targets": [],
+                            "options": {
+                            "max_workers": 4,
+                            "payload_limit": 3,
+                            "timeout": 10.0,
+                            "verify": False,
+                            "allow_redirects": False,
+                            "proxies": {},
+                            "user_agent": "KSJ-DAST-Scanner/1.0"
+                            }
+                        },
+                        "ssrf_data": {
+                            "targets": [
+                            {
+                                "url": "https://hotspotfan.online/api/banners?position=MAIN",
+                                "method": "GET",
+                                "params": {
+                                "position": "MAIN"
+                                },
+                                "data": {},
+                                "headers": {},
+                                "inject_params": [
+                                "position"
+                                ],
+                                "timeout": 10.0,
+                                "priority": "MEDIUM",
+                                "reason": "배너 API의 응답 데이터에 imageUrl 필드가 포함되어 있으며, S3 외부 URL이 반환됩니다. position 파라미터가 서버 측 리소스 요청에 영향을 줄 가능성이 있는 후보입니다. 단, 파라미터가 직접 URL로 사용되는지는 확인되지 않았습니다."
+                            },
+                            {
+                                "url": "https://hotspotfan.online/api/ranking/weekly?type=seller",
+                                "method": "GET",
+                                "params": {
+                                "type": "seller"
+                                },
+                                "data": {},
+                                "headers": {},
+                                "inject_params": [
+                                "type"
+                                ],
+                                "timeout": 10.0,
+                                "priority": "MEDIUM",
+                                "reason": "랭킹 API 응답의 profileImageUrl 필드에 ftp://placehold.co/100 와 같이 비표준 외부 URL이 저장된 것이 scan_data에서 확인되었습니다. 서버가 해당 URL을 요청하는 경우 SSRF 가능성이 있으며, type 파라미터가 서버 측 처리에 영향을 줄 수 있습니다."
+                            },
+                            {
+                                "url": "https://hotspotfan.online/api/products?page=0&size=60",
+                                "method": "GET",
+                                "params": {
+                                "page": "0",
+                                "size": "60"
+                                },
+                                "data": {},
+                                "headers": {},
+                                "inject_params": [
+                                "page",
+                                "size"
+                                ],
+                                "timeout": 10.0,
+                                "priority": "LOW",
+                                "reason": "상품 목록 API로, 응답에 외부 S3 imageUrl이 포함됩니다. 서버가 이미지 URL을 직접 fetch하는 구조라면 SSRF 후보가 될 수 있으나, 현재 scan_data에서 직접적인 URL 파라미터 신호는 확인되지 않았습니다. 경로 기반 후보입니다."
+                            }
+                            ],
+                            "options": {
+                            "max_workers": 4,
+                            "payload_limit": 3,
+                            "timeout": 10.0,
+                            "verify": False,
+                            "allow_redirects": False,
+                            "proxies": {},
+                            "user_agent": "KSJ-DAST-Scanner/1.0"
+                            }
+                        },
+                        "limitations": [
+                            "scan_data의 crawler.auth에 유효한 쿠키, Authorization 토큰 등 인증 정보가 없어 인증이 필요한 API 엔드포인트(/api/cart, /api/orders/me, /api/orders/seller/me, /api/follows/followings, /api/follows/my-followers 등)에 대한 테스트는 401 응답으로 제한될 수 있습니다.",
+                            "대부분의 페이지가 CSR(Client-Side Rendering) 또는 SSR 방식으로 동작하며, 실제 사용자 입력 파라미터명이 폼 필드의 name 속성에 명시되지 않아(name 속성이 빈 문자열) 정확한 파라미터명을 특정할 수 없습니다.",
+                            "/influencer/:id, /products/:id, /api/products/:id, /api/users/managers/:id 등 경로 파라미터(:id)가 포함된 엔드포인트는 실제 유효한 ID 값이 확인되지 않아 500 에러가 발생하였습니다. 실제 테스트 시 유효한 UUID 형태의 ID를 사용해야 합니다.",
+                            "Cloudflare HTTP 프록시(포트 80, 443, 8080, 8443)를 통해 서비스가 제공되므로, WAF 또는 DDoS 보호로 인해 일부 테스트 요청이 차단될 수 있습니다.",
+                            "FileDownload 후보를 위한 file, filename, filepath, download, attach 등 파일 경로 관련 파라미터나 URL이 scan_data에서 확인되지 않아 FileDownload 모듈 후보를 생성하지 않았습니다.",
+                            "scan_data에서 robots.txt의 disallowed 항목이 모두 '/'로만 표시되어 실질적인 숨겨진 경로 정보를 확인할 수 없었습니다.",
+                            "XSS 페이로드('<img src=x onerror=alert(document.domain)>')가 이미 상품 데이터에 저장되어 API 응답에서 확인되었으나, 이것이 실제로 브라우저에서 실행되는지 여부는 프론트엔드 렌더링 방식에 따라 다르므로 브라우저 기반 검증이 필요합니다."
+                        ]
+                        }
             # preprocess_task = progress.add_task("[bold blue]각 공격 모듈에 맞는 통합 데이터 전처리 중...", total=1)
             # preprocessor = LLMPreprocessor()
             # pre_data = preprocessor.generate_preprocess_data(recon_results)
@@ -343,11 +639,14 @@ if check_Url(recon_url):
             # progress.update(preprocess_task, advance=1, description="[bold blue]✔ 각 공격 모듈에 맞는 통합 데이터 전처리 완료")
             
             # 공격 모듈에 데이터 넣기
-
+            # sqli_task = progress.add_task("[bold red]SQLi 모듈 동작중...", total=1)
             # sql_data = pre_data["sql_data"]
-            # sql_results=asyncio.run(run_scan(sql_data))
-            # mid_core.set_sqli_data(sql_results)
+            # scanInput=ScanInput.from_dict(sql_data)
+            # sql_results =(asyncio.run(run_scan(scanInput))).to_json()
+            # progress.update(sqli_task, advance=1, description="[bold red]✔ SQLi 모듈 동작 완료[/]")
+            # # mid_core.set_sqli_data(sql_results)
             # print("SQLi 모듈", sql_results)
+            
 
             # xss_data = pre_data["xss_data"]
             # xss_results=asyncio.run(run_xss_scan(xss_data))
@@ -356,21 +655,21 @@ if check_Url(recon_url):
 
 
             # fileDownloadModule=FileDownloadModule()
-            # sSRFModule=SSRFModule()
+            # # sSRFModule=SSRFModule()
 
             # filedown_data = pre_data["filedown_data"]
             # filedownload_results=asyncio.run(fileDownloadModule.run_json(filedown_data))
-            # mid_core.set_file_download_data(filedownload_results)
+            # # mid_core.set_file_download_data(filedownload_results)
             # print("filedownload 모듈", filedownload_results)
 
             # ssrf_data = pre_data["ssrf_data"]
             # ssrf_results=asyncio.run(sSRFModule.run_json(ssrf_data))
             # mid_core.set_ssrf_data(ssrf_results)
             # print("ssrf_result",ssrf_results)
-            # end = time.time()
-            # final_time=end - start
+            end = time.time()
+            final_time=end - start
             # mid_core.set_time(final_time)
-            # console.print(f"[bold magenta]⏱ 소요 시간:[/] [bold cyan]{end - start:.2f}초[/]")
+            console.print(f"[bold magenta]⏱ 소요 시간:[/] [bold cyan]{end - start:.2f}초[/]")
             # integrated_results=mid_core.get_integrated_results()
             #reporter = LLMReporter()
             #reporter.generate_dashboard_from_data(integrated_results,recon_mode)
