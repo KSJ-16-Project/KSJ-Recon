@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 import requests
 import urllib3
@@ -18,7 +19,8 @@ DEFAULT_HEADERS = {
 
 
 class HttpClient:
-    def __init__(self, *, headers: dict | None = None, cookies: dict | None = None, timeout: int = 10, verify_tls: bool = False):
+    def __init__(self, *, headers: dict | None = None, cookies: dict | None = None,
+                 timeout: int = 10, verify_tls: bool = False, request_delay: float = 0.0):
         self.session = requests.Session()
         self.session.headers.update(DEFAULT_HEADERS)
         if headers:
@@ -27,11 +29,16 @@ class HttpClient:
             self.session.cookies.update(cookies)
         self.timeout = timeout
         self.verify_tls = verify_tls
+        self.request_delay = request_delay  # seconds between requests; 0 = no delay
 
     def get(self, url: str, *, params: dict | None = None, headers: dict | None = None, cookies: dict | None = None):
+        if self.request_delay > 0:
+            time.sleep(self.request_delay)
         return self.session.get(url, params=params, headers=headers, cookies=cookies, timeout=self.timeout, verify=self.verify_tls, allow_redirects=True)
 
     def post(self, url: str, *, data: dict | None = None, json: dict | None = None, headers: dict | None = None, cookies: dict | None = None):
+        if self.request_delay > 0:
+            time.sleep(self.request_delay)
         return self.session.post(url, data=data, json=json, headers=headers, cookies=cookies, timeout=self.timeout, verify=self.verify_tls, allow_redirects=True)
 
     def update_auth(self, *, session_id: str | None = None, token: str | None = None, cookies: dict | None = None) -> None:

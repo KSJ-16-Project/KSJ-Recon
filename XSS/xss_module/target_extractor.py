@@ -5,8 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict
 from urllib.parse import urlparse, parse_qs, urldefrag
 
-from .payloads import HIGH_VALUE_PARAM_NAMES, DANGEROUS_FORM_HINTS
-
 
 @dataclass
 class Target:
@@ -73,8 +71,6 @@ class TargetExtractor:
             parsed = urlparse(url)
             params = {k: v[0] if v else "" for k, v in parse_qs(parsed.query, keep_blank_values=True).items()}
         safe = bool(item.get("safe_to_submit", False))
-        if method == "POST" and not safe:
-            safe = self._looks_safe_form(url, params or {})
         return Target(
             url=url,
             method=method,
@@ -87,10 +83,3 @@ class TargetExtractor:
             source=source,
             body_format=item.get("body_format", "form"),
         )
-
-    def _looks_safe_form(self, url: str, params: dict) -> bool:
-        text = (url + " " + " ".join(params.keys())).lower()
-        if any(hint in text for hint in DANGEROUS_FORM_HINTS):
-            return False
-        # Only auto-safe for text-like, user-content forms.
-        return any(name.lower() in HIGH_VALUE_PARAM_NAMES for name in params.keys())

@@ -9,7 +9,8 @@ Covers:
 from __future__ import annotations
 
 import logging
-from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+import time
+from urllib.parse import urlparse, parse_qs, urlunparse
 
 from .context_analyzer import ContextAnalyzer
 from .csrf import extract_csrf
@@ -36,11 +37,13 @@ class ReflectedXSSScanner:
 
     def scan(self) -> list[dict]:
         findings: list[dict] = []
-        for target in self.targets:
+        total = len(self.targets)
+        for i, target in enumerate(self.targets):
             method = target.get("method", "GET").upper()
             params = target.get("params") or self._params_from_url(target["url"])
             if not params:
                 continue
+            logger.info("[%d/%d] reflected scan: %s", i + 1, total, target["url"])
             for param in self._prioritized_params(params):
                 if method == "GET":
                     finding = self._test_param(target, params, param)
@@ -78,23 +81,37 @@ class ReflectedXSSScanner:
         test_params[param] = marker
         headers = target.get("headers") or {}
         cookies = target.get("cookies") or {}
+        base_url = self._strip_query(url)
 
         try:
-            resp = self.client.get(self._strip_query(url), params=test_params, headers=headers, cookies=cookies)
+            resp = self.client.get(base_url, params=test_params, headers=headers, cookies=cookies)
         except Exception as e:
-            self.errors.append(self.builder.error(url=url, phase="reflected_marker", error="request_failed", detail=str(e)))
+            self.errors.append(self.builder.error(url=url, phase="reflected_marker", error="request_failed", detail=str(e), category="network_error"))
             return None
+
+        # 429 retry: WAF rate-limit → wait 2 s then retry once
+        if resp.status_code == 429:
+            logger.warning("429 rate-limit on %s [%s] – retrying after 2s", url, param)
+            time.sleep(2)
+            try:
+                resp = self.client.get(base_url, params=test_params, headers=headers, cookies=cookies)
+            except Exception as e:
+                self.errors.append(self.builder.error(url=url, phase="reflected_marker", error="request_failed", detail=str(e), category="network_error"))
+                return None
+            if resp.status_code == 429:
+                self.errors.append(self.builder.error(url=url, phase="reflected_marker", error="waf_rate_limited", detail="429 after retry", category="waf_block"))
+                return None
 
         if self._auth_failed(resp):
             if self.auth_refresher:
                 self.auth_refresher()
                 try:
-                    resp = self.client.get(self._strip_query(url), params=test_params, headers=headers, cookies=cookies)
+                    resp = self.client.get(base_url, params=test_params, headers=headers, cookies=cookies)
                 except Exception as e:
-                    self.errors.append(self.builder.error(url=url, phase="reflected_marker_retry", error="request_failed", detail=str(e)))
+                    self.errors.append(self.builder.error(url=url, phase="reflected_marker_retry", error="request_failed", detail=str(e), category="network_error"))
                     return None
             if self._auth_failed(resp):
-                self.errors.append(self.builder.error(url=url, phase="reflected_marker", error="auth_failed", detail=f"status={resp.status_code}"))
+                self.errors.append(self.builder.error(url=url, phase="reflected_marker", error="auth_failed", detail=f"status={resp.status_code}", category="auth_failed"))
                 return None
 
         analysis = self.analyzer.analyze(resp.text, marker)
@@ -126,6 +143,7 @@ class ReflectedXSSScanner:
             payload=payload,
             browser_verified=False,
             browser_verification_required=should_verify,
+            verification_status="skipped",
             risk=risk,
             waf_detected=waf,
             waf_bypass_possible=bypass_payload is not None,
@@ -156,8 +174,22 @@ class ReflectedXSSScanner:
         try:
             resp = self._post(url, test_data, body_format, headers, cookies)
         except Exception as e:
-            self.errors.append(self.builder.error(url=url, phase="reflected_post_marker", error="request_failed", detail=str(e)))
+            self.errors.append(self.builder.error(url=url, phase="reflected_post_marker", error="request_failed", detail=str(e), category="network_error"))
             return None
+
+        # 429 retry
+        if resp.status_code == 429:
+            logger.warning("429 rate-limit on %s [%s] – retrying after 2s", url, param)
+            time.sleep(2)
+            self._inject_csrf(url, test_data, headers, cookies, body_format)
+            try:
+                resp = self._post(url, test_data, body_format, headers, cookies)
+            except Exception as e:
+                self.errors.append(self.builder.error(url=url, phase="reflected_post_marker", error="request_failed", detail=str(e), category="network_error"))
+                return None
+            if resp.status_code == 429:
+                self.errors.append(self.builder.error(url=url, phase="reflected_post_marker", error="waf_rate_limited", detail="429 after retry", category="waf_block"))
+                return None
 
         if self._auth_failed(resp):
             if self.auth_refresher:
@@ -166,10 +198,10 @@ class ReflectedXSSScanner:
                 try:
                     resp = self._post(url, test_data, body_format, headers, cookies)
                 except Exception as e:
-                    self.errors.append(self.builder.error(url=url, phase="reflected_post_marker_retry", error="request_failed", detail=str(e)))
+                    self.errors.append(self.builder.error(url=url, phase="reflected_post_marker_retry", error="request_failed", detail=str(e), category="network_error"))
                     return None
             if self._auth_failed(resp):
-                self.errors.append(self.builder.error(url=url, phase="reflected_post_marker", error="auth_failed", detail=f"status={resp.status_code}"))
+                self.errors.append(self.builder.error(url=url, phase="reflected_post_marker", error="auth_failed", detail=f"status={resp.status_code}", category="auth_failed"))
                 return None
 
         analysis = self.analyzer.analyze(resp.text, marker)
@@ -179,7 +211,8 @@ class ReflectedXSSScanner:
         escaped = self._check_special_encoding(target, params, param, marker)
         analysis.escaped = escaped
         payload = self._select_payload(analysis.context)
-        risk, _ = self._risk_and_verify(analysis.context, escaped)
+        # POST XSS uses the same risk/verify logic as GET (4-1 fix)
+        risk, should_verify = self._risk_and_verify(analysis.context, escaped)
         waf = self._detect_waf(resp)
 
         bypass_payload = None
@@ -200,18 +233,21 @@ class ReflectedXSSScanner:
             quote_breakout_possible=analysis.quote_breakout_possible,
             payload=payload,
             browser_verified=False,
-            browser_verification_required=False,
+            browser_verification_required=should_verify,
+            verification_status="skipped",
             risk=risk,
             waf_detected=waf,
             waf_bypass_possible=bypass_payload is not None,
             waf_bypass_payload=bypass_payload,
             body_format=body_format,
+            # Browser verification must be able to rebuild the original POST body
+            # and replace only the vulnerable parameter with the executable payload.
+            body_params=dict(params),
             evidence={
                 "request_url": url,
                 "status_code": resp.status_code,
                 "snippet": analysis.snippet,
                 "reason": analysis.reason,
-                "note": "POST reflected XSS – manual browser verification recommended",
             },
         )
 
@@ -229,7 +265,7 @@ class ReflectedXSSScanner:
         try:
             resp = self.client.get(url, headers=inject_headers, cookies=cookies)
         except Exception as e:
-            self.errors.append(self.builder.error(url=url, phase="header_reflection", error="request_failed", detail=str(e)))
+            self.errors.append(self.builder.error(url=url, phase="header_reflection", error="request_failed", detail=str(e), category="network_error"))
             return None
 
         analysis = self.analyzer.analyze(resp.text, marker)
@@ -254,6 +290,7 @@ class ReflectedXSSScanner:
             payload=payload,
             browser_verified=False,
             browser_verification_required=should_verify,
+            verification_status="skipped",
             risk=risk,
             waf_detected=waf,
             evidence={
@@ -275,6 +312,16 @@ class ReflectedXSSScanner:
             test_params[param] = payload
             try:
                 resp = self.client.get(url, params=test_params, headers=headers, cookies=cookies)
+                if resp.status_code == 429:
+                    time.sleep(2)
+                    try:
+                        resp = self.client.get(url, params=test_params, headers=headers, cookies=cookies)
+                    except Exception:
+                        continue
+                    if resp.status_code == 429:
+                        # 429가 재시도 후에도 유지되면 rate limit이 지속되는 상태이므로
+                        # 추가 bypass 탐색을 중단해 대상 서버에 불필요한 요청을 보내지 않는다.
+                        break
                 if not self._detect_waf(resp):
                     logger.info("WAF bypass candidate found (GET): %s [%s]", url, param)
                     return payload
@@ -290,6 +337,17 @@ class ReflectedXSSScanner:
             self._inject_csrf(url, test_data, headers, cookies, body_format)
             try:
                 resp = self._post(url, test_data, body_format, headers, cookies)
+                if resp.status_code == 429:
+                    time.sleep(2)
+                    self._inject_csrf(url, test_data, headers, cookies, body_format)
+                    try:
+                        resp = self._post(url, test_data, body_format, headers, cookies)
+                    except Exception:
+                        continue
+                    if resp.status_code == 429:
+                        # 429가 재시도 후에도 유지되면 rate limit이 지속되는 상태이므로
+                        # 추가 bypass 탐색을 중단해 대상 서버에 불필요한 요청을 보내지 않는다.
+                        break
                 if not self._detect_waf(resp):
                     logger.info("WAF bypass candidate found (POST): %s [%s]", url, param)
                     return payload

