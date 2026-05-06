@@ -30,7 +30,7 @@ from crawler.engine import crawl_target , CrawlerConfig
 from crawler.auth.models import AuthConfig
 from ksj_llm.preprocessor import LLMPreprocessor
 from sql_injection.scanner import  run_scan,ScanInput
-# from XSS.xss_module.xss_scanner import run_xss_scan
+from XSS.xss_module.xss_scanner import run_xss_scan
 from attacker_module_3.file_download.module import FileDownloadModule
 # from attacker_module_3.ssrf.module import SSRFModule
 # Rich 콘솔 초기화
@@ -650,12 +650,12 @@ if check_Url(recon_url):
 
             # xss_data = pre_data["xss_data"]
             # xss_results=asyncio.run(run_xss_scan(xss_data))
-            # mid_core.set_xss_data(xss_results)
+            # # mid_core.set_xss_data(xss_results)
             # print("XSS 모듈", xss_results)
 
-
+            
             # fileDownloadModule=FileDownloadModule()
-            # # sSRFModule=SSRFModule()
+            # # # sSRFModule=SSRFModule()
 
             # filedown_data = pre_data["filedown_data"]
             # filedownload_results=asyncio.run(fileDownloadModule.run_json(filedown_data))
