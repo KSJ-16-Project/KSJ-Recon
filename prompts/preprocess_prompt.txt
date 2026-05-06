@@ -16,8 +16,6 @@ Important constraints:
 [Language Rules]
 - All JSON keys must remain exactly as defined in the schema.
 - Enum-like values must be written in English, for example "GET", "POST", "HIGH", "MEDIUM", "LOW".
-- Human-readable explanation fields must be written in Korean.
-- The fields that must be written in Korean are "reason" and "limitations".
 - Do not use Korean for JSON keys or enum values.
 
 ---
@@ -80,34 +78,29 @@ Return this exact top-level structure:
 
 {
   "sql_data": {
-    "targets": [
-      {
-        "url": "https://example.com/item?id=1",
-        "method": "GET",
-        "params": {
-          "id": "1"
-        },
-        "data": {},
-        "headers": {},
-        "inject_params": ["id"],
-        "param_location": "query",
-        "param_current_values": {
-          "id": "1"
-        },
-        "context": {
-          "db_ports": [],
-          "services": [],
-          "versions": [],
-          "hidden_endpoints": []
-        },
-        "priority": "MEDIUM",
-        "reason": "id 파라미터가 숫자형 식별자로 보여 SQLi 테스트 후보로 분류했습니다."
-      }
-    ]
+    "target_url": "",
+    "crawler_data": [],
+    "auth": {
+      "cookie": "",
+      "Authorization": "",
+      "Referer": "",
+      "Accept-Language": ""
+    },
+    "nmap_data": {
+      "port": "",
+      "service": "",
+      "version": ""
+    },
+    "fuzzer_data": []
   },
   "xss_data": {
-    "base_url": "https://example.com",
+    "base_url": "",
+    "session_id": "",
+    "token": "",
+    "login_mock_path": "",
     "spider_urls": [],
+    "urls": [],
+    "stored_targets": [],
     "options": {
       "browser_verify": true,
       "stored_xss": true,
@@ -116,37 +109,19 @@ Return this exact top-level structure:
       "timeout": 10,
       "verify_tls": false
     },
-    "stored_targets": [
-      {
-        "url": "https://example.com/search",
-        "method": "GET",
-        "body_format": "form",
-        "params": {
-          "q": ""
-        },
-        "check_urls": ["https://example.com/search"],
-        "safe_to_submit": false,
-        "priority": "MEDIUM",
-        "reason": "q 파라미터가 검색어 입력값으로 보여 XSS 테스트 후보로 분류했습니다."
-      }
-    ]
+    "evidence_dir": "evidence",
+    "results_dir": "results"
   },
   "filedown_data": {
-    "targets": [
-      {
-        "url": "https://example.com/download?file=manual.pdf",
-        "method": "GET",
-        "params": {
-          "file": "manual.pdf"
-        },
-        "data": {},
-        "headers": {},
-        "inject_params": ["file"],
-        "timeout": 5.0,
-        "priority": "HIGH",
-        "reason": "file 파라미터가 다운로드 대상 파일명을 제어하는 값으로 보여 FileDownload 테스트 후보로 분류했습니다."
-      }
-    ],
+    "target": {
+      "url": "",
+      "method": "GET",
+      "params": {},
+      "data": {},
+      "headers": {},
+      "inject_params": [],
+      "timeout": 5.0
+    },
     "options": {
       "max_workers": 4,
       "payload_limit": 3,
@@ -158,21 +133,15 @@ Return this exact top-level structure:
     }
   },
   "ssrf_data": {
-    "targets": [
-      {
-        "url": "https://example.com/proxy?url=https://target.example",
-        "method": "GET",
-        "params": {
-          "url": "https://target.example"
-        },
-        "data": {},
-        "headers": {},
-        "inject_params": ["url"],
-        "timeout": 5.0,
-        "priority": "HIGH",
-        "reason": "url 파라미터가 외부 리소스 요청에 사용될 수 있어 SSRF 테스트 후보로 분류했습니다."
-      }
-    ],
+    "target": {
+      "url": "",
+      "method": "GET",
+      "params": {},
+      "data": {},
+      "headers": {},
+      "inject_params": [],
+      "timeout": 5.0
+    },
     "options": {
       "max_workers": 4,
       "payload_limit": 3,
@@ -182,17 +151,97 @@ Return this exact top-level structure:
       "proxies": {},
       "user_agent": "KSJ-DAST-Scanner/1.0"
     }
-  },
-  "limitations": [
-    "입력 데이터만으로 판단했기 때문에 실제 취약 여부는 별도 검증이 필요합니다."
-  ]
+  }
 }
+
+---
+
+[Candidate Item Requirements]
+Empty arrays in the schema mean "no candidates by default".
+If scan_data contains supported candidates, populate the arrays with candidate objects.
+Do not omit required keys from any candidate object.
+Never copy documentation placeholders or schema examples into output values.
+All candidate values must come from scan_data.
+
+xss_data.base_url must be copied from crawler.target_url or fuzzer.base_url.
+If both are missing, use "".
+
+sql_data.target_url must be copied from crawler.target_url or fuzzer.base_url.
+If both are missing, use "".
+
+sql_data.crawler_data MUST be an array of parameter objects copied from scan_data only.
+Every sql_data.crawler_data item MUST contain:
+- name: string
+- location: "query" | "body" | "path" | "header" | "unknown"
+- value: string
+
+sql_data.auth MUST contain cookie, Authorization, Referer, and Accept-Language.
+Use values from scan_data.crawler.auth when available.
+If a value is missing, use "".
+
+sql_data.nmap_data MUST contain port, service, and version.
+Use the highest-relevance open service from scan_data.nmap.ports when available.
+If a value is missing, use "".
+
+sql_data.fuzzer_data MUST be an array of URL strings copied from scan_data.fuzzer.spider_urls, scan_data.fuzzer.results, crawler pages, sitemap URLs, robots hints, or endpoint hints.
+Only include URLs or paths that are present in scan_data.
+
+xss_data.session_id and xss_data.token must be copied from scan_data.crawler.auth when available.
+If missing, use "".
+
+xss_data.login_mock_path must be copied from an authentication-related URL in scan_data when available.
+If missing, use "".
+
+xss_data.spider_urls MUST be an array of URL strings copied from scan_data only.
+
+Every xss_data.urls item MUST contain:
+- url: string, copied from scan_data only
+- method: "GET" or "POST"
+- type: "form" | "json" | "raw" | "unknown"
+- body: object
+- fields: object
+- safe_to_submit: boolean
+- cookies: object
+- headers: object
+- priority: "HIGH" | "MEDIUM" | "LOW"
+
+xss_data.urls is used for:
+- POST Reflected XSS when method is "POST"
+- DOM Stored XSS when type is "form" and safe_to_submit is true
+
+Every xss_data.stored_targets item MUST contain:
+- submit_url: string, copied from scan_data only
+- view_url: string, copied from scan_data only
+- body: object
+- safe_to_submit: boolean
+- cookies: object
+- headers: object
+- priority: "HIGH" | "MEDIUM" | "LOW"
+
+xss_data.stored_targets is used for Stored XSS.
+
+filedown_data.target MUST contain:
+- url: string, copied from scan_data only
+- method: "GET" or "POST"
+- params: object
+- data: object
+- headers: object
+- inject_params: string array
+- timeout: number
+
+ssrf_data.target MUST contain:
+- url: string, copied from scan_data only
+- method: "GET" or "POST"
+- params: object
+- data: object
+- headers: object
+- inject_params: string array
+- timeout: number
 
 ---
 
 [Additional Rules]
 - Do not create a candidate when there is no explicit URL, parameter, form field, or path-based signal in the input.
-- If a URL path looks relevant but no parameter is confirmed, write in Korean in the reason field that it is a path-based candidate with no confirmed parameter.
 - Remove duplicate URLs unless they are used for different modules or different purposes.
 - The same URL may appear in multiple modules when it has distinct test purposes.
 - Prioritize items with HIGH-risk signals.
