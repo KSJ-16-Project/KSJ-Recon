@@ -69,7 +69,7 @@ class ScanInput:
                     service=nmap_raw["service"],
                     version=nmap_raw.get("version") or None,
                 )
-                if nmap_raw and (int(nmap_raw.get("port", 0)) or nmap_raw.get("service") or nmap_raw.get("version"))
+                if nmap_raw and (int(nmap_raw.get("port") or 0) or nmap_raw.get("service") or nmap_raw.get("version"))
                 else None
             ),
             fuzzer_data=data.get("fuzzer_data") or [],
@@ -108,6 +108,7 @@ class ScanOutput:
         result_dict = asdict(self)
         result_dict["dbms_type"] = self.dbms_type.value
         result_dict["confidence"] = self.confidence.value
+        del result_dict["probe_log"]
         return result_dict
 
     def to_json(self) -> str:
