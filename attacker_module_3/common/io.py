@@ -5,8 +5,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from common.result import ScanReport
-from common.target import Target
+from attacker_module_3.common.result import ScanReport
+from attacker_module_3.common.target import Target
 
 
 _REQUEST_TOP_KEYS = frozenset({"target", "options", "auth"})
