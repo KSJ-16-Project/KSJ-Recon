@@ -32,7 +32,7 @@ from ksj_llm.preprocessor import LLMPreprocessor
 from sql_injection.scanner import  run_scan,ScanInput
 from XSS.xss_module.xss_scanner import run_xss_scan
 from attacker_module_3.file_download.module import FileDownloadModule
-# from attacker_module_3.ssrf.module import SSRFModule
+from attacker_module_3.ssrf.module import SSRFModule
 # Rich 콘솔 초기화
 console = Console()
 
@@ -394,10 +394,12 @@ if check_Url(recon_url):
                             "https://hotspotfan.online/api/cart",
                             "https://hotspotfan.online/users/admin/me",
                             "https://hotspotfan.online/manager",
+                            "https://hotspotfan.online/products/:id",
+                            "https://hotspotfan.online/influencer/:id",
                             "https://hotspotfan.online/search",
                             "https://hotspotfan.online/ranking",
-                            "https://hotspotfan.online/products/:id",
-                            "https://hotspotfan.online/influencer/:id"
+                            "https://hotspotfan.online/orders",
+                            "https://hotspotfan.online/seller/upload"
                             ]
                         },
                         "xss_data": {
@@ -412,20 +414,25 @@ if check_Url(recon_url):
                             "https://hotspotfan.online/ranking",
                             "https://hotspotfan.online/products/:id",
                             "https://hotspotfan.online/influencer/:id",
-                            "https://hotspotfan.online/manager",
+                            "https://hotspotfan.online/seller/upload",
                             "https://hotspotfan.online/me",
                             "https://hotspotfan.online/mypage",
-                            "https://hotspotfan.online/seller/upload",
                             "https://hotspotfan.online/users/admin/me",
+                            "https://hotspotfan.online/manager",
                             "https://hotspotfan.online/obs/widget",
-                            "https://hotspotfan.online/payment/fail",
                             "https://hotspotfan.online/payment/success",
+                            "https://hotspotfan.online/payment/fail",
+                            "https://hotspotfan.online/orders",
+                            "https://hotspotfan.online/cart",
+                            "https://hotspotfan.online/follow-list",
+                            "https://hotspotfan.online/my-followers",
+                            "https://hotspotfan.online/purchase",
                             "https://hotspotfan.online/api/products?page=0&size=60",
                             "https://hotspotfan.online/api/products?page=0&size=10&sort=createdAt,desc",
-                            "https://hotspotfan.online/api/products/:id/comments?page=0&size=20",
+                            "https://hotspotfan.online/api/categories?page=0&size=100",
                             "https://hotspotfan.online/api/ranking/weekly?type=seller",
-                            "https://hotspotfan.online/api/ranking/realtime?type=seller",
-                            "https://hotspotfan.online/api/banners?position=MAIN"
+                            "https://hotspotfan.online/api/banners?position=MAIN",
+                            "https://hotspotfan.online/api/products/:id/comments?page=0&size=20"
                             ],
                             "urls": [
                             {
@@ -434,96 +441,138 @@ if check_Url(recon_url):
                                 "type": "unknown",
                                 "body": {},
                                 "fields": {},
-                                "safe_to_submit": True,
+                                "safe_to_submit": False,
                                 "cookies": {},
                                 "headers": {},
-                                "priority": "HIGH",
-                                "reason": "검색 관련 경로로, 사용자 입력이 반영될 가능성이 높은 XSS 후보 페이지입니다. scan_data의 라우트 목록에서 확인된 /search 경로이며, 쿼리 파라미터를 통한 검색어 반영 여부 테스트가 필요합니다."
+                                "priority": "MEDIUM"
                             },
                             {
-                                "url": "https://hotspotfan.online/api/products?page=0&size=60",
+                                "url": "https://hotspotfan.online/auth",
                                 "method": "GET",
-                                "type": "json",
+                                "type": "form",
                                 "body": {},
-                                "fields": {},
-                                "safe_to_submit": True,
+                                "fields": {
+                                "username": "",
+                                "password": ""
+                                },
+                                "safe_to_submit": False,
                                 "cookies": {},
                                 "headers": {},
-                                "priority": "HIGH",
-                                "reason": "API 응답 본문에 '<img src=x onerror=alert(document.domain)>' 형태의 XSS 페이로드가 name 및 description 필드에 저장된 상품 데이터가 실제로 반환되는 것이 scan_data에서 확인되었습니다. 저장형 XSS 검증이 필요한 고위험 후보입니다."
+                                "priority": "HIGH"
                             },
                             {
-                                "url": "https://hotspotfan.online/api/products?page=0&size=10&sort=createdAt,desc",
+                                "url": "https://hotspotfan.online/me",
                                 "method": "GET",
-                                "type": "json",
+                                "type": "form",
                                 "body": {},
-                                "fields": {},
-                                "safe_to_submit": True,
+                                "fields": {
+                                "username": "",
+                                "password": ""
+                                },
+                                "safe_to_submit": False,
                                 "cookies": {},
                                 "headers": {},
-                                "priority": "HIGH",
-                                "reason": "API 응답에 XSS 페이로드 포함 상품 데이터가 반환됩니다. page, size, sort 파라미터가 존재하며, 응답 내용이 프론트엔드에 렌더링될 경우 저장형 XSS가 트리거될 수 있습니다."
+                                "priority": "HIGH"
                             },
                             {
-                                "url": "https://hotspotfan.online/api/products/:id/comments?page=0&size=20",
+                                "url": "https://hotspotfan.online/mypage",
                                 "method": "GET",
-                                "type": "json",
+                                "type": "form",
                                 "body": {},
-                                "fields": {},
-                                "safe_to_submit": True,
+                                "fields": {
+                                "username": "",
+                                "password": ""
+                                },
+                                "safe_to_submit": False,
                                 "cookies": {},
                                 "headers": {},
-                                "priority": "HIGH",
-                                "reason": "상품 댓글 목록을 반환하는 API로, comment/content 형태의 사용자 입력이 저장되어 반환될 수 있습니다. page, size 파라미터가 존재하며, 저장형 XSS 검증 후보입니다."
-                            },
-                            {
-                                "url": "https://hotspotfan.online/api/ranking/weekly?type=seller",
-                                "method": "GET",
-                                "type": "json",
-                                "body": {},
-                                "fields": {},
-                                "safe_to_submit": True,
-                                "cookies": {},
-                                "headers": {},
-                                "priority": "MEDIUM",
-                                "reason": "랭킹 API 응답에서 profileImageUrl 필드에 ftp://placehold.co/100 와 같이 비표준 프로토콜 URL이 반환되는 것이 scan_data에서 확인되었습니다. type 파라미터가 반영될 경우 XSS 가능성이 있습니다."
+                                "priority": "HIGH"
                             },
                             {
                                 "url": "https://hotspotfan.online/seller/upload",
                                 "method": "GET",
                                 "type": "form",
                                 "body": {},
-                                "fields": {},
+                                "fields": {
+                                "username": "",
+                                "password": ""
+                                },
                                 "safe_to_submit": False,
                                 "cookies": {},
                                 "headers": {},
-                                "priority": "HIGH",
-                                "reason": "판매자 상품 업로드 페이지로, 상품명/설명 입력 필드를 통해 XSS 페이로드가 저장될 수 있습니다. scan_data에서 XSS 페이로드가 포함된 상품이 실제로 API 응답에서 확인되어 해당 업로드 경로가 저장형 XSS의 입력 경로일 가능성이 높습니다."
+                                "priority": "HIGH"
                             },
                             {
                                 "url": "https://hotspotfan.online/users/admin/me",
                                 "method": "GET",
                                 "type": "form",
                                 "body": {},
-                                "fields": {},
+                                "fields": {
+                                "username": "",
+                                "password": ""
+                                },
                                 "safe_to_submit": False,
                                 "cookies": {},
                                 "headers": {},
-                                "priority": "HIGH",
-                                "reason": "관리자 경로(/users/admin/me)로 민감한 내부 페이지입니다. scan_data에서 확인된 경로이며, 관리자 입력 또는 프로필 데이터가 반영될 경우 XSS 위험이 있습니다."
+                                "priority": "HIGH"
+                            },
+                            {
+                                "url": "https://hotspotfan.online/payment/success",
+                                "method": "GET",
+                                "type": "form",
+                                "body": {},
+                                "fields": {
+                                "username": "",
+                                "password": ""
+                                },
+                                "safe_to_submit": False,
+                                "cookies": {},
+                                "headers": {},
+                                "priority": "MEDIUM"
+                            },
+                            {
+                                "url": "https://hotspotfan.online/api/products?page=0&size=60",
+                                "method": "GET",
+                                "type": "json",
+                                "body": {},
+                                "fields": {
+                                "page": "0",
+                                "size": "60"
+                                },
+                                "safe_to_submit": False,
+                                "cookies": {},
+                                "headers": {},
+                                "priority": "MEDIUM"
+                            },
+                            {
+                                "url": "https://hotspotfan.online/api/products/:id/comments?page=0&size=20",
+                                "method": "GET",
+                                "type": "json",
+                                "body": {},
+                                "fields": {
+                                "page": "0",
+                                "size": "20"
+                                },
+                                "safe_to_submit": False,
+                                "cookies": {},
+                                "headers": {},
+                                "priority": "HIGH"
+                            },
+                            {
+                                "url": "https://hotspotfan.online/api/ranking/weekly?type=seller",
+                                "method": "GET",
+                                "type": "json",
+                                "body": {},
+                                "fields": {
+                                "type": "seller"
+                                },
+                                "safe_to_submit": False,
+                                "cookies": {},
+                                "headers": {},
+                                "priority": "MEDIUM"
                             }
                             ],
                             "stored_targets": [
-                            {
-                                "submit_url": "https://hotspotfan.online/seller/upload",
-                                "view_url": "https://hotspotfan.online/api/products?page=0&size=60",
-                                "body": {},
-                                "safe_to_submit": False,
-                                "cookies": {},
-                                "headers": {},
-                                "priority": "HIGH",
-                                "reason": "scan_data의 API 응답에서 상품 name 및 description 필드에 '<img src=x onerror=alert(document.domain)>' 형태의 XSS 페이로드가 실제로 저장되어 반환되는 것이 확인되었습니다. 판매자 업로드 경로(/seller/upload)가 저장 입력 경로이고, /api/products 가 조회 경로입니다."
-                            },
                             {
                                 "submit_url": "https://hotspotfan.online/seller/upload",
                                 "view_url": "https://hotspotfan.online/products/:id",
@@ -531,8 +580,25 @@ if check_Url(recon_url):
                                 "safe_to_submit": False,
                                 "cookies": {},
                                 "headers": {},
-                                "priority": "HIGH",
-                                "reason": "상품 상세 페이지(/products/:id)에서 저장된 상품 name/description 데이터가 렌더링됩니다. scan_data에서 XSS 페이로드가 포함된 상품 데이터가 API를 통해 반환되는 것이 확인되었으므로, 해당 상세 페이지에서 저장형 XSS가 실행될 수 있습니다."
+                                "priority": "HIGH"
+                            },
+                            {
+                                "submit_url": "https://hotspotfan.online/api/products?page=0&size=60",
+                                "view_url": "https://hotspotfan.online/products/:id",
+                                "body": {},
+                                "safe_to_submit": False,
+                                "cookies": {},
+                                "headers": {},
+                                "priority": "HIGH"
+                            },
+                            {
+                                "submit_url": "https://hotspotfan.online/api/products/:id/comments?page=0&size=20",
+                                "view_url": "https://hotspotfan.online/products/:id",
+                                "body": {},
+                                "safe_to_submit": False,
+                                "cookies": {},
+                                "headers": {},
+                                "priority": "HIGH"
                             }
                             ],
                             "options": {
@@ -547,7 +613,21 @@ if check_Url(recon_url):
                             "results_dir": "results"
                         },
                         "filedown_data": {
-                            "targets": [],
+                            "target": {
+                            "url": "https://hotspotfan.online/api/products?page=0&size=60",
+                            "method": "GET",
+                            "params": {
+                                "page": "0",
+                                "size": "60"
+                            },
+                            "data": {},
+                            "headers": {},
+                            "inject_params": [
+                                "page",
+                                "size"
+                            ],
+                            "timeout": 5.0
+                            },
                             "options": {
                             "max_workers": 4,
                             "payload_limit": 3,
@@ -559,55 +639,19 @@ if check_Url(recon_url):
                             }
                         },
                         "ssrf_data": {
-                            "targets": [
-                            {
-                                "url": "https://hotspotfan.online/api/banners?position=MAIN",
-                                "method": "GET",
-                                "params": {
+                            "target": {
+                            "url": "https://hotspotfan.online/api/banners?position=MAIN",
+                            "method": "GET",
+                            "params": {
                                 "position": "MAIN"
-                                },
-                                "data": {},
-                                "headers": {},
-                                "inject_params": [
+                            },
+                            "data": {},
+                            "headers": {},
+                            "inject_params": [
                                 "position"
-                                ],
-                                "timeout": 10.0,
-                                "priority": "MEDIUM",
-                                "reason": "배너 API의 응답 데이터에 imageUrl 필드가 포함되어 있으며, S3 외부 URL이 반환됩니다. position 파라미터가 서버 측 리소스 요청에 영향을 줄 가능성이 있는 후보입니다. 단, 파라미터가 직접 URL로 사용되는지는 확인되지 않았습니다."
-                            },
-                            {
-                                "url": "https://hotspotfan.online/api/ranking/weekly?type=seller",
-                                "method": "GET",
-                                "params": {
-                                "type": "seller"
-                                },
-                                "data": {},
-                                "headers": {},
-                                "inject_params": [
-                                "type"
-                                ],
-                                "timeout": 10.0,
-                                "priority": "MEDIUM",
-                                "reason": "랭킹 API 응답의 profileImageUrl 필드에 ftp://placehold.co/100 와 같이 비표준 외부 URL이 저장된 것이 scan_data에서 확인되었습니다. 서버가 해당 URL을 요청하는 경우 SSRF 가능성이 있으며, type 파라미터가 서버 측 처리에 영향을 줄 수 있습니다."
-                            },
-                            {
-                                "url": "https://hotspotfan.online/api/products?page=0&size=60",
-                                "method": "GET",
-                                "params": {
-                                "page": "0",
-                                "size": "60"
-                                },
-                                "data": {},
-                                "headers": {},
-                                "inject_params": [
-                                "page",
-                                "size"
-                                ],
-                                "timeout": 10.0,
-                                "priority": "LOW",
-                                "reason": "상품 목록 API로, 응답에 외부 S3 imageUrl이 포함됩니다. 서버가 이미지 URL을 직접 fetch하는 구조라면 SSRF 후보가 될 수 있으나, 현재 scan_data에서 직접적인 URL 파라미터 신호는 확인되지 않았습니다. 경로 기반 후보입니다."
-                            }
                             ],
+                            "timeout": 5.0
+                            },
                             "options": {
                             "max_workers": 4,
                             "payload_limit": 3,
@@ -617,16 +661,7 @@ if check_Url(recon_url):
                             "proxies": {},
                             "user_agent": "KSJ-DAST-Scanner/1.0"
                             }
-                        },
-                        "limitations": [
-                            "scan_data의 crawler.auth에 유효한 쿠키, Authorization 토큰 등 인증 정보가 없어 인증이 필요한 API 엔드포인트(/api/cart, /api/orders/me, /api/orders/seller/me, /api/follows/followings, /api/follows/my-followers 등)에 대한 테스트는 401 응답으로 제한될 수 있습니다.",
-                            "대부분의 페이지가 CSR(Client-Side Rendering) 또는 SSR 방식으로 동작하며, 실제 사용자 입력 파라미터명이 폼 필드의 name 속성에 명시되지 않아(name 속성이 빈 문자열) 정확한 파라미터명을 특정할 수 없습니다.",
-                            "/influencer/:id, /products/:id, /api/products/:id, /api/users/managers/:id 등 경로 파라미터(:id)가 포함된 엔드포인트는 실제 유효한 ID 값이 확인되지 않아 500 에러가 발생하였습니다. 실제 테스트 시 유효한 UUID 형태의 ID를 사용해야 합니다.",
-                            "Cloudflare HTTP 프록시(포트 80, 443, 8080, 8443)를 통해 서비스가 제공되므로, WAF 또는 DDoS 보호로 인해 일부 테스트 요청이 차단될 수 있습니다.",
-                            "FileDownload 후보를 위한 file, filename, filepath, download, attach 등 파일 경로 관련 파라미터나 URL이 scan_data에서 확인되지 않아 FileDownload 모듈 후보를 생성하지 않았습니다.",
-                            "scan_data에서 robots.txt의 disallowed 항목이 모두 '/'로만 표시되어 실질적인 숨겨진 경로 정보를 확인할 수 없었습니다.",
-                            "XSS 페이로드('<img src=x onerror=alert(document.domain)>')가 이미 상품 데이터에 저장되어 API 응답에서 확인되었으나, 이것이 실제로 브라우저에서 실행되는지 여부는 프론트엔드 렌더링 방식에 따라 다르므로 브라우저 기반 검증이 필요합니다."
-                        ]
+                        }
                         }
             # preprocess_task = progress.add_task("[bold blue]각 공격 모듈에 맞는 통합 데이터 전처리 중...", total=1)
             # preprocessor = LLMPreprocessor()
@@ -658,14 +693,14 @@ if check_Url(recon_url):
             # # # sSRFModule=SSRFModule()
 
             # filedown_data = pre_data["filedown_data"]
-            # filedownload_results=asyncio.run(fileDownloadModule.run_json(filedown_data))
-            # # mid_core.set_file_download_data(filedownload_results)
+            # filedownload_results=asyncio.run(FileDownloadModule.run_json(filedown_data))
+            # # # mid_core.set_file_download_data(filedownload_results)
             # print("filedownload 모듈", filedownload_results)
 
             # ssrf_data = pre_data["ssrf_data"]
-            # ssrf_results=asyncio.run(sSRFModule.run_json(ssrf_data))
-            # mid_core.set_ssrf_data(ssrf_results)
-            # print("ssrf_result",ssrf_results)
+            # ssrf_results=asyncio.run(SSRFModule.run_json(ssrf_data))
+            # # mid_core.set_ssrf_data(ssrf_results)
+            # print("에스에스알에프",ssrf_results)
             end = time.time()
             final_time=end - start
             # mid_core.set_time(final_time)

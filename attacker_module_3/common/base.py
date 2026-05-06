@@ -130,7 +130,7 @@ class AttackModule(ABC):
 
     #부모 DAST 가 직접 호출하는 경로
     @classmethod
-    def run_json(cls, request: str | bytes | bytearray | dict[str, Any]) -> str:
+    async def run_json(cls, request: str | bytes | bytearray | dict[str, Any]) -> str:
         """JSON-in / JSON-out 진입점."""
         try:
             req = load_request(request) #JSON 요청을 프로젝트 내부에서 쓰기 좋은 형태로 파싱
