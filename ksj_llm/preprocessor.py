@@ -368,17 +368,19 @@ Write only human-readable explanation fields such as "reason" and "limitations" 
         param["value"] = self._as_str(param.get("value"))
         return param
 
-    def _normalize_xss_target(self, item):
+    def _normalize_xss_url(self, item):
         target = self._as_dict(item).copy()
         target["url"] = self._as_str(target.get("url"))
         target["method"] = self._as_str(target.get("method") or "GET").upper()
         if target["method"] not in ("GET", "POST"):
             target["method"] = "GET"
-        target["body_format"] = self._as_str(target.get("body_format") or "unknown")
-        if target["body_format"] not in ("form", "json", "raw", "unknown"):
-            target["body_format"] = "unknown"
-        target["params"] = self._as_dict(target.get("params"))
-        target["check_urls"] = self._as_string_list(target.get("check_urls"))
+        target["type"] = self._as_str(
+            target.get("type") or target.get("body_format") or "unknown"
+        )
+        if target["type"] not in ("form", "json", "raw", "unknown"):
+            target["type"] = "unknown"
+        target["body"] = self._as_dict(target.get("body") or target.get("params"))
+        target["fields"] = self._as_dict(target.get("fields"))
         target["safe_to_submit"] = self._as_bool(target.get("safe_to_submit"), False)
         target["cookies"] = self._as_dict(target.get("cookies"))
         target["headers"] = self._as_dict(target.get("headers"))
@@ -387,6 +389,40 @@ Write only human-readable explanation fields such as "reason" and "limitations" 
             target["priority"] = "MEDIUM"
         target["reason"] = self._as_str(target.get("reason"))
         return target
+
+    def _normalize_xss_stored_target(self, item):
+        target = self._as_dict(item).copy()
+        check_urls = self._as_string_list(target.get("check_urls"))
+        target["submit_url"] = self._as_str(
+            target.get("submit_url") or target.get("url")
+        )
+        target["view_url"] = self._as_str(
+            target.get("view_url") or (check_urls[0] if check_urls else "")
+        )
+        target["body"] = self._as_dict(target.get("body") or target.get("params"))
+        target["safe_to_submit"] = self._as_bool(target.get("safe_to_submit"), False)
+        target["cookies"] = self._as_dict(target.get("cookies"))
+        target["headers"] = self._as_dict(target.get("headers"))
+        target["priority"] = self._as_str(target.get("priority") or "MEDIUM").upper()
+        if target["priority"] not in ("HIGH", "MEDIUM", "LOW"):
+            target["priority"] = "MEDIUM"
+        target["reason"] = self._as_str(target.get("reason"))
+
+        normalized_keys = {
+            "submit_url",
+            "view_url",
+            "body",
+            "safe_to_submit",
+            "cookies",
+            "headers",
+            "priority",
+            "reason"
+        }
+        return {
+            key: target[key]
+            for key in target
+            if key in normalized_keys
+        }
 
     def _normalize_attack_target(self, item):
         target = self._as_dict(item).copy()
@@ -460,8 +496,12 @@ Write only human-readable explanation fields such as "reason" and "limitations" 
             "token": self._as_str(xss_data.get("token")),
             "login_mock_path": self._as_str(xss_data.get("login_mock_path")),
             "spider_urls": self._as_string_list(xss_data.get("spider_urls")),
+            "urls": [
+                self._normalize_xss_url(item)
+                for item in self._as_list(xss_data.get("urls"))
+            ],
             "stored_targets": [
-                self._normalize_xss_target(item)
+                self._normalize_xss_stored_target(item)
                 for item in self._as_list(xss_data.get("stored_targets"))
             ],
             "options": self._normalize_options(xss_data.get("options"), xss_options),

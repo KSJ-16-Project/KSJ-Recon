@@ -101,6 +101,7 @@ Return this exact top-level structure:
     "token": "",
     "login_mock_path": "",
     "spider_urls": [],
+    "urls": [],
     "stored_targets": [],
     "options": {
       "browser_verify": true,
@@ -180,17 +181,33 @@ If missing, use "".
 
 xss_data.spider_urls MUST be an array of URL strings copied from scan_data only.
 
-Every xss_data.stored_targets item MUST contain:
+Every xss_data.urls item MUST contain:
 - url: string, copied from scan_data only
 - method: "GET" or "POST"
-- body_format: "form" | "json" | "raw" | "unknown"
-- params: object
-- check_urls: string array
+- type: "form" | "json" | "raw" | "unknown"
+- body: object
+- fields: object
 - safe_to_submit: boolean
 - cookies: object
 - headers: object
 - priority: "HIGH" | "MEDIUM" | "LOW"
 - reason: Korean explanation based only on scan_data
+
+xss_data.urls is used for:
+- POST Reflected XSS when method is "POST"
+- DOM Stored XSS when type is "form" and safe_to_submit is true
+
+Every xss_data.stored_targets item MUST contain:
+- submit_url: string, copied from scan_data only
+- view_url: string, copied from scan_data only
+- body: object
+- safe_to_submit: boolean
+- cookies: object
+- headers: object
+- priority: "HIGH" | "MEDIUM" | "LOW"
+- reason: Korean explanation based only on scan_data
+
+xss_data.stored_targets is used for Stored XSS.
 
 Every filedown_data.targets item MUST contain:
 - url: string, copied from scan_data only
