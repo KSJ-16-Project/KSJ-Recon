@@ -6,13 +6,23 @@ The output JSON will be used by an HTML dashboard renderer.
 
 ---
 
+[Mode A Recon-Only Policy]
+- Mode A uses reconnaissance and scan observations only.
+- Do not describe an item as a confirmed vulnerability unless the input explicitly proves successful exploitation or unauthorized sensitive access.
+- Prefer wording such as "candidate", "exposure", "suspicious signal", "requires verification", or "possible risk" when the evidence is reconnaissance-only.
+- If an access-controlled route returns 401/403 or otherwise shows that authentication is enforced, do not rate it HIGH only because the route name is sensitive. Use MEDIUM unless there is additional evidence of unauthenticated sensitive data exposure or authorization bypass.
+- If a stored payload-like string is observed but rendered output appears escaped or execution is not proven, describe it as a stored payload trace and verification candidate. Use MEDIUM unless execution is proven.
+- If a user-controlled URL value is observed, do not label it SSRF unless there is evidence that the server fetches that URL. Describe it as URL scheme validation or external resource reference risk instead.
+
+---
+
 [Analysis Rules]
 - Base the analysis only on the provided JSON input.
 - Do not assume vulnerabilities that are not supported by the input.
 - Mention CVE or CVSS only when the product and version evidence is sufficient.
 - Mark uncertain items as requiring additional verification.
 - Write attack paths only as high-level attack surface narratives.
-- Do not include exploit code, payloads, bypass procedures, or step-by-step offensive instructions.
+- Do not include exploit code, destructive payloads, bypass procedures, or step-by-step offensive instructions.
 
 ---
 
@@ -51,11 +61,11 @@ The output JSON will be used by an HTML dashboard renderer.
 
 [Risk Rules]
 - HIGH:
-  Publicly accessible admin paths, sensitive services, management APIs or consoles, exposed internal-like endpoints, clear authentication risk signals, or items requiring immediate review.
+  Confirmed unauthenticated sensitive data exposure, confirmed authorization bypass, externally exposed management services with strong evidence of direct risk, or other items requiring immediate review based on explicit input evidence.
 - MEDIUM:
-  Exposed services without confirmed vulnerability, services with version information, non-standard ports, or items that require additional enumeration.
+  Sensitive routes that appear access-controlled, exposed services without confirmed vulnerability, services with version information, non-standard ports, stored payload traces without proven execution, URL validation weaknesses without proven server-side fetching, or items requiring additional verification.
 - LOW:
-  Static resources, generic directories, informational exposure, or items with weak direct abuse potential.
+  Static resources, generic directories, informational exposure, catch-all routing behavior, redirects, or items with weak direct abuse potential.
 
 ---
 
@@ -78,7 +88,7 @@ Return this exact top-level structure:
     {
       "category": "Network",
       "title": "발견 항목 제목",
-      "risk": "HIGH",
+      "risk": "MEDIUM",
       "target": "IP:PORT or URL",
       "evidence": "입력 JSON에 근거한 증거를 한국어로 작성합니다.",
       "impact": "예상 영향을 한국어로 작성합니다.",
@@ -91,7 +101,7 @@ Return this exact top-level structure:
       "entry_point": "초기 진입점을 한국어로 작성합니다.",
       "steps": ["단계 1", "단계 2"],
       "impact": "예상 영향을 한국어로 작성합니다.",
-      "likelihood": "HIGH"
+      "likelihood": "MEDIUM"
     }
   ],
   "limitations": [
@@ -106,6 +116,7 @@ Return this exact top-level structure:
 - findings[].risk must be one of "HIGH", "MEDIUM", or "LOW".
 - findings[].category must be one of "Network", "Web", or "Other" in mode_a.
 - attack_paths[].likelihood must be one of "HIGH", "MEDIUM", or "LOW".
+- Do not include payload_example in mode_a unless a downstream mode_b attack result explicitly provides it.
 - Use empty arrays [] or "-" when evidence is missing.
 - Do not add a comma after the last item in an object or array.
 

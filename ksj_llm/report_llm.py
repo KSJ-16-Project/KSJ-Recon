@@ -13,34 +13,25 @@ except ImportError:
 
 class LLMReporter:
     def __init__(self):
-        # claude/report_llm.py 기준으로 project 루트 계산
+        # ksj_llm/report_llm.py 기준으로 프로젝트 루트를 계산한다.
         self.base_dir = Path(__file__).resolve().parent.parent
 
-        # .env 로드 (경로 + 기본 로드 둘 다 수행)
-        load_dotenv(self.base_dir / ".env", override=True)   # 명시적 경로
-        load_dotenv()                         # fallback (실행 위치 기준)
+        # 프로젝트 .env를 우선 로드하고, 실행 위치 기준 .env를 fallback으로 로드한다.
+        load_dotenv(self.base_dir / ".env", override=True)
+        load_dotenv()
 
-        # 환경변수 읽고 공백 제거
         self.api_key = os.getenv("ANTHROPIC_API_KEY")
         self.model = os.getenv("MODEL_NAME")
 
-        # None 방지 + strip 안전 처리
         if not self.api_key:
-            raise ValueError("ANTHROPIC_API_KEY가 설정되지 않았습니다.")
+            raise ValueError("ANTHROPIC_API_KEY가 설정되어 있지 않습니다.")
 
         if not self.model:
-            raise ValueError("MODEL_NAME이 설정되지 않았습니다.")
+            raise ValueError("MODEL_NAME이 설정되어 있지 않습니다.")
 
         self.api_key = self.api_key.strip()
         self.model = self.model.strip()
 
-        # 디버깅 출력 (모델문제 확인용)
-        #print(f"[DEBUG] MODEL_NAME = {self.model}")
-
-        # 클라이언트 생성
-        # dashboard_renderer.py 호출용 인스턴스 생성
-        # base_dir은 project/ 루트를 넘겨 templates/, output/ 경로가 안정적으로 잡히게 함
-        self.client = anthropic.Anthropic(api_key=self.api_key)
         self.client = anthropic.Anthropic(api_key=self.api_key)
         self.renderer = DashboardRenderer(base_dir=self.base_dir)
 
@@ -97,7 +88,7 @@ class LLMReporter:
 
     def minimize_scan_data(self, scan_data: dict):
         """
-        보고서 작성에 필요한 핵심 근거만 남겨 입력 토큰을 줄인다.
+        보고서 작성에 필요한 핵심 근거만 남겨 LLM 입력 토큰을 줄인다.
         raw_html/rendered_html/run_dir/saved_path 같은 대용량 필드는 제외한다.
         """
         nmap = scan_data.get("nmap") or {}
@@ -297,8 +288,8 @@ class LLMReporter:
 
     def minimize_attack_results(self, attacks: dict):
         """
-        Normalize attack module output into compact report evidence.
-        Large raw fields and executable payload details are intentionally omitted.
+        공격 모듈 결과를 보고서 근거로 쓰기 좋게 축약한다.
+        대용량 원문 필드와 실행 가능한 공격 코드는 의도적으로 제외한다.
         """
         if not isinstance(attacks, dict):
             return []
@@ -388,11 +379,11 @@ class LLMReporter:
         return {
             "mode": "mode_b",
             "report_instructions": [
-                "scan_summary와 attack_results를 함께 근거로 사용한다.",
-                "confirmed, vulnerable, success, detected 등으로 확인된 공격 모듈 결과는 findings에 우선 반영한다.",
-                "inconclusive, failed, not_confirmed 또는 결과가 없는 항목은 확정 취약점으로 단정하지 않는다.",
-                "공격 모듈 기반 findings의 category는 SQLi, XSS, FileDownload, SSRF, Web, Network, Other 중 하나를 사용한다.",
-                "payload_example에는 취약점 동작 확인에 필요한 비파괴 검증 payload 예시만 작성한다."
+                "Use scan_summary and attack_results together as evidence.",
+                "Prioritize attack module results marked confirmed, vulnerable, success, detected, or equivalent in findings.",
+                "Do not describe inconclusive, failed, not_confirmed, or missing results as confirmed vulnerabilities.",
+                "For attack-module findings, use one category from SQLi, XSS, FileDownload, SSRF, Web, Network, or Other.",
+                "payload_example may be included only when the attack result provides a non-destructive verification example."
             ],
             "metadata": {
                 "target": metadata.get("target") or input_data.get("target"),
@@ -416,6 +407,7 @@ class LLMReporter:
 - In mode_b, findings[].category may be one of "Network", "Web", "SQLi", "XSS", "FileDownload", "SSRF", or "Other".
 - This category rule overrides the mode_a category restriction from report_prompt.txt.
 - Write all human-readable report fields in Korean.
+- Include payload_example only when the attack result provides a non-destructive verification example; otherwise omit it or use "-".
 - Do not include automated attack code, bypass procedures, destructive steps, or data exfiltration procedures in the final report.
 """
 
@@ -438,16 +430,15 @@ Write human-readable report fields such as "summary", "title", "evidence", "impa
 """
 
         return f"{prompt_template}\n\n{json_output_rule}\n\n[Scan Data]\n{combined_data}"
-    
-    # Claude 응답에서 JSON 객체만 안전하게 파싱
+
     def parse_llm_json(self, response_text: str):
         """
-        Claude가 원칙적으로 JSON만 반환해야 하지만,
-        혹시 코드블록이나 앞뒤 설명이 섞인 경우를 대비해 JSON 객체 영역을 한 번 더 추출한다.
+        Claude 응답에서 JSON 객체만 안전하게 파싱한다.
+        원칙적으로 JSON만 반환해야 하지만, 코드블록이나 앞뒤 설명이 섞인
+        경우를 대비해 JSON 객체 영역을 한 번 더 추출한다.
         """
         text = response_text.strip()
 
-        # ```json ... ``` 형태 방어
         if text.startswith("```"):
             text = re.sub(r"^```(?:json)?\s*", "", text)
             text = re.sub(r"\s*```$", "", text)
@@ -458,7 +449,6 @@ Write human-readable report fields such as "summary", "title", "evidence", "impa
         try:
             return json.loads(text)
         except json.JSONDecodeError:
-            # 앞뒤 설명이 섞인 경우 첫 { 부터 마지막 } 까지 추출
             start = text.find("{")
             end = text.rfind("}")
 
@@ -490,30 +480,17 @@ Write human-readable report fields such as "summary", "title", "evidence", "impa
 
         return self.parse_llm_json(response_text)
 
-    # LLM 분석 JSON을 DashboardRenderer로 넘겨 HTML 생성
     def render_dashboard(self, report_data: dict, output_filename="dashboard.html"):
         return self.renderer.render_from_report_data(
             report_data=report_data,
             output_filename=output_filename
         )
 
-    # Core 연동용 함수
-    # Core에서 input_data dict와 mode("mode_a" 또는 "mode_b")를 넘기면
-    # LLM 분석 → JSON 파싱 → HTML 렌더링까지 수행한다.
-    #
-    # mode_a 입력:
-    #   기존 통합 스캔 결과 dict. nmap/crawler/fuzzer 기반으로 보고서를 생성한다.
-    #
-    # mode_b 입력:
-    #   {
-    #       "scan": {"nmap": ..., "crawler": ..., "fuzzer": ...},
-    #       "attacks": {"sqli": ..., "xss": ..., "file_download": ..., "ssrf": ...},
-    #       "metadata": {"target": ..., "scan_time": ...}
-    #   }
-    #
-    # 권장 호출:
-    #   generate_dashboard_from_data(input_data, output_filename="dashboard.html", mode=mode)
     def generate_dashboard_from_data(self, scan_data: dict, output_filename="dashboard.html", mode="mode_a"):
+        """
+        Core 연동 함수.
+        input_data dict와 mode를 받아 LLM 분석, JSON 파싱, HTML 렌더링까지 수행한다.
+        """
         if output_filename in ("mode_a", "mode_b") and mode == "mode_a":
             mode = output_filename
             output_filename = "dashboard.html"
@@ -527,10 +504,12 @@ Write human-readable report fields such as "summary", "title", "evidence", "impa
             "report_data": report_data,
             "dashboard_path": dashboard_path
         }
-    
-    # 로컬 테스트용 함수
-    # scan_result.json 또는 mode_b 입력 JSON 파일을 읽어 LLM 분석 → HTML 렌더링까지 수행한다.
+
     def generate_dashboard_from_scan_file(self, filepath: str, output_filename="dashboard.html", mode="mode_a"):
+        """
+        로컬 테스트용 함수.
+        scan_result.json 또는 mode_b 입력 JSON 파일을 읽어 LLM 분석과 HTML 렌더링까지 수행한다.
+        """
         if output_filename in ("mode_a", "mode_b") and mode == "mode_a":
             mode = output_filename
             output_filename = "dashboard.html"
@@ -543,7 +522,7 @@ Write human-readable report fields such as "summary", "title", "evidence", "impa
 def generate_report_dashboard(input_data: dict, mode="mode_a", output_filename="dashboard.html"):
     """
     Core에서 호출하는 단일 진입점.
-    Core는 input_data와 mode만 넘기고, Reporter 생성/LLM 분석/HTML 렌더링은 이 모듈 내부에서 처리한다.
+    Core는 input_data와 mode만 넘기고, Reporter 생성/LLM 분석/HTML 렌더링은 이 함수 내부에서 처리한다.
     """
     reporter = LLMReporter()
     return reporter.generate_dashboard_from_data(
@@ -555,7 +534,7 @@ def generate_report_dashboard(input_data: dict, mode="mode_a", output_filename="
 
 def generate_report_dashboard_from_file(filepath: str, mode="mode_a", output_filename="dashboard.html"):
     """
-    로컬 테스트용 진입점.
+    로컬 파일 기반 테스트 진입점.
     """
     reporter = LLMReporter()
     return reporter.generate_dashboard_from_scan_file(
@@ -563,12 +542,12 @@ def generate_report_dashboard_from_file(filepath: str, mode="mode_a", output_fil
         output_filename=output_filename,
         mode=mode
     )
-    
+
+
 """
 Core 연동 예시:
 
 from ksj_llm.report_llm import generate_report_dashboard
-
 
 result = generate_report_dashboard(
     input_data=input_data,
@@ -586,14 +565,16 @@ mode_a_result = generate_report_dashboard(
     mode="mode_a",
     output_filename="dashboard_mode_a.html"
 )
+
 # mode_b: 통합 스캔 데이터 + 공격 모듈 결과를 함께 사용하는 보고서
 mode_b_result = generate_report_dashboard(
     input_data=mode_b_input,
     mode="mode_b",
     output_filename="dashboard_mode_b.html"
 )
+
 # mode_b input data 형태 참고용입니다.
-mode_b_input = { #참고용입니다
+mode_b_input = {
     "scan": {
         "nmap": nmap_result,
         "crawler": crawler_result,
@@ -611,16 +592,15 @@ mode_b_input = { #참고용입니다
     }
 }
 
-
 # 로컬 파일 테스트는 generate_report_dashboard_from_file()을 사용한다.
 """
 
 
 if __name__ == "__main__":
     result = generate_report_dashboard_from_file(
-        filepath="scan_result.json",
+        filepath="full_recon_report.json",
         mode="mode_a",
-        output_filename="dashboard.html"
+        output_filename="hotspot_0506_01.html"
     )
 
     print(f"[+] 대시보드 저장 완료: {result['dashboard_path']}")

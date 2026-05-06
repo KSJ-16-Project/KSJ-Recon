@@ -366,5 +366,5 @@ saved_path = preprocessor.save_preprocess_data(pre_data, "파일명.json")
 if __name__ == "__main__":
     # 로컬 테스트
     preprocessor = LLMPreprocessor()
-    pre_data = preprocessor.generate_preprocess_data_from_file("scan_result.json")
+    pre_data = preprocessor.generate_preprocess_data_from_file("full_recon_report.json")
     preprocessor.save_preprocess_data(pre_data)
