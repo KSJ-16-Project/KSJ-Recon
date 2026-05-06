@@ -85,6 +85,12 @@ class ContextAnalyzer:
         last_gt = before.rfind(">")
         next_gt = after.find(">")
         if last_lt > last_gt and next_gt >= 0:
+            # Guard: the character after < must be a letter, / or ! to be a real tag.
+            # Without this, a < inside an attribute value (e.g. data-x="<nested>")
+            # would be mistaken for a tag boundary and misclassify the context.
+            tag_opener = text[last_lt + 1: last_lt + 2] if last_lt + 1 < len(text) else ""
+            if not (tag_opener.isalpha() or tag_opener in ("/", "!")):
+                return "html_body", None
             tag_fragment = text[last_lt: idx + len(marker) + next_gt + 1]
             attr = self._attribute_containing_marker(tag_fragment, marker)
             if attr:

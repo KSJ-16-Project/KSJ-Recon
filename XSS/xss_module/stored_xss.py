@@ -8,6 +8,7 @@ observable on configured check URLs or known crawled URLs.
 from __future__ import annotations
 
 import logging
+import time
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 
 from .context_analyzer import ContextAnalyzer
@@ -18,7 +19,24 @@ from .result_builder import ResultBuilder
 
 logger = logging.getLogger(__name__)
 
-VERIFIABLE_CONTEXTS = {"html_body", "html_attribute", "event_handler", "script", "url_context"}
+VERIFIABLE_CONTEXTS = {
+    "html_body",
+    "html_attribute_double",
+    "html_attribute_single",
+    "html_attribute_unquoted",
+    "event_handler_js",
+    "event_handler_js_string_double",
+    "event_handler_js_string_single",
+    "js_block",
+    "js_string_double",
+    "js_string_single",
+    "url_context",
+    "html_comment",
+}
+
+STORED_XSS_SUBMISSION_WARNING = (
+    "실제 폼 제출이 발생할 수 있으며, 테스트 데이터가 서버에 저장될 수 있습니다."
+)
 
 
 class StoredXSSScanner:
@@ -29,23 +47,58 @@ class StoredXSSScanner:
         self.auth_refresher = auth_refresher
         self.analyzer = ContextAnalyzer()
         self.errors: list[dict] = []
+        self.skipped: list[dict] = []
         self.known_get_urls = [t["url"] for t in targets if t.get("method", "GET").upper() == "GET"]
 
     def scan(self) -> list[dict]:
         findings: list[dict] = []
         for target in self.targets:
-            if target.get("method", "GET").upper() not in ("GET", "POST"):
-                continue
-            if not target.get("safe_to_submit"):
-                continue
+            method = target.get("method", "GET").upper()
             params = target.get("params") or {}
-            if not params:
-                continue
+            explicitly_stored_like = (
+                target.get("source") == "stored_targets"
+                or target.get("type") == "form"
+                or method == "POST"
+            )
+            if explicitly_stored_like and method in ("GET", "POST") and params and not target.get("safe_to_submit"):
+                reason = "safe_to_submit is not explicitly true; stored XSS submission skipped"
+                logger.info("[stored_xss] skipped unsafe target: %s (%s)", target.get("url", ""), reason)
+                self.skipped.append(self.builder.finding(
+                    type="stored_xss_skipped",
+                    url=target.get("url", ""),
+                    method=method,
+                    param=None,
+                    payload=None,
+                    risk="INFO",
+                    browser_verified=False,
+                    verification_status="skipped",
+                    evidence={
+                        "reason": reason,
+                        "safe_to_submit": bool(target.get("safe_to_submit", False)),
+                        "verification_method": "not_run",
+                    },
+                ))
+        candidates = [
+            t for t in self.targets
+            if t.get("method", "GET").upper() in ("GET", "POST")
+            and t.get("safe_to_submit")
+            and t.get("params")
+        ]
+        total = len(candidates)
+        for i, target in enumerate(candidates):
+            params = target.get("params") or {}
+            logger.info("[%d/%d] stored scan: %s", i + 1, total, target["url"])
             for param in self._candidate_params(params):
                 finding = self._test_form(target, params, param)
                 if finding:
                     findings.append(finding)
         return findings
+
+    def _is_verifiable_context(self, context: str | None) -> bool:
+        # ContextAnalyzer returns concrete context names, not broad labels such
+        # as "script" or "event_handler".  Keep this helper to avoid future
+        # mismatch when context names are extended.
+        return bool(context and context in VERIFIABLE_CONTEXTS)
 
     def _auth_failed(self, resp) -> bool:
         if resp.status_code in {401, 403}:
@@ -59,14 +112,23 @@ class StoredXSSScanner:
         return any(ind in body for ind in WAF_INDICATORS)
 
     def _test_form(self, target: dict, params: dict, param: str) -> dict | None:
-        marker = new_marker()
+        cleanup_marker = new_marker()
+        marker = cleanup_marker
+        payload = f'<script data-testid="{cleanup_marker}">alert(1)</script>'
         data = dict(params)
-        data[param] = marker
+        # Store a marker-bearing payload so later verification can both trigger
+        # alert(1) and identify/clean the test data by cleanup_marker.
+        data[param] = payload
         url = target["url"]
         method = target.get("method", "GET").upper()
         req_headers = target.get("headers") or {}
         req_cookies = target.get("cookies") or {}
         body_format = target.get("body_format", "form")
+
+        logger.warning(
+            "[stored_xss] safe_to_submit=True – 실제 폼 제출이 발생합니다. "
+            "테스트 데이터가 서버에 저장될 수 있습니다. (%s)", url,
+        )
 
         if method == "POST":
             self._inject_csrf(url, data, req_headers, req_cookies)
@@ -74,8 +136,23 @@ class StoredXSSScanner:
         try:
             submit_resp = self._submit(method, url, data, body_format, req_headers, req_cookies)
         except Exception as e:
-            self.errors.append(self.builder.error(url=url, phase="stored_submit", error="request_failed", detail=str(e)))
+            self.errors.append(self.builder.error(url=url, phase="stored_submit", error="request_failed", detail=str(e), category="network_error"))
             return None
+
+        # 429 retry
+        if submit_resp.status_code == 429:
+            logger.warning("429 rate-limit on %s [%s] – retrying after 2s", url, param)
+            time.sleep(2)
+            if method == "POST":
+                self._inject_csrf(url, data, req_headers, req_cookies)
+            try:
+                submit_resp = self._submit(method, url, data, body_format, req_headers, req_cookies)
+            except Exception as e:
+                self.errors.append(self.builder.error(url=url, phase="stored_submit", error="request_failed", detail=str(e), category="network_error"))
+                return None
+            if submit_resp.status_code == 429:
+                self.errors.append(self.builder.error(url=url, phase="stored_submit", error="waf_rate_limited", detail="429 after retry", category="waf_block"))
+                return None
 
         if self._auth_failed(submit_resp):
             if self.auth_refresher:
@@ -85,10 +162,10 @@ class StoredXSSScanner:
                 try:
                     submit_resp = self._submit(method, url, data, body_format, req_headers, req_cookies)
                 except Exception as e:
-                    self.errors.append(self.builder.error(url=url, phase="stored_submit_retry", error="request_failed", detail=str(e)))
+                    self.errors.append(self.builder.error(url=url, phase="stored_submit_retry", error="request_failed", detail=str(e), category="network_error"))
                     return None
             if self._auth_failed(submit_resp):
-                self.errors.append(self.builder.error(url=url, phase="stored_submit", error="auth_failed", detail=f"status={submit_resp.status_code}"))
+                self.errors.append(self.builder.error(url=url, phase="stored_submit", error="auth_failed", detail=f"status={submit_resp.status_code}", category="auth_failed"))
                 return None
 
         waf = self._detect_waf(submit_resp)
@@ -104,14 +181,13 @@ class StoredXSSScanner:
                 continue
 
             escaped = self._check_special_encoding(target, params, param, check_urls, marker)
-            payload = CONTEXT_PAYLOADS.get(analysis.context or "unknown", CONTEXT_PAYLOADS["unknown"])[0]
             risk = "LOW" if escaped else "MEDIUM"
 
             bypass_payload = None
             if waf and not escaped:
                 bypass_payload = self._find_waf_bypass(target, params, param, analysis.context, req_headers, req_cookies, body_format)
 
-            browser_verification_required = (not escaped) and (analysis.context in VERIFIABLE_CONTEXTS)
+            browser_verification_required = (not escaped) and self._is_verifiable_context(analysis.context)
 
             return self.builder.finding(
                 type="stored_xss_candidate_limited",
@@ -124,8 +200,12 @@ class StoredXSSScanner:
                 context=analysis.context,
                 escaped=escaped,
                 payload=payload,
+                cleanup_marker=cleanup_marker,
+                side_effect_possible=True,
+                stored_xss_submission_warning=STORED_XSS_SUBMISSION_WARNING,
                 browser_verified=False,
                 browser_verification_required=browser_verification_required,
+                verification_status="skipped",
                 waf_detected=waf,
                 waf_bypass_possible=bypass_payload is not None,
                 waf_bypass_payload=bypass_payload,
@@ -136,6 +216,9 @@ class StoredXSSScanner:
                     "snippet": analysis.snippet,
                     "reason": f"marker submitted through a safe {method} form and later observed on a reachable page",
                     "scope_note": "limited stored XSS check; not a full stored-XSS workflow crawler",
+                    "cleanup_marker": cleanup_marker,
+                    "side_effect_possible": True,
+                    "stored_xss_submission_warning": STORED_XSS_SUBMISSION_WARNING,
                 },
             )
         return None
@@ -154,6 +237,18 @@ class StoredXSSScanner:
                 self._inject_csrf(url, test_data, headers, cookies)
             try:
                 resp = self._submit(method, url, test_data, body_format, headers, cookies)
+                if resp.status_code == 429:
+                    time.sleep(2)
+                    if method == "POST":
+                        self._inject_csrf(url, test_data, headers, cookies)
+                    try:
+                        resp = self._submit(method, url, test_data, body_format, headers, cookies)
+                    except Exception:
+                        continue
+                    if resp.status_code == 429:
+                        # Sustained rate limiting means the bypass loop should stop
+                        # instead of sending more probes to the target.
+                        break
                 if not self._detect_waf(resp):
                     logger.info("WAF bypass candidate found (stored): %s [%s]", url, param)
                     return payload
