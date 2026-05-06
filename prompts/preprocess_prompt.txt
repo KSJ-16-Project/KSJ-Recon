@@ -113,7 +113,15 @@ Return this exact top-level structure:
     "results_dir": "results"
   },
   "filedown_data": {
-    "targets": [],
+    "target": {
+      "url": "",
+      "method": "GET",
+      "params": {},
+      "data": {},
+      "headers": {},
+      "inject_params": [],
+      "timeout": 5.0
+    },
     "options": {
       "max_workers": 4,
       "payload_limit": 3,
@@ -125,7 +133,15 @@ Return this exact top-level structure:
     }
   },
   "ssrf_data": {
-    "targets": [],
+    "target": {
+      "url": "",
+      "method": "GET",
+      "params": {},
+      "data": {},
+      "headers": {},
+      "inject_params": [],
+      "timeout": 5.0
+    },
     "options": {
       "max_workers": 4,
       "payload_limit": 3,
@@ -204,7 +220,7 @@ Every xss_data.stored_targets item MUST contain:
 
 xss_data.stored_targets is used for Stored XSS.
 
-Every filedown_data.targets item MUST contain:
+filedown_data.target MUST contain:
 - url: string, copied from scan_data only
 - method: "GET" or "POST"
 - params: object
@@ -212,9 +228,8 @@ Every filedown_data.targets item MUST contain:
 - headers: object
 - inject_params: string array
 - timeout: number
-- priority: "HIGH" | "MEDIUM" | "LOW"
 
-Every ssrf_data.targets item MUST contain:
+ssrf_data.target MUST contain:
 - url: string, copied from scan_data only
 - method: "GET" or "POST"
 - params: object
@@ -222,7 +237,6 @@ Every ssrf_data.targets item MUST contain:
 - headers: object
 - inject_params: string array
 - timeout: number
-- priority: "HIGH" | "MEDIUM" | "LOW"
 
 ---
 

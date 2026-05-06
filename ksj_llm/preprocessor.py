@@ -435,10 +435,8 @@ Keep JSON keys and enum values in English.
             target["timeout"] = float(target.get("timeout", 5.0))
         except (TypeError, ValueError):
             target["timeout"] = 5.0
-        target["priority"] = self._as_str(target.get("priority") or "MEDIUM").upper()
-        if target["priority"] not in ("HIGH", "MEDIUM", "LOW"):
-            target["priority"] = "MEDIUM"
         target.pop("reason", None)
+        target.pop("priority", None)
         return target
 
     def normalize_preprocess_data(self, pre_data: dict):
@@ -516,11 +514,12 @@ Keep JSON keys and enum values in English.
         }
         for key in ("filedown_data", "ssrf_data"):
             module_data = self._as_dict(pre_data.get(key)).copy()
+            target = module_data.get("target")
+            if target is None:
+                targets = self._as_list(module_data.get("targets"))
+                target = targets[0] if targets else {}
             normalized[key] = {
-                "targets": [
-                    self._normalize_attack_target(item)
-                    for item in self._as_list(module_data.get("targets"))
-                ],
+                "target": self._normalize_attack_target(target),
                 "options": self._normalize_options(module_data.get("options"), module_options)
             }
 
@@ -564,7 +563,7 @@ Keep JSON keys and enum values in English.
         scan_data = self.load_scan_result(filepath)
         return self.generate_preprocess_data(scan_data)
 
-    def save_preprocess_data(self, pre_data: dict, filename: str = "preprocess_data.json"):
+    def save_preprocess_data(self, pre_data: dict, filename: str = "preprocess_data_new1.json"):
         """
         output 디렉터리에 전처리후 데이터를 저장하도록 함수 구성 테스트간 llm 사용량을 줄이기위함
         """
