@@ -263,7 +263,6 @@ Wrap every JSON key and every string value in double quotes.
 Use pure JSON syntax, not Python dict syntax.
 Use null, true, and false instead of None, True, and False.
 Keep JSON keys and enum values in English.
-Write only human-readable explanation fields such as "reason" and "limitations" in Korean.
 """
 
         return f"{prompt_template}\n\n{json_output_rule}\n\n[Scan Data]\n{combined_data}"
@@ -387,7 +386,7 @@ Write only human-readable explanation fields such as "reason" and "limitations" 
         target["priority"] = self._as_str(target.get("priority") or "MEDIUM").upper()
         if target["priority"] not in ("HIGH", "MEDIUM", "LOW"):
             target["priority"] = "MEDIUM"
-        target["reason"] = self._as_str(target.get("reason"))
+        target.pop("reason", None)
         return target
 
     def _normalize_xss_stored_target(self, item):
@@ -406,7 +405,6 @@ Write only human-readable explanation fields such as "reason" and "limitations" 
         target["priority"] = self._as_str(target.get("priority") or "MEDIUM").upper()
         if target["priority"] not in ("HIGH", "MEDIUM", "LOW"):
             target["priority"] = "MEDIUM"
-        target["reason"] = self._as_str(target.get("reason"))
 
         normalized_keys = {
             "submit_url",
@@ -415,8 +413,7 @@ Write only human-readable explanation fields such as "reason" and "limitations" 
             "safe_to_submit",
             "cookies",
             "headers",
-            "priority",
-            "reason"
+            "priority"
         }
         return {
             key: target[key]
@@ -441,7 +438,7 @@ Write only human-readable explanation fields such as "reason" and "limitations" 
         target["priority"] = self._as_str(target.get("priority") or "MEDIUM").upper()
         if target["priority"] not in ("HIGH", "MEDIUM", "LOW"):
             target["priority"] = "MEDIUM"
-        target["reason"] = self._as_str(target.get("reason"))
+        target.pop("reason", None)
         return target
 
     def normalize_preprocess_data(self, pre_data: dict):
@@ -477,8 +474,7 @@ Write only human-readable explanation fields such as "reason" and "limitations" 
             },
             "xss_data": {},
             "filedown_data": {},
-            "ssrf_data": {},
-            "limitations": self._as_list(pre_data.get("limitations"))
+            "ssrf_data": {}
         }
 
         xss_data = self._as_dict(pre_data.get("xss_data")).copy()

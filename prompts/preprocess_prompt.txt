@@ -16,8 +16,6 @@ Important constraints:
 [Language Rules]
 - All JSON keys must remain exactly as defined in the schema.
 - Enum-like values must be written in English, for example "GET", "POST", "HIGH", "MEDIUM", "LOW".
-- Human-readable explanation fields must be written in Korean.
-- The fields that must be written in Korean are "reason" and "limitations".
 - Do not use Korean for JSON keys or enum values.
 
 ---
@@ -137,8 +135,7 @@ Return this exact top-level structure:
       "proxies": {},
       "user_agent": "KSJ-DAST-Scanner/1.0"
     }
-  },
-  "limitations": []
+  }
 }
 
 ---
@@ -191,7 +188,6 @@ Every xss_data.urls item MUST contain:
 - cookies: object
 - headers: object
 - priority: "HIGH" | "MEDIUM" | "LOW"
-- reason: Korean explanation based only on scan_data
 
 xss_data.urls is used for:
 - POST Reflected XSS when method is "POST"
@@ -205,7 +201,6 @@ Every xss_data.stored_targets item MUST contain:
 - cookies: object
 - headers: object
 - priority: "HIGH" | "MEDIUM" | "LOW"
-- reason: Korean explanation based only on scan_data
 
 xss_data.stored_targets is used for Stored XSS.
 
@@ -218,7 +213,6 @@ Every filedown_data.targets item MUST contain:
 - inject_params: string array
 - timeout: number
 - priority: "HIGH" | "MEDIUM" | "LOW"
-- reason: Korean explanation based only on scan_data
 
 Every ssrf_data.targets item MUST contain:
 - url: string, copied from scan_data only
@@ -229,13 +223,11 @@ Every ssrf_data.targets item MUST contain:
 - inject_params: string array
 - timeout: number
 - priority: "HIGH" | "MEDIUM" | "LOW"
-- reason: Korean explanation based only on scan_data
 
 ---
 
 [Additional Rules]
 - Do not create a candidate when there is no explicit URL, parameter, form field, or path-based signal in the input.
-- If a URL path looks relevant but no parameter is confirmed, write in Korean in the reason field that it is a path-based candidate with no confirmed parameter.
 - Remove duplicate URLs unless they are used for different modules or different purposes.
 - The same URL may appear in multiple modules when it has distinct test purposes.
 - Prioritize items with HIGH-risk signals.
