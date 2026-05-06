@@ -25,7 +25,7 @@ if root_path not in sys.path:
 
 import ksj_nmap.ksj_nmap 
 from ffuf_module.fuzzer_module import FuzzOrchestrator
-# from ksj_llm.ksj_llm import LLMReporter
+from ksj_llm.report_llm import LLMReporter
 from crawler.engine import crawl_target , CrawlerConfig
 from crawler.auth.models import AuthConfig
 from ksj_llm.preprocessor import LLMPreprocessor
@@ -35,29 +35,6 @@ from attacker_module_3.file_download.module import FileDownloadModule
 from attacker_module_3.ssrf.module import SSRFModule
 # Rich 콘솔 초기화
 console = Console()
-
-# async def save_to_txt(target_full_path, content):
-#     """
-#     target_full_path: 저장할 파일의 전체 경로 (예: 'C:/output/test.txt')
-#     content: 저장할 내용 (문자열)
-#     """
-#     try:
-#         # 1. 파일이 저장될 폴더 경로 추출
-#         directory = os.path.dirname(target_full_path)
-
-#         # 2. 폴더가 없으면 생성 (exist_ok=True는 이미 폴더가 있어도 에러를 내지 않음)
-#         if directory and not os.path.exists(directory):
-#             os.makedirs(directory, exist_ok=True)
-#             print(f"새로운 디렉토리를 생성했습니다: {directory}")
-
-#         # 3. 파일 쓰기 (utf-8 인코딩으로 한글 깨짐 방지)
-#         with open(target_full_path, 'w', encoding='utf-8') as f:
-#             f.write(content)
-        
-#         print(f"성공적으로 파일을 저장했습니다: {target_full_path}")
-        
-#     except Exception as e:
-#         print(f"파일 저장 중 오류 발생: {e}")
 
 # Url 검사 로직
 def check_Url(recon_url):
@@ -217,7 +194,7 @@ start = time.time()
 
 if check_Url(recon_url):
 
-    # mid_core = Middle_core(recon_url)
+    mid_core = Middle_core(recon_url)
 
     with Progress(
     SpinnerColumn(),
@@ -226,105 +203,102 @@ if check_Url(recon_url):
     ) as progress:
         
         
-    #     if login_choice==1:
-    #         # 로그인이 필요한 도메인이면
-    #         config = CrawlerConfig(
-    #             target_url=recon_url, # check_isOrder에서 검증된 url
-    #             auth = AuthConfig(
-    #                 username = user_id,
-    #                 password = user_password,
-    #             )
-    #         )
-    #     else:
-    #         # Crawler 설정 (config 생성)
-    #         config = CrawlerConfig(
-    #             target_url=recon_url # check_isOrder에서 검증된 url
-    #         )
+        if login_choice==1:
+            # 로그인이 필요한 도메인이면
+            config = CrawlerConfig(
+                target_url=recon_url, # check_isOrder에서 검증된 url
+                auth = AuthConfig(
+                    username = user_id,
+                    password = user_password,
+                )
+            )
+        else:
+            # Crawler 설정 (config 생성)
+            config = CrawlerConfig(
+                target_url=recon_url # check_isOrder에서 검증된 url
+            )
 
 
-    #     # Crawler 전용 프로그레스 바
-    #     crawl_task = progress.add_task("[red]Crawler 모듈 동작중...", total=1)
+        # Crawler 전용 프로그레스 바
+        crawl_task = progress.add_task("[red]Crawler 모듈 동작중...", total=1)
         
-    #     # 비동기 함수인 crawl_target 실행 및 결과 수령
-    #     crawl_data = asyncio.run(crawl_target(config))
+        # 비동기 함수인 crawl_target 실행 및 결과 수령
+        crawl_data = asyncio.run(crawl_target(config))
         
-    #     #json으로 변환
-    #     final_crawl_data=dataclasses.asdict(crawl_data)
+        #json으로 변환
+        final_crawl_data=dataclasses.asdict(crawl_data)
        
-    #     # 크롤러 데이터에서 Fuzzer 모듈을 위한 URL 리스트 뽑기 ( 미들 코어에서 )
-    #     spider_urls=asyncio.run(mid_core.make_url_list(final_crawl_data))
-    #     # print("스파이더",spider_urls)
-    #     print("미들 코어에서 나온",spider_urls)
-    #     mid_core.set_crawler_data(final_crawl_data)
+        # 크롤러 데이터에서 Fuzzer 모듈을 위한 URL 리스트 뽑기 ( 미들 코어에서 )
+        spider_urls=asyncio.run(mid_core.make_url_list(final_crawl_data))
+        # print("스파이더",spider_urls)
+        # print("미들 코어에서 나온",spider_urls)
+        mid_core.set_crawler_data(final_crawl_data)
 
        
         
-    #     progress.update(crawl_task, advance=1, description="[bold red]✔ Crawler 분석 완료")
+        progress.update(crawl_task, advance=1, description="[bold red]✔ Crawler 분석 완료")
         
         
-    #     # 개별 작업 바 생성
-    #     task1 = progress.add_task("[cyan]Nmap 모듈 동작중...", total=1)
-    #     task2 = progress.add_task("[magenta]Fuzzer 모듈 동작중...", total=1)
+        # 개별 작업 바 생성
+        task1 = progress.add_task("[cyan]Nmap 모듈 동작중...", total=1)
+        task2 = progress.add_task("[magenta]Fuzzer 모듈 동작중...", total=1)
         
-    #      # Nmap 모듈 생성
-    #     scanner=ksj_nmap.ksj_nmap.NmapScanner()
+         # Nmap 모듈 생성
+        scanner=ksj_nmap.ksj_nmap.NmapScanner()
 
-    #     # Fuzzer 모듈 생성
-    #     fuzzer=FuzzOrchestrator()
+        # Fuzzer 모듈 생성
+        fuzzer=FuzzOrchestrator()
         
-    #     nmap_data, fuzzer_data = {}, []
+        nmap_data, fuzzer_data = {}, []
 
-    #     try:
-    #         with ThreadPoolExecutor(max_workers=2) as executor:
+        try:
+            with ThreadPoolExecutor(max_workers=2) as executor:
 
-    #             # Nmap 모듈 작동
-    #             future_nmap=executor.submit(scanner.scan,recon_url,nmap_level)
+                # Nmap 모듈 작동
+                future_nmap=executor.submit(scanner.scan,recon_url,nmap_level)
                 
-    #             # Fuzzer 모듈 작동
-    #             future_fuzzer=executor.submit(
-    #                 fuzzer.run,
-    #                 base_url    = recon_url,  # 필수
-    #                 spider_urls = spider_urls,  # 필수 (없으면 [])
-    #                 difficulty  = fuzzer_level,  # 필수: 1(이지) or 2(하드)
-    #             )
+                # Fuzzer 모듈 작동
+                future_fuzzer=executor.submit(
+                    fuzzer.run,
+                    base_url    = recon_url,  # 필수
+                    spider_urls = spider_urls,  # 필수 (없으면 [])
+                    difficulty  = fuzzer_level,  # 필수: 1(이지) or 2(하드)
+                )
 
-    #             # 완료되는 순서대로 처리 (as_completed 사용)
-    #             from concurrent.futures import as_completed
-    #             futures = {future_nmap: "nmap", future_fuzzer: "fuzzer"}
-    #             # futures = {future_nmap: "nmap"}
-    #             for future in as_completed(futures):
-    #                 target = futures[future]
-    #                 result = future.result()
+                # 완료되는 순서대로 처리 (as_completed 사용)
+                from concurrent.futures import as_completed
+                futures = {future_nmap: "nmap", future_fuzzer: "fuzzer"}
+                # futures = {future_nmap: "nmap"}
+                for future in as_completed(futures):
+                    target = futures[future]
+                    result = future.result()
                     
-    #                 if target == "nmap":
-    #                     nmap_data = result
-    #                     print("nmap은",result)
-    #                     progress.update(task1, advance=1, description="[cyan]✔ Nmap 스캔 완료")
-    #                 elif target == "fuzzer":
-    #                     fuzzer_data = result
-    #                     progress.update(task2, advance=1, description="[magenta]✔ Fuzzer 완료")
+                    if target == "nmap":
+                        nmap_data = result
+                        print("nmap은",result)
+                        progress.update(task1, advance=1, description="[cyan]✔ Nmap 스캔 완료")
+                    elif target == "fuzzer":
+                        fuzzer_data = result
+                        progress.update(task2, advance=1, description="[magenta]✔ Fuzzer 완료")
         
-    #     except Exception as e:
-    #         console.print(f"[bold red] KSJ-RECON 실행 중 오류 발생: {e}")
+        except Exception as e:
+            console.print(f"[bold red] KSJ-RECON 실행 중 오류 발생: {e}")
    
-    #     # --- 5. Middle Core로 데이터 통합 ---
-    #     middle_core_task = progress.add_task("[yellow]모듈 데이터 통합 중...", total=1)
+        # --- 5. Middle Core로 데이터 통합 ---
+        middle_core_task = progress.add_task("[yellow]모듈 데이터 통합 중...", total=1)
         
 
-    #     mid_core.set_nmap_data(nmap_data)
-    #     mid_core.set_fuzzer_data(fuzzer_data)
+        mid_core.set_nmap_data(nmap_data)
+        mid_core.set_fuzzer_data(fuzzer_data)
 
-    #     recon_results = mid_core.get_all_recon_results()
-    #     # save_path1 = "C:/Ksj-Recon/KSJ-Recon/output/middle_core_data.txt"
-    #     # asyncio.run(save_to_txt(save_path1, recon_results))
-    #     # print("Recon 데이터 결과")
-    #     # print()
-    #     # print(recon_results)
-    #     print("모듈 통합 데이터 저장 완료")
-    #     progress.update(middle_core_task, advance=1, description="[yellow]✔ 모듈 데이터 통합 완료")
+        recon_results = mid_core.get_all_recon_results()
+
+        print("모듈 통합 데이터 저장 완료")
+        progress.update(middle_core_task, advance=1, description="[yellow]✔ 모듈 데이터 통합 완료")
         if recon_mode=="mode_a":
-            #reporter = LLMReporter()
-            #reporter.generate_dashboard_from_data(recon_results,recon_mode)
+            print("테스트 시작 , mode_a")
+            reporter = LLMReporter()
+            reporter.generate_dashboard_from_data(recon_results,recon_mode)
             end = time.time()
             final_time=end - start
             # mid_core.set_time(final_time)
@@ -332,383 +306,56 @@ if check_Url(recon_url):
             pass
         elif recon_mode=="mode_b":
             print("테스트 시작 , mode_b")
-            pre_data={
-                        "sql_data": {
-                            "target_url": "https://hotspotfan.online/",
-                            "crawler_data": [
-                            {
-                                "name": "page",
-                                "location": "query",
-                                "value": "0"
-                            },
-                            {
-                                "name": "size",
-                                "location": "query",
-                                "value": "60"
-                            },
-                            {
-                                "name": "sort",
-                                "location": "query",
-                                "value": "createdAt,desc"
-                            },
-                            {
-                                "name": "position",
-                                "location": "query",
-                                "value": "MAIN"
-                            },
-                            {
-                                "name": "type",
-                                "location": "query",
-                                "value": "seller"
-                            }
-                            ],
-                            "auth": {
-                            "cookie": "",
-                            "Authorization": "",
-                            "Referer": "",
-                            "Accept-Language": ""
-                            },
-                            "nmap_data": {
-                            "port": "443",
-                            "service": "http",
-                            "version": ""
-                            },
-                            "fuzzer_data": [
-                            "https://hotspotfan.online/api/orders/me",
-                            "https://hotspotfan.online/api/products/:id/comments?page=0&size=20",
-                            "https://hotspotfan.online/api/products?page=0&size=60",
-                            "https://hotspotfan.online/api/orders/seller/me",
-                            "https://hotspotfan.online/api/categories?page=0&size=100",
-                            "https://hotspotfan.online/api/follows/my-followers",
-                            "https://hotspotfan.online/api/products/:id",
-                            "https://hotspotfan.online/api/users/managers/:id",
-                            "https://hotspotfan.online/api/auth/refresh",
-                            "https://hotspotfan.online/api/ranking/realtime?type=seller",
-                            "https://hotspotfan.online/api/ranking/weekly?type=seller",
-                            "https://hotspotfan.online/api/follows/followings?size=20",
-                            "https://hotspotfan.online/api/ranking/daily?type=seller",
-                            "https://hotspotfan.online/api/products?page=0&size=10&sort=createdAt,desc",
-                            "https://hotspotfan.online/api/ranking/monthly?type=seller",
-                            "https://hotspotfan.online/api/banners?position=MAIN",
-                            "https://hotspotfan.online/api/products/:id/likes",
-                            "https://hotspotfan.online/api/cart",
-                            "https://hotspotfan.online/users/admin/me",
-                            "https://hotspotfan.online/manager",
-                            "https://hotspotfan.online/products/:id",
-                            "https://hotspotfan.online/influencer/:id",
-                            "https://hotspotfan.online/search",
-                            "https://hotspotfan.online/ranking",
-                            "https://hotspotfan.online/orders",
-                            "https://hotspotfan.online/seller/upload"
-                            ]
-                        },
-                        "xss_data": {
-                            "base_url": "https://hotspotfan.online/",
-                            "session_id": "",
-                            "token": "",
-                            "login_mock_path": "https://hotspotfan.online/auth",
-                            "spider_urls": [
-                            "https://hotspotfan.online/",
-                            "https://hotspotfan.online/auth",
-                            "https://hotspotfan.online/search",
-                            "https://hotspotfan.online/ranking",
-                            "https://hotspotfan.online/products/:id",
-                            "https://hotspotfan.online/influencer/:id",
-                            "https://hotspotfan.online/seller/upload",
-                            "https://hotspotfan.online/me",
-                            "https://hotspotfan.online/mypage",
-                            "https://hotspotfan.online/users/admin/me",
-                            "https://hotspotfan.online/manager",
-                            "https://hotspotfan.online/obs/widget",
-                            "https://hotspotfan.online/payment/success",
-                            "https://hotspotfan.online/payment/fail",
-                            "https://hotspotfan.online/orders",
-                            "https://hotspotfan.online/cart",
-                            "https://hotspotfan.online/follow-list",
-                            "https://hotspotfan.online/my-followers",
-                            "https://hotspotfan.online/purchase",
-                            "https://hotspotfan.online/api/products?page=0&size=60",
-                            "https://hotspotfan.online/api/products?page=0&size=10&sort=createdAt,desc",
-                            "https://hotspotfan.online/api/categories?page=0&size=100",
-                            "https://hotspotfan.online/api/ranking/weekly?type=seller",
-                            "https://hotspotfan.online/api/banners?position=MAIN",
-                            "https://hotspotfan.online/api/products/:id/comments?page=0&size=20"
-                            ],
-                            "urls": [
-                            {
-                                "url": "https://hotspotfan.online/search",
-                                "method": "GET",
-                                "type": "unknown",
-                                "body": {},
-                                "fields": {},
-                                "safe_to_submit": False,
-                                "cookies": {},
-                                "headers": {},
-                                "priority": "MEDIUM"
-                            },
-                            {
-                                "url": "https://hotspotfan.online/auth",
-                                "method": "GET",
-                                "type": "form",
-                                "body": {},
-                                "fields": {
-                                "username": "",
-                                "password": ""
-                                },
-                                "safe_to_submit": False,
-                                "cookies": {},
-                                "headers": {},
-                                "priority": "HIGH"
-                            },
-                            {
-                                "url": "https://hotspotfan.online/me",
-                                "method": "GET",
-                                "type": "form",
-                                "body": {},
-                                "fields": {
-                                "username": "",
-                                "password": ""
-                                },
-                                "safe_to_submit": False,
-                                "cookies": {},
-                                "headers": {},
-                                "priority": "HIGH"
-                            },
-                            {
-                                "url": "https://hotspotfan.online/mypage",
-                                "method": "GET",
-                                "type": "form",
-                                "body": {},
-                                "fields": {
-                                "username": "",
-                                "password": ""
-                                },
-                                "safe_to_submit": False,
-                                "cookies": {},
-                                "headers": {},
-                                "priority": "HIGH"
-                            },
-                            {
-                                "url": "https://hotspotfan.online/seller/upload",
-                                "method": "GET",
-                                "type": "form",
-                                "body": {},
-                                "fields": {
-                                "username": "",
-                                "password": ""
-                                },
-                                "safe_to_submit": False,
-                                "cookies": {},
-                                "headers": {},
-                                "priority": "HIGH"
-                            },
-                            {
-                                "url": "https://hotspotfan.online/users/admin/me",
-                                "method": "GET",
-                                "type": "form",
-                                "body": {},
-                                "fields": {
-                                "username": "",
-                                "password": ""
-                                },
-                                "safe_to_submit": False,
-                                "cookies": {},
-                                "headers": {},
-                                "priority": "HIGH"
-                            },
-                            {
-                                "url": "https://hotspotfan.online/payment/success",
-                                "method": "GET",
-                                "type": "form",
-                                "body": {},
-                                "fields": {
-                                "username": "",
-                                "password": ""
-                                },
-                                "safe_to_submit": False,
-                                "cookies": {},
-                                "headers": {},
-                                "priority": "MEDIUM"
-                            },
-                            {
-                                "url": "https://hotspotfan.online/api/products?page=0&size=60",
-                                "method": "GET",
-                                "type": "json",
-                                "body": {},
-                                "fields": {
-                                "page": "0",
-                                "size": "60"
-                                },
-                                "safe_to_submit": False,
-                                "cookies": {},
-                                "headers": {},
-                                "priority": "MEDIUM"
-                            },
-                            {
-                                "url": "https://hotspotfan.online/api/products/:id/comments?page=0&size=20",
-                                "method": "GET",
-                                "type": "json",
-                                "body": {},
-                                "fields": {
-                                "page": "0",
-                                "size": "20"
-                                },
-                                "safe_to_submit": False,
-                                "cookies": {},
-                                "headers": {},
-                                "priority": "HIGH"
-                            },
-                            {
-                                "url": "https://hotspotfan.online/api/ranking/weekly?type=seller",
-                                "method": "GET",
-                                "type": "json",
-                                "body": {},
-                                "fields": {
-                                "type": "seller"
-                                },
-                                "safe_to_submit": False,
-                                "cookies": {},
-                                "headers": {},
-                                "priority": "MEDIUM"
-                            }
-                            ],
-                            "stored_targets": [
-                            {
-                                "submit_url": "https://hotspotfan.online/seller/upload",
-                                "view_url": "https://hotspotfan.online/products/:id",
-                                "body": {},
-                                "safe_to_submit": False,
-                                "cookies": {},
-                                "headers": {},
-                                "priority": "HIGH"
-                            },
-                            {
-                                "submit_url": "https://hotspotfan.online/api/products?page=0&size=60",
-                                "view_url": "https://hotspotfan.online/products/:id",
-                                "body": {},
-                                "safe_to_submit": False,
-                                "cookies": {},
-                                "headers": {},
-                                "priority": "HIGH"
-                            },
-                            {
-                                "submit_url": "https://hotspotfan.online/api/products/:id/comments?page=0&size=20",
-                                "view_url": "https://hotspotfan.online/products/:id",
-                                "body": {},
-                                "safe_to_submit": False,
-                                "cookies": {},
-                                "headers": {},
-                                "priority": "HIGH"
-                            }
-                            ],
-                            "options": {
-                            "browser_verify": True,
-                            "stored_xss": True,
-                            "dom_hash_xss": True,
-                            "dom_stored_xss": False,
-                            "timeout": 10,
-                            "verify_tls": False
-                            },
-                            "evidence_dir": "evidence",
-                            "results_dir": "results"
-                        },
-                        "filedown_data": {
-                            "target": {
-                            "url": "https://hotspotfan.online/api/products?page=0&size=60",
-                            "method": "GET",
-                            "params": {
-                                "page": "0",
-                                "size": "60"
-                            },
-                            "data": {},
-                            "headers": {},
-                            "inject_params": [
-                                "page",
-                                "size"
-                            ],
-                            "timeout": 5.0
-                            },
-                            "options": {
-                            "max_workers": 4,
-                            "payload_limit": 3,
-                            "timeout": 10.0,
-                            "verify": False,
-                            "allow_redirects": False,
-                            "proxies": {},
-                            "user_agent": "KSJ-DAST-Scanner/1.0"
-                            }
-                        },
-                        "ssrf_data": {
-                            "target": {
-                            "url": "https://hotspotfan.online/api/banners?position=MAIN",
-                            "method": "GET",
-                            "params": {
-                                "position": "MAIN"
-                            },
-                            "data": {},
-                            "headers": {},
-                            "inject_params": [
-                                "position"
-                            ],
-                            "timeout": 5.0
-                            },
-                            "options": {
-                            "max_workers": 4,
-                            "payload_limit": 3,
-                            "timeout": 10.0,
-                            "verify": False,
-                            "allow_redirects": False,
-                            "proxies": {},
-                            "user_agent": "KSJ-DAST-Scanner/1.0"
-                            }
-                        }
-                        }
-            # preprocess_task = progress.add_task("[bold blue]각 공격 모듈에 맞는 통합 데이터 전처리 중...", total=1)
-            # preprocessor = LLMPreprocessor()
-            # pre_data = preprocessor.generate_preprocess_data(recon_results)
-            # save_path2 = "C:/Ksj-Recon/KSJ-Recon/output/pre_data.txt"
-            # asyncio.run(save_to_txt(save_path2, pre_data))
+            preprocess_task = progress.add_task("[bold blue]각 공격 모듈에 맞는 통합 데이터 전처리 중...", total=1)
+            preprocessor = LLMPreprocessor()
+            pre_data = preprocessor.generate_preprocess_data(recon_results)
             # print("데이터 전처리끝")
             # print()
             # print(pre_data)
-            # progress.update(preprocess_task, advance=1, description="[bold blue]✔ 각 공격 모듈에 맞는 통합 데이터 전처리 완료")
+            progress.update(preprocess_task, advance=1, description="[bold blue]✔ 각 공격 모듈에 맞는 통합 데이터 전처리 완료")
             
             # 공격 모듈에 데이터 넣기
-            # sqli_task = progress.add_task("[bold red]SQLi 모듈 동작중...", total=1)
-            # sql_data = pre_data["sql_data"]
-            # scanInput=ScanInput.from_dict(sql_data)
-            # sql_results =(asyncio.run(run_scan(scanInput))).to_json()
-            # progress.update(sqli_task, advance=1, description="[bold red]✔ SQLi 모듈 동작 완료[/]")
-            # # mid_core.set_sqli_data(sql_results)
+            sqli_task = progress.add_task("[bold red]SQLi 모듈 동작중...", total=1)
+            sql_data = pre_data["sql_data"]
+            scanInput=ScanInput.from_dict(sql_data)
+            sql_results =(asyncio.run(run_scan(scanInput))).to_json()
+            progress.update(sqli_task, advance=1, description="[bold red]✔ SQLi 모듈 동작 완료[/]")
+            mid_core.set_sqli_data(sql_results)
             # print("SQLi 모듈", sql_results)
             
-
-            # xss_data = pre_data["xss_data"]
-            # xss_results=asyncio.run(run_xss_scan(xss_data))
-            # # mid_core.set_xss_data(xss_results)
+            xss_task = progress.add_task("[bold red]XSS 공격 모듈 동작중...", total=1)
+            xss_data = pre_data["xss_data"]
+            xss_results=asyncio.run(run_xss_scan(xss_data))
+            mid_core.set_xss_data(xss_results)
+            progress.update(xss_task, advance=1, description="[bold red]✔ XSS 모듈 동작 완료[/]")
             # print("XSS 모듈", xss_results)
 
             
-            # fileDownloadModule=FileDownloadModule()
-            # # # sSRFModule=SSRFModule()
+            fileDownloadModule=FileDownloadModule()
+            sSRFModule=SSRFModule()
 
-            # filedown_data = pre_data["filedown_data"]
-            # filedownload_results=asyncio.run(FileDownloadModule.run_json(filedown_data))
-            # # # mid_core.set_file_download_data(filedownload_results)
+            filedown_task = progress.add_task("[bold red]File-download 공격 모듈 동작중...", total=1)
+            filedown_data = pre_data["filedown_data"]
+            filedownload_results=asyncio.run(FileDownloadModule.run_json(filedown_data))
+            mid_core.set_file_download_data(filedownload_results)
+            progress.update(filedown_task, advance=1, description="[bold red]✔ File-download 공격 모듈 완료[/]")
             # print("filedownload 모듈", filedownload_results)
 
-            # ssrf_data = pre_data["ssrf_data"]
-            # ssrf_results=asyncio.run(SSRFModule.run_json(ssrf_data))
-            # # mid_core.set_ssrf_data(ssrf_results)
+            ssrf_task = progress.add_task("[bold red]SSRF 공격 모듈 동작중...", total=1)
+            ssrf_data = pre_data["ssrf_data"]
+            ssrf_results=asyncio.run(SSRFModule.run_json(ssrf_data))
+            mid_core.set_ssrf_data(ssrf_results)
+            progress.update(ssrf_task, advance=1, description="[bold red]✔ SSRF 공격 모듈 완료[/]")
             # print("에스에스알에프",ssrf_results)
+            integrated_results=mid_core.get_integrated_results()
+            reporter = LLMReporter()
+            senario_task = progress.add_task("[bold red]공격 시나리오 생성중...", total=1)
+            reporter.generate_dashboard_from_data(integrated_results,recon_mode)
+            progress.update(filedown_task, advance=1, description="[bold red]✔ 공격 시나리오 생성 완료[/]")
             end = time.time()
             final_time=end - start
-            # mid_core.set_time(final_time)
+            mid_core.set_time(final_time)
             console.print(f"[bold magenta]⏱ 소요 시간:[/] [bold cyan]{end - start:.2f}초[/]")
-            # integrated_results=mid_core.get_integrated_results()
-            #reporter = LLMReporter()
-            #reporter.generate_dashboard_from_data(integrated_results,recon_mode)
-            pass
         
 
         #report_task = progress.add_task("[bold blue]LLM 기반 보고서 생성 중...", total=1)

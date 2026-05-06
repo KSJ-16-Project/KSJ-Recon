@@ -14,7 +14,8 @@ class Middle_core:
         os.makedirs(self.output_dir, exist_ok=True)
     
         # 저장될 파일 이름
-        self.save_path = os.path.join(self.output_dir, "full_recon_report.json")
+        self.save_path_recon = os.path.join(self.output_dir, "recon_report.json")
+        self.save_path_senario = os.path.join(self.output_dir, "attack_senario.json")
         # 클래스 내부 메모리에 데이터를 저장할 딕셔너리 초기화
         self.Recon_storage={
             "nmap":None,
@@ -29,7 +30,7 @@ class Middle_core:
             "ssrf": None
         }
 
-        self.integrated_data = {
+        self.Integrated_storage = {
             "scan": self.Recon_storage,
             "attacks": self.Attack_storage,
             "metadata": {
@@ -38,14 +39,24 @@ class Middle_core:
             }
         }
 
-    def save_to_file(self):
+    def save_recon_file(self):
         """Recon_storage 바구니 그대로 파일로 저장"""
         try:
-            with open(self.save_path, 'w', encoding='utf-8') as f:
+            with open(self.save_path_recon, 'w', encoding='utf-8') as f:
                 json.dump(self.Recon_storage, f, ensure_ascii=False, indent=4)
             return True
         except Exception as e:
-            print(f"파일 저장 오류: {e}")
+            print(f"Recon 파일 저장 오류: {e}")
+            return False
+        
+    def save_senario_file(self):
+        """시나리오 생성"""
+        try:
+            with open(self.save_path_senario, 'w', encoding='utf-8') as f:
+                json.dump(self.Integrated_storage, f, ensure_ascii=False, indent=4)
+            return True
+        except Exception as e:
+            print(f"공격 시나리오 파일 저장 오류: {e}")
             return False
         
     # nmap 모듈에서 데이터 받아 내부 저장소에 기록
@@ -82,17 +93,18 @@ class Middle_core:
 
     # 메타 데이터에 시간 설정
     def set_time(self,time_data):
-        self.integrated_data["metadata"]["scan_time"] = time_data
+        self.Integrated_storage["metadata"]["scan_time"] = time_data
     
     def get_all_recon_results(self):
-        self.save_to_file()
+        self.save_recon_file()
         return self.Recon_storage
     
     def get_all_attack_results(self):
         return self.Attack_storage
 
     def get_integrated_results(self):
-        return self.integrated_data
+        self.save_senario_file()
+        return self.Integrated_storage
     
     # 크롤러 데이터에서 Fuzzer 모듈에 줄 URL 리스트 생성
     async def make_url_list(self,final_crawl_data):
