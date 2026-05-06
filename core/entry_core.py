@@ -36,28 +36,28 @@ from ksj_llm.preprocessor import LLMPreprocessor
 # Rich 콘솔 초기화
 console = Console()
 
-async def save_to_txt(target_full_path, content):
-    """
-    target_full_path: 저장할 파일의 전체 경로 (예: 'C:/output/test.txt')
-    content: 저장할 내용 (문자열)
-    """
-    try:
-        # 1. 파일이 저장될 폴더 경로 추출
-        directory = os.path.dirname(target_full_path)
+# async def save_to_txt(target_full_path, content):
+#     """
+#     target_full_path: 저장할 파일의 전체 경로 (예: 'C:/output/test.txt')
+#     content: 저장할 내용 (문자열)
+#     """
+#     try:
+#         # 1. 파일이 저장될 폴더 경로 추출
+#         directory = os.path.dirname(target_full_path)
 
-        # 2. 폴더가 없으면 생성 (exist_ok=True는 이미 폴더가 있어도 에러를 내지 않음)
-        if directory and not os.path.exists(directory):
-            os.makedirs(directory, exist_ok=True)
-            print(f"새로운 디렉토리를 생성했습니다: {directory}")
+#         # 2. 폴더가 없으면 생성 (exist_ok=True는 이미 폴더가 있어도 에러를 내지 않음)
+#         if directory and not os.path.exists(directory):
+#             os.makedirs(directory, exist_ok=True)
+#             print(f"새로운 디렉토리를 생성했습니다: {directory}")
 
-        # 3. 파일 쓰기 (utf-8 인코딩으로 한글 깨짐 방지)
-        with open(target_full_path, 'w', encoding='utf-8') as f:
-            f.write(content)
+#         # 3. 파일 쓰기 (utf-8 인코딩으로 한글 깨짐 방지)
+#         with open(target_full_path, 'w', encoding='utf-8') as f:
+#             f.write(content)
         
-        print(f"성공적으로 파일을 저장했습니다: {target_full_path}")
+#         print(f"성공적으로 파일을 저장했습니다: {target_full_path}")
         
-    except Exception as e:
-        print(f"파일 저장 중 오류 발생: {e}")
+#     except Exception as e:
+#         print(f"파일 저장 중 오류 발생: {e}")
 
 # Url 검사 로직
 def check_Url(recon_url):
@@ -298,6 +298,7 @@ if check_Url(recon_url):
                     
                     if target == "nmap":
                         nmap_data = result
+                        print("nmap은",result)
                         progress.update(task1, advance=1, description="[cyan]✔ Nmap 스캔 완료")
                     elif target == "fuzzer":
                         fuzzer_data = result
@@ -314,27 +315,31 @@ if check_Url(recon_url):
         mid_core.set_fuzzer_data(fuzzer_data)
 
         recon_results = mid_core.get_all_recon_results()
-        save_path1 = "C:/Ksj-Recon/KSJ-Recon/output/middle_core_data.txt"
-        asyncio.run(save_to_txt(save_path1, recon_results))
-        print("Recon 데이터 결과")
-        print()
-        print(recon_results)
+        # save_path1 = "C:/Ksj-Recon/KSJ-Recon/output/middle_core_data.txt"
+        # asyncio.run(save_to_txt(save_path1, recon_results))
+        # print("Recon 데이터 결과")
+        # print()
+        # print(recon_results)
         print("모듈 통합 데이터 저장 완료")
         progress.update(middle_core_task, advance=1, description="[yellow]✔ 모듈 데이터 통합 완료")
         if recon_mode=="mode_a":
             #reporter = LLMReporter()
             #reporter.generate_dashboard_from_data(recon_results,recon_mode)
+            end = time.time()
+            final_time=end - start
+            # mid_core.set_time(final_time)
+            console.print(f"[bold magenta]⏱ 소요 시간:[/] [bold cyan]{end - start:.2f}초[/]")
             pass
         elif recon_mode=="mode_b":
-            preprocess_task = progress.add_task("[bold blue]각 공격 모듈에 맞는 통합 데이터 전처리 중...", total=1)
-            preprocessor = LLMPreprocessor()
-            pre_data = preprocessor.generate_preprocess_data(recon_results)
-            save_path2 = "C:/Ksj-Recon/KSJ-Recon/output/pre_data.txt"
-            asyncio.run(save_to_txt(save_path2, pre_data))
-            print("데이터 전처리끝")
-            print()
-            print(pre_data)
-            progress.update(preprocess_task, advance=1, description="[bold blue]✔ 각 공격 모듈에 맞는 통합 데이터 전처리 완료")
+            # preprocess_task = progress.add_task("[bold blue]각 공격 모듈에 맞는 통합 데이터 전처리 중...", total=1)
+            # preprocessor = LLMPreprocessor()
+            # pre_data = preprocessor.generate_preprocess_data(recon_results)
+            # save_path2 = "C:/Ksj-Recon/KSJ-Recon/output/pre_data.txt"
+            # asyncio.run(save_to_txt(save_path2, pre_data))
+            # print("데이터 전처리끝")
+            # print()
+            # print(pre_data)
+            # progress.update(preprocess_task, advance=1, description="[bold blue]✔ 각 공격 모듈에 맞는 통합 데이터 전처리 완료")
             
             # 공격 모듈에 데이터 넣기
 
@@ -361,11 +366,11 @@ if check_Url(recon_url):
             # ssrf_results=asyncio.run(sSRFModule.run_json(ssrf_data))
             # mid_core.set_ssrf_data(ssrf_results)
             # print("ssrf_result",ssrf_results)
-            end = time.time()
-            final_time=end - start
-            mid_core.set_time(final_time)
-            console.print(f"[bold magenta]⏱ 소요 시간:[/] [bold cyan]{end - start:.2f}초[/]")
-            integrated_results=mid_core.get_integrated_results()
+            # end = time.time()
+            # final_time=end - start
+            # mid_core.set_time(final_time)
+            # console.print(f"[bold magenta]⏱ 소요 시간:[/] [bold cyan]{end - start:.2f}초[/]")
+            # integrated_results=mid_core.get_integrated_results()
             #reporter = LLMReporter()
             #reporter.generate_dashboard_from_data(integrated_results,recon_mode)
             pass

@@ -1,11 +1,20 @@
 # 역할
 # Nmap , Crawler , Fuzzer 모듈에서 데이터 받아오기
-
+import os
+import json
 
 class Middle_core:
 
     #초기화 메서드 
     def __init__(self,target_url):
+        # 1. 경로 설정 (KSJ-RECON/output/ 폴더)
+        current_file = os.path.abspath(__file__)
+        self.project_root = os.path.dirname(os.path.dirname(current_file))
+        self.output_dir = os.path.join(self.project_root, "output")
+        os.makedirs(self.output_dir, exist_ok=True)
+    
+        # 저장될 파일 이름
+        self.save_path = os.path.join(self.output_dir, "full_recon_report.json")
         # 클래스 내부 메모리에 데이터를 저장할 딕셔너리 초기화
         self.Recon_storage={
             "nmap":None,
@@ -28,20 +37,30 @@ class Middle_core:
                 "scan_time": None
             }
         }
-    
+
+    def save_to_file(self):
+        """Recon_storage 바구니 그대로 파일로 저장"""
+        try:
+            with open(self.save_path, 'w', encoding='utf-8') as f:
+                json.dump(self.Recon_storage, f, ensure_ascii=False, indent=4)
+            return True
+        except Exception as e:
+            print(f"파일 저장 오류: {e}")
+            return False
+        
     # nmap 모듈에서 데이터 받아 내부 저장소에 기록
     def set_nmap_data(self, nmap_data):
         self.Recon_storage["nmap"] = nmap_data
 
-
    # crawler 모듈에서 데이터 받아 내부 저장소에 기록
     def set_crawler_data(self, crawler_data):
         self.Recon_storage["crawler"] = crawler_data
-
+       
     
    # fuzzer 모듈에서 데이터 받아 내부 저장소에 기록
     def set_fuzzer_data(self, fuzzer_data):
         self.Recon_storage["fuzzer"] = fuzzer_data
+      
 
     # sqli 모듈에서 데이터 받아 내부 저장소에 기록
     def set_sqli_data(self,sqli_data):
@@ -66,6 +85,7 @@ class Middle_core:
         self.integrated_data["metadata"]["scan_time"] = time_data
     
     def get_all_recon_results(self):
+        self.save_to_file()
         return self.Recon_storage
     
     def get_all_attack_results(self):
