@@ -191,8 +191,8 @@ print()
 
 #검사 시간 측정
 start = time.time()
-
-if check_Url(recon_url):
+#check_Url(recon_url)
+if True:
 
     mid_core = Middle_core(recon_url)
 
@@ -331,27 +331,27 @@ if check_Url(recon_url):
             # print("XSS 모듈", xss_results)
 
             
-            fileDownloadModule=FileDownloadModule()
-            sSRFModule=SSRFModule()
+            # fileDownloadModule=FileDownloadModule()
+            # sSRFModule=SSRFModule()
 
-            filedown_task = progress.add_task("[bold red]File-download 공격 모듈 동작중...", total=1)
-            filedown_data = pre_data["filedown_data"]
-            filedownload_results=asyncio.run(FileDownloadModule.run_json(filedown_data))
-            mid_core.set_file_download_data(filedownload_results)
-            progress.update(filedown_task, advance=1, description="[bold red]✔ File-download 공격 모듈 완료[/]")
-            # print("filedownload 모듈", filedownload_results)
+            # filedown_task = progress.add_task("[bold red]File-download 공격 모듈 동작중...", total=1)
+            # filedown_data = pre_data["filedown_data"]
+            # filedownload_results=asyncio.run(FileDownloadModule.run_json(filedown_data))
+            # mid_core.set_file_download_data(filedownload_results)
+            # progress.update(filedown_task, advance=1, description="[bold red]✔ File-download 공격 모듈 완료[/]")
+            # # print("filedownload 모듈", filedownload_results)
 
-            ssrf_task = progress.add_task("[bold red]SSRF 공격 모듈 동작중...", total=1)
-            ssrf_data = pre_data["ssrf_data"]
-            ssrf_results=asyncio.run(SSRFModule.run_json(ssrf_data))
-            mid_core.set_ssrf_data(ssrf_results)
-            progress.update(ssrf_task, advance=1, description="[bold red]✔ SSRF 공격 모듈 완료[/]")
+            # ssrf_task = progress.add_task("[bold red]SSRF 공격 모듈 동작중...", total=1)
+            # ssrf_data = pre_data["ssrf_data"]
+            # ssrf_results=asyncio.run(SSRFModule.run_json(ssrf_data))
+            # mid_core.set_ssrf_data(ssrf_results)
+            # progress.update(ssrf_task, advance=1, description="[bold red]✔ SSRF 공격 모듈 완료[/]")
             # print("에스에스알에프",ssrf_results)
             integrated_results=mid_core.get_integrated_results()
             reporter = LLMReporter()
             senario_task = progress.add_task("[bold red]공격 시나리오 생성중...", total=1)
             reporter.generate_dashboard_from_data(integrated_results,recon_mode)
-            progress.update(filedown_task, advance=1, description="[bold red]✔ 공격 시나리오 생성 완료[/]")
+            progress.update(senario_task, advance=1, description="[bold red]✔ 공격 시나리오 생성 완료[/]")
             end = time.time()
             final_time=end - start
             mid_core.set_time(final_time)
