@@ -356,6 +356,42 @@ class LLMReporter:
                 return value
         return None
 
+    def _pick_payload_example(self, item):
+        if not isinstance(item, dict):
+            return None
+
+        direct = self._pick_first(item, (
+            "payload_example", "test_payload", "proof_payload", "payload"
+        ))
+        if direct not in (None, "", [], {}):
+            return direct
+
+        payloads = item.get("payloads")
+        if isinstance(payloads, list):
+            examples = []
+            for payload in payloads:
+                if payload in (None, "", [], {}):
+                    continue
+                if isinstance(payload, dict):
+                    value = self._pick_first(payload, (
+                        "payload", "value", "example", "test_payload", "proof_payload"
+                    ))
+                    if value in (None, "", [], {}):
+                        value = payload
+                else:
+                    value = payload
+
+                text = self._truncate_text(value, limit=240)
+                if text:
+                    examples.append(text)
+                if len(examples) >= 3:
+                    break
+
+            if examples:
+                return " | ".join(examples)
+
+        return None
+
     def _extract_attack_items(self, module_data):
         if module_data is None:
             return []
@@ -376,7 +412,7 @@ class LLMReporter:
     def minimize_attack_results(self, attacks: dict):
         """
         공격 모듈 결과를 보고서 근거로 쓰기 좋게 축약한다.
-        대용량 원문 필드와 실행 가능한 공격 코드는 의도적으로 제외한다.
+        대용량 원문 필드는 의도적으로 제외한다.
         """
         if not isinstance(attacks, dict):
             return []
@@ -385,7 +421,7 @@ class LLMReporter:
         excluded_keys = {
             "raw_html", "rendered_html", "html", "body", "content",
             "raw_response", "response_body", "request_body",
-            "payloads", "exploit", "exploit_code",
+            "exploit", "exploit_code",
             "screenshot", "screenshot_path", "saved_path", "run_dir",
             "debug", "logs", "traceback"
         }
@@ -418,9 +454,10 @@ class LLMReporter:
                         "vulnerability": self._pick_first(item, ("vulnerability", "type", "name", "title", "check")),
                         "risk": self._normalize_risk(self._pick_first(item, ("risk", "severity", "level"))),
                         "status": self._normalize_status(item),
-                        "payload_example": self._truncate_text(self._pick_first(item, (
-                            "payload_example", "test_payload", "proof_payload", "payload"
-                        )), limit=500),
+                        "payload_example": self._truncate_text(
+                            self._pick_payload_example(item),
+                            limit=800
+                        ),
                         "evidence": self._truncate_text(self._pick_first(item, (
                             "evidence", "proof", "detail", "details", "message", "reason", "description"
                         ))),
@@ -475,7 +512,8 @@ class LLMReporter:
                 "Prioritize attack module results marked confirmed, vulnerable, success, detected, or equivalent in findings.",
                 "Do not describe inconclusive, failed, not_confirmed, or missing results as confirmed vulnerabilities.",
                 "For attack-module findings, use one category from SQLi, XSS, FileDownload, SSRF, Web, Network, or Other.",
-                "payload_example may be included only when the attack result provides a non-destructive verification example."
+                "For SQLi, XSS, FileDownload, and SSRF findings, include findings[].payload_example when attack_results contains payload_example, test_payload, proof_payload, payload, or payloads.",
+                "Use payload_example only as a short diagnostic verification string copied or summarized from attack_results. Do not invent payloads."
             ],
             "metadata": {
                 "target": metadata.get("target") or input_data.get("target"),
@@ -499,7 +537,9 @@ class LLMReporter:
 - In mode_b, findings[].category may be one of "Network", "Web", "SQLi", "XSS", "FileDownload", "SSRF", or "Other".
 - This category rule overrides the mode_a category restriction from report_prompt.txt.
 - Write all human-readable report fields in Korean.
-- Include payload_example only when the attack result provides a non-destructive verification example; otherwise omit it or use "-".
+- For findings derived from SQLi, XSS, FileDownload, or SSRF attack_results, include findings[].payload_example when a provided payload_example, test_payload, proof_payload, payload, or payloads value exists.
+- payload_example must be copied or briefly summarized from attack_results and must remain a short diagnostic verification string, not a full exploit procedure.
+- If no provided payload exists for a finding, set payload_example to "-".
 - Do not include automated attack code, bypass procedures, destructive steps, or data exfiltration procedures in the final report.
 """
 
