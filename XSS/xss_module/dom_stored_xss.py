@@ -11,8 +11,6 @@ Requires playwright: pip install playwright && playwright install chromium
 from __future__ import annotations
 
 import logging
-from typing import Callable
-
 from .browser_engine import BrowserExecutionEngine
 from .payloads import new_marker
 from .result_builder import ResultBuilder
@@ -25,18 +23,18 @@ class DOMStoredXSSVerifier:
         self,
         targets: list[dict],
         builder: ResultBuilder,
-        auth_refresher: Callable | None = None,
         verify_tls: bool = False,
+        timeout_ms: int = 8000,
         auth_cookies: dict | None = None,
         auth_headers: dict | None = None,
     ):
         self.targets = targets
         self.builder = builder
-        self.auth_refresher = auth_refresher  # reserved for future cookie refresh on 401
         self.verify_tls = verify_tls
         self._auth_cookies = auth_cookies or {}
         self._auth_headers = auth_headers or {}
         self.engine = BrowserExecutionEngine(
+            timeout_ms=timeout_ms,
             verify_tls=verify_tls,
             auth_cookies=self._auth_cookies,
             auth_headers=self._auth_headers,
@@ -74,7 +72,7 @@ class DOMStoredXSSVerifier:
             return []
 
         try:
-            from playwright.sync_api import sync_playwright
+            from playwright.sync_api import sync_playwright as _  # noqa: F401
         except ImportError:
             logger.warning("playwright not installed – dom_stored_xss skipped (pip install playwright && playwright install chromium)")
             self.errors.append(self.builder.error(
@@ -131,9 +129,6 @@ class DOMStoredXSSVerifier:
         ]
 
     def _try_payload(self, browser, url: str, payload: str, cookies: dict, headers: dict, cleanup_marker: str) -> dict | None:
-        # ignore_https_errors reflects the verify_tls option from scanner config
-        ctx = None
-        page = None
         param_name = "form_input"
         trigger_stage = None
         alert_text = None

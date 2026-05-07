@@ -145,7 +145,3 @@ HIGH_VALUE_PARAM_NAMES = {
     "url", "next", "return", "callback", "continue", "page", "path",
 }
 
-DANGEROUS_FORM_HINTS = {
-    "delete", "remove", "logout", "payment", "pay", "withdraw", "reset",
-    "password", "passwd", "admin", "role", "permission", "file", "upload",
-}

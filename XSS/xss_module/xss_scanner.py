@@ -250,7 +250,6 @@ class XSSScanner:
             logger.info("phase: DOM hash XSS")
             dom = DOMHashXSSVerifier(
                 self.targets, self.builder,
-                auth_refresher=self._refresh_auth,
                 verify_tls=bool(self.options.get("verify_tls", False)),
                 auth_cookies={k: v for k, v in self.client.session.cookies.items()},
                 auth_headers=dict(self.client.session.headers),
@@ -264,8 +263,8 @@ class XSSScanner:
             logger.info("phase: DOM stored XSS")
             dom_stored = DOMStoredXSSVerifier(
                 self.targets, self.builder,
-                auth_refresher=self._refresh_auth,
                 verify_tls=bool(self.options.get("verify_tls", False)),
+                timeout_ms=int(self.options["timeout"]) * 1000,
                 auth_cookies={k: v for k, v in self.client.session.cookies.items()},
                 auth_headers=dict(self.client.session.headers),
             )

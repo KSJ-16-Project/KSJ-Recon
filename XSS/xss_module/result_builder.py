@@ -64,6 +64,44 @@ class ResultBuilder:
             "errors": errors,
         }
 
+    def to_llm_payload(self, full_result: dict) -> dict:
+        """Return a minimal subset of full_result for LLM report generation.
+
+        Each finding is reduced to 5-6 fields:
+          url, param, method, context, verified
+          + payload  (when verified=True)
+          + snippet  (when verified=False, as HTTP-level evidence)
+        """
+        slim_findings = []
+        for f in full_result.get("results", []):
+            verified = bool(f.get("browser_verified"))
+            entry: dict = {
+                "url": f.get("url", ""),
+                "param": f.get("param"),
+                "method": f.get("method", "GET"),
+                "context": f.get("context"),
+                "verified": verified,
+            }
+            if verified:
+                entry["payload"] = f.get("payload")
+            else:
+                snippet = (f.get("evidence") or {}).get("snippet")
+                if snippet:
+                    entry["snippet"] = snippet
+            slim_findings.append(entry)
+
+        summary = full_result.get("summary", {})
+        return {
+            "base_url": full_result.get("base_url", ""),
+            "timestamp": full_result.get("timestamp", ""),
+            "summary": {
+                "total_findings": summary.get("total_findings", 0),
+                "verified": summary.get("high", 0),
+                "candidates": summary.get("medium", 0) + summary.get("low", 0),
+            },
+            "findings": slim_findings,
+        }
+
     def finding(self, **kwargs) -> dict:
         return kwargs
 

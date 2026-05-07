@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import html
-import json
 import logging
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
@@ -144,8 +143,6 @@ class BrowserVerifier:
                 detail=detail, verification_status=status,
             ))
             self._write_browser_evidence(finding, triggered, alert_text, payload, url, action)
-        finally:
-            pass
         return triggered, action
 
     # ------------------------------------------------------------------ #
@@ -189,7 +186,6 @@ class BrowserVerifier:
         if param:
             body[param] = payload
 
-        ctx = None
         triggered = False
         alert_text = None
         action = "post_json_fetch" if body_format == "json" else "post_form_submit"
@@ -225,8 +221,6 @@ class BrowserVerifier:
                 detail=detail, verification_status=status,
             ))
             self._write_browser_evidence(finding, triggered, alert_text, payload, url, action)
-        finally:
-            pass
         return triggered, action
 
     def _submit_form_post(self, page, url: str, body: dict) -> None:
@@ -302,7 +296,6 @@ class BrowserVerifier:
         finding.setdefault("evidence", {})["browser_reason"] = "payloads_tested_but_no_alert_hook"
 
     def _try_header_payload(self, browser, url: str, header_name: str, payload: str, finding: dict) -> bool:
-        ctx = None
         triggered = False
         alert_text = None
         try:
@@ -327,8 +320,6 @@ class BrowserVerifier:
                 detail=detail, verification_status=status,
             ))
             self._write_browser_evidence(finding, triggered, alert_text, payload, url, f"header_{header_name}_injected")
-        finally:
-            pass
         return triggered
 
     # ------------------------------------------------------------------ #
@@ -340,7 +331,6 @@ class BrowserVerifier:
         if not url:
             return
 
-        ctx = None
         triggered = False
         alert_text = None
         action = "page_load"
@@ -387,8 +377,6 @@ class BrowserVerifier:
                 detail=detail, verification_status=status,
             ))
             self._write_browser_evidence(finding, triggered, alert_text, payload, url, action)
-        finally:
-            pass
 
     # ------------------------------------------------------------------ #
     #  Helpers                                                             #

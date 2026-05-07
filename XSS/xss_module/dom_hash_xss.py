@@ -8,7 +8,6 @@ window.alert hook trigger.
 from __future__ import annotations
 
 from urllib.parse import urldefrag, quote
-from typing import Callable
 import logging
 
 from .browser_engine import BrowserExecutionEngine
@@ -24,7 +23,6 @@ class DOMHashXSSVerifier:
         targets: list[dict],
         builder: ResultBuilder,
         timeout_ms: int = 8000,
-        auth_refresher: Callable | None = None,
         verify_tls: bool = False,
         auth_cookies: dict | None = None,
         auth_headers: dict | None = None,
@@ -32,7 +30,6 @@ class DOMHashXSSVerifier:
         self.targets = targets
         self.builder = builder
         self.timeout_ms = timeout_ms
-        self.auth_refresher = auth_refresher  # reserved for future cookie refresh on 401
         self.verify_tls = verify_tls
         self._auth_cookies = auth_cookies or {}
         self._auth_headers = auth_headers or {}
@@ -49,7 +46,7 @@ class DOMHashXSSVerifier:
         if not candidate_urls:
             return []
         try:
-            from playwright.sync_api import sync_playwright
+            from playwright.sync_api import sync_playwright as _  # noqa: F401
         except ImportError:
             self.errors.append(self.builder.error(
                 url="", phase="dom_hash", error="playwright_not_installed",

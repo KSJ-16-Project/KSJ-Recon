@@ -5,17 +5,6 @@ from __future__ import annotations
 from contextlib import contextmanager
 from urllib.parse import urlparse
 
-VALID_VERIFICATION_STATUSES = {
-    "verified",
-    "not_triggered",
-    "skipped",
-    "browser_error",
-    "timeout",
-    "auth_failed",
-    "selector_not_found",
-    "submit_failed",
-}
-
 
 class BrowserExecutionEngine:
     def __init__(
@@ -116,20 +105,6 @@ class BrowserExecutionEngine:
         if "401" in lowered or "403" in lowered or "auth" in lowered:
             return "auth_failed", text
         return "browser_error", text
-
-    def error_record(self, *, url: str, phase: str, exc: Exception | str, error: str | None = None) -> dict:
-        if isinstance(exc, Exception):
-            normalized, detail = self.normalize_error(exc)
-        else:
-            normalized, detail = "browser_error", str(exc)
-        return {
-            "url": url,
-            "phase": phase,
-            "error": error or normalized,
-            "detail": detail,
-            "category": normalized,
-            "verification_status": normalized,
-        }
 
     def evidence(
         self,

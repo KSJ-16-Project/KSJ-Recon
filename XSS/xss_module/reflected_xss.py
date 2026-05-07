@@ -13,13 +13,13 @@ import time
 from urllib.parse import urlparse, parse_qs, urlunparse
 
 from .context_analyzer import ContextAnalyzer
-from .csrf import extract_csrf
 from .http_client import HttpClient
 from .payloads import (
     CONTEXT_PAYLOADS, HIGH_VALUE_PARAM_NAMES, SPECIAL_PROBE,
-    WAF_BYPASS_PAYLOADS, WAF_INDICATORS, new_marker,
+    WAF_BYPASS_PAYLOADS, new_marker,
 )
 from .result_builder import ResultBuilder
+from .scanner_base import auth_failed, detect_waf, inject_csrf
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +102,7 @@ class ReflectedXSSScanner:
                 self.errors.append(self.builder.error(url=url, phase="reflected_marker", error="waf_rate_limited", detail="429 after retry", category="waf_block"))
                 return None
 
-        if self._auth_failed(resp):
+        if auth_failed(resp):
             if self.auth_refresher:
                 self.auth_refresher()
                 try:
@@ -110,7 +110,7 @@ class ReflectedXSSScanner:
                 except Exception as e:
                     self.errors.append(self.builder.error(url=url, phase="reflected_marker_retry", error="request_failed", detail=str(e), category="network_error"))
                     return None
-            if self._auth_failed(resp):
+            if auth_failed(resp):
                 self.errors.append(self.builder.error(url=url, phase="reflected_marker", error="auth_failed", detail=f"status={resp.status_code}", category="auth_failed"))
                 return None
 
@@ -122,7 +122,7 @@ class ReflectedXSSScanner:
         analysis.escaped = escaped
         payload = self._select_payload(analysis.context)
         risk, should_verify = self._risk_and_verify(analysis.context, escaped)
-        waf = self._detect_waf(resp)
+        waf = detect_waf(resp)
 
         bypass_payload = None
         if waf and not escaped:
@@ -169,7 +169,7 @@ class ReflectedXSSScanner:
         cookies = target.get("cookies") or {}
         body_format = target.get("body_format", "form")
 
-        self._inject_csrf(url, test_data, headers, cookies, body_format)
+        inject_csrf(self.client, url, test_data, headers, cookies)
 
         try:
             resp = self._post(url, test_data, body_format, headers, cookies)
@@ -181,7 +181,7 @@ class ReflectedXSSScanner:
         if resp.status_code == 429:
             logger.warning("429 rate-limit on %s [%s] – retrying after 2s", url, param)
             time.sleep(2)
-            self._inject_csrf(url, test_data, headers, cookies, body_format)
+            inject_csrf(self.client, url, test_data, headers, cookies)
             try:
                 resp = self._post(url, test_data, body_format, headers, cookies)
             except Exception as e:
@@ -191,16 +191,16 @@ class ReflectedXSSScanner:
                 self.errors.append(self.builder.error(url=url, phase="reflected_post_marker", error="waf_rate_limited", detail="429 after retry", category="waf_block"))
                 return None
 
-        if self._auth_failed(resp):
+        if auth_failed(resp):
             if self.auth_refresher:
                 self.auth_refresher()
-                self._inject_csrf(url, test_data, headers, cookies, body_format)
+                inject_csrf(self.client, url, test_data, headers, cookies)
                 try:
                     resp = self._post(url, test_data, body_format, headers, cookies)
                 except Exception as e:
                     self.errors.append(self.builder.error(url=url, phase="reflected_post_marker_retry", error="request_failed", detail=str(e), category="network_error"))
                     return None
-            if self._auth_failed(resp):
+            if auth_failed(resp):
                 self.errors.append(self.builder.error(url=url, phase="reflected_post_marker", error="auth_failed", detail=f"status={resp.status_code}", category="auth_failed"))
                 return None
 
@@ -213,7 +213,7 @@ class ReflectedXSSScanner:
         payload = self._select_payload(analysis.context)
         # POST XSS uses the same risk/verify logic as GET (4-1 fix)
         risk, should_verify = self._risk_and_verify(analysis.context, escaped)
-        waf = self._detect_waf(resp)
+        waf = detect_waf(resp)
 
         bypass_payload = None
         if waf and not escaped:
@@ -274,7 +274,7 @@ class ReflectedXSSScanner:
 
         payload = self._select_payload(analysis.context)
         risk, should_verify = self._risk_and_verify(analysis.context, escaped=False)
-        waf = self._detect_waf(resp)
+        waf = detect_waf(resp)
 
         logger.info("header reflection: %s [%s] context=%s", url, header_name, analysis.context)
         return self.builder.finding(
@@ -322,7 +322,7 @@ class ReflectedXSSScanner:
                         # 429가 재시도 후에도 유지되면 rate limit이 지속되는 상태이므로
                         # 추가 bypass 탐색을 중단해 대상 서버에 불필요한 요청을 보내지 않는다.
                         break
-                if not self._detect_waf(resp):
+                if not detect_waf(resp):
                     logger.info("WAF bypass candidate found (GET): %s [%s]", url, param)
                     return payload
             except Exception:
@@ -334,12 +334,12 @@ class ReflectedXSSScanner:
         for payload in WAF_BYPASS_PAYLOADS.get(context or "unknown", WAF_BYPASS_PAYLOADS["unknown"]):
             test_data = dict(params)
             test_data[param] = payload
-            self._inject_csrf(url, test_data, headers, cookies, body_format)
+            inject_csrf(self.client, url, test_data, headers, cookies)
             try:
                 resp = self._post(url, test_data, body_format, headers, cookies)
                 if resp.status_code == 429:
                     time.sleep(2)
-                    self._inject_csrf(url, test_data, headers, cookies, body_format)
+                    inject_csrf(self.client, url, test_data, headers, cookies)
                     try:
                         resp = self._post(url, test_data, body_format, headers, cookies)
                     except Exception:
@@ -348,7 +348,7 @@ class ReflectedXSSScanner:
                         # 429가 재시도 후에도 유지되면 rate limit이 지속되는 상태이므로
                         # 추가 bypass 탐색을 중단해 대상 서버에 불필요한 요청을 보내지 않는다.
                         break
-                if not self._detect_waf(resp):
+                if not detect_waf(resp):
                     logger.info("WAF bypass candidate found (POST): %s [%s]", url, param)
                     return payload
             except Exception:
@@ -359,17 +359,6 @@ class ReflectedXSSScanner:
     #  CSRF                                                                #
     # ------------------------------------------------------------------ #
 
-    def _inject_csrf(self, url: str, data: dict, headers: dict, cookies: dict, body_format: str) -> None:
-        """Fetch a fresh CSRF token and inject it into data in-place."""
-        try:
-            resp = self.client.get(url, headers=headers, cookies=cookies)
-            result = extract_csrf(resp.text)
-            if result:
-                field, token = result
-                data[field] = token
-                logger.debug("CSRF token injected: %s", field)
-        except Exception:
-            pass
 
     # ------------------------------------------------------------------ #
     #  Helpers                                                             #
@@ -391,7 +380,7 @@ class ReflectedXSSScanner:
         body_format = target.get("body_format", "form")
         try:
             if method == "POST":
-                self._inject_csrf(target["url"], test_params, headers, cookies, body_format)
+                inject_csrf(self.client, target["url"], test_params, headers, cookies)
                 resp = self._post(url, test_params, body_format, headers, cookies)
             else:
                 resp = self.client.get(url, params=test_params, headers=headers, cookies=cookies)
@@ -430,14 +419,3 @@ class ReflectedXSSScanner:
         parsed = urlparse(url)
         return urlunparse(parsed._replace(query=""))
 
-    def _auth_failed(self, resp) -> bool:
-        if resp.status_code in {401, 403}:
-            return True
-        final = resp.url.lower()
-        return "login" in final or "signin" in final
-
-    def _detect_waf(self, resp) -> bool:
-        if resp.status_code in {403, 406, 429}:
-            return True
-        body = resp.text.lower()
-        return any(ind in body for ind in WAF_INDICATORS)
