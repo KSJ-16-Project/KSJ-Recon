@@ -97,9 +97,13 @@ Return this exact top-level structure:
     "fuzzer_data": []
   },
   "xss_data": {
+    "base_url": "",
+    "headers": {},
+    "cookies": {},
     "spider_urls": [],
     "urls": [],
-    "stored_targets": []
+    "stored_targets": [],
+    "options": {}
   },
   "filedown_data": {
     "target": {
@@ -181,28 +185,57 @@ sql_data.fuzzer_data MUST be an array of URL strings copied from scan_data.fuzze
 Only include URLs or paths that are present in scan_data.
 Do not convert fuzzer_data URLs or route paths into crawler_data parameters unless explicit query/body/header parameter names and values are present.
 
+xss_data MUST contain base_url, headers, cookies, spider_urls, urls, stored_targets, and options.
+xss_data.base_url MUST be copied from crawler.target_url or fuzzer.base_url. If both are missing, use "".
+xss_data.headers and xss_data.cookies MUST be objects copied from scan_data when available. If missing, use {}.
+xss_data.options MUST be an object. If there are no XSS options in scan_data, use {}.
 xss_data.spider_urls MUST be an array of URL strings copied from scan_data only.
-xss_data MUST contain only spider_urls, urls, and stored_targets.
-Do not include base_url, session_id, token, login_mock_path, options, evidence_dir, results_dir, cookies, headers, priority, reason, evidence, or any other metadata in xss_data.
+Include complete GET URLs containing ?param=value for GET Reflected XSS candidates.
+Include URLs containing #fragment for DOM Hash XSS candidates.
+Do not include session_id, token, login_mock_path, evidence_dir, results_dir, priority, reason, evidence, or other metadata in xss_data.
 
-Every xss_data.urls item MUST contain only fields needed by the XSS module:
-- url: string, copied from scan_data only
-- For POST Reflected XSS: method and body.
-- For DOM Stored XSS: type, fields, and safe_to_submit.
-Do not include empty fields or metadata fields.
+Every xss_data.urls item MUST use the new XSS input shape.
+For GET Reflected XSS and GET Form/Workflow Reflected XSS, include:
+- submit_url: string copied from scan_data only
+- method: "GET"
+- body: object containing request parameters copied from scan_data only
+- attack_params: string array containing parameter names from body that should be tested
+Optional fields:
+- view_url, source_url, headers, cookies
 
-xss_data.urls is used for:
-- POST Reflected XSS when method is "POST"
-- DOM Stored XSS when type is "form" and safe_to_submit is true
+For POST Reflected XSS, include:
+- submit_url: string copied from scan_data only
+- method: "POST"
+- body: object containing request body parameters copied from scan_data only
+- attack_params: string array containing parameter names from body that should be tested
+Optional fields:
+- view_url, body_format, headers, cookies
 
-Every xss_data.stored_targets item MUST contain only:
-- submit_url: string, copied from scan_data only
-- view_url: string, copied from scan_data only
-- body: object
-- safe_to_submit: boolean
-Do not include empty fields or metadata fields.
+For DOM Hash XSS, include either a spider_urls URL containing #fragment or a urls item with:
+- type: "dom_hash"
+- submit_url: string copied from scan_data only
+Optional fields:
+- headers, cookies
 
-xss_data.stored_targets is used for Stored XSS.
+For DOM Stored XSS, include a urls item with:
+- type: "form"
+- submit_url: string copied from scan_data only
+- fields: object containing form fields copied from scan_data only
+- attack_params: string array containing field names from fields that should be tested
+- safe_to_submit: true
+Optional fields:
+- view_url, source_url, headers, cookies
+
+Every xss_data.stored_targets item is used for Stored XSS and MUST contain:
+- submit_url: string copied from scan_data only
+- body: object containing request body parameters copied from scan_data only
+- attack_params: string array containing parameter names from body that should be tested
+- view_url: string copied from scan_data only
+- safe_to_submit: true
+Optional fields:
+- method, body_format, headers, cookies
+
+Do not include empty fields or metadata fields inside xss_data.urls or xss_data.stored_targets.
 
 filedown_data.target MUST contain:
 - url: string, copied from scan_data only
