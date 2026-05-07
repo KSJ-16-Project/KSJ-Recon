@@ -1,24 +1,16 @@
 {
   "base_url": "https://xss-game.appspot.com",
+
+  "session_id": "example-session-id",
+  "token": "example-token",
+
   "spider_urls": [
     "https://xss-game.appspot.com/level1/frame?query=test",
     "https://xss-game.appspot.com/level3/frame#1",
     "https://xss-game.appspot.com/level4/frame?timer=3",
     "https://xss-game.appspot.com/level5/frame/signup?next=confirm"
   ],
-  "urls": [
-    {
-      "url": "https://xss-game.appspot.com/level2/frame",
-      "type": "form",
-      "method": "GET",
-      "params": {
-        "content": "test",
-        "action": "sign"
-      },
-      "safe_to_submit": true,
-      "source": "xss-game-level2"
-    }
-  ],
+
   "options": {
     "browser_verify": true,
     "stored_xss": true,
@@ -26,5 +18,14 @@
     "dom_stored_xss": true,
     "timeout": 10,
     "verify_tls": false
-  }
+  },
+
+  "urls": [
+    {
+      "url": "https://xss-game.appspot.com/level2/frame",
+      "method": "GET",
+      "type": "form",
+      "safe_to_submit": true
+    }
+  ]
 }

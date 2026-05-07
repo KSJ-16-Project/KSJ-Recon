@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import html
-import json
 import logging
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
@@ -126,14 +125,23 @@ class BrowserVerifier:
                 self.engine.install_alert_capture(page)
                 page.goto(url, wait_until="domcontentloaded", timeout=self.timeout_ms)
                 self.engine.wait_for_alert_capture(page, timeout_ms=2000)
+                triggered, alert_text = self.engine.read_alert_capture(page)
+
+                view_url = finding.get("view_url")
+                if not triggered and view_url and view_url != finding.get("url"):
+                    url = self._payload_url(view_url, finding["param"], payload)
+                    action = "view_url_page_load"
+                    page.goto(url, wait_until="domcontentloaded", timeout=self.timeout_ms)
+                    self.engine.wait_for_alert_capture(page, timeout_ms=2000)
+                    triggered, alert_text = self.engine.read_alert_capture(page)
 
                 if not triggered and finding.get("context") == "url_context":
                     action = "click_javascript_href"
                     clicked = self._click_javascript_href(page, finding)
                     if clicked:
                         self.engine.wait_for_alert_capture(page, timeout_ms=800)
+                        triggered, alert_text = self.engine.read_alert_capture(page)
 
-                triggered, alert_text = self.engine.read_alert_capture(page)
                 self._write_browser_evidence(finding, triggered, alert_text, payload, url, action)
         except Exception as e:
             status, detail = self.engine.normalize_error(e)
@@ -144,8 +152,6 @@ class BrowserVerifier:
                 detail=detail, verification_status=status,
             ))
             self._write_browser_evidence(finding, triggered, alert_text, payload, url, action)
-        finally:
-            pass
         return triggered, action
 
     # ------------------------------------------------------------------ #
@@ -189,7 +195,6 @@ class BrowserVerifier:
         if param:
             body[param] = payload
 
-        ctx = None
         triggered = False
         alert_text = None
         action = "post_json_fetch" if body_format == "json" else "post_form_submit"
@@ -208,13 +213,23 @@ class BrowserVerifier:
                     self._submit_form_post(page, url, body)
 
                 self.engine.wait_for_alert_capture(page, timeout_ms=2000)
+                triggered, alert_text = self.engine.read_alert_capture(page)
+
+                view_url = finding.get("view_url")
+                if not triggered and view_url and view_url != url:
+                    action += "+view_url_page_load"
+                    page.goto(view_url, wait_until="domcontentloaded", timeout=self.timeout_ms)
+                    url = view_url
+                    self.engine.wait_for_alert_capture(page, timeout_ms=2000)
+                    triggered, alert_text = self.engine.read_alert_capture(page)
+
                 if not triggered and finding.get("context") == "url_context":
                     action += "+click_javascript_href"
                     clicked = self._click_javascript_href(page, finding)
                     if clicked:
                         self.engine.wait_for_alert_capture(page, timeout_ms=800)
+                        triggered, alert_text = self.engine.read_alert_capture(page)
 
-                triggered, alert_text = self.engine.read_alert_capture(page)
                 self._write_browser_evidence(finding, triggered, alert_text, payload, url, action)
         except Exception as e:
             status, detail = self.engine.normalize_error(e)
@@ -225,8 +240,6 @@ class BrowserVerifier:
                 detail=detail, verification_status=status,
             ))
             self._write_browser_evidence(finding, triggered, alert_text, payload, url, action)
-        finally:
-            pass
         return triggered, action
 
     def _submit_form_post(self, page, url: str, body: dict) -> None:
@@ -302,7 +315,6 @@ class BrowserVerifier:
         finding.setdefault("evidence", {})["browser_reason"] = "payloads_tested_but_no_alert_hook"
 
     def _try_header_payload(self, browser, url: str, header_name: str, payload: str, finding: dict) -> bool:
-        ctx = None
         triggered = False
         alert_text = None
         try:
@@ -327,8 +339,6 @@ class BrowserVerifier:
                 detail=detail, verification_status=status,
             ))
             self._write_browser_evidence(finding, triggered, alert_text, payload, url, f"header_{header_name}_injected")
-        finally:
-            pass
         return triggered
 
     # ------------------------------------------------------------------ #
@@ -340,7 +350,6 @@ class BrowserVerifier:
         if not url:
             return
 
-        ctx = None
         triggered = False
         alert_text = None
         action = "page_load"
@@ -387,8 +396,6 @@ class BrowserVerifier:
                 detail=detail, verification_status=status,
             ))
             self._write_browser_evidence(finding, triggered, alert_text, payload, url, action)
-        finally:
-            pass
 
     # ------------------------------------------------------------------ #
     #  Helpers                                                             #

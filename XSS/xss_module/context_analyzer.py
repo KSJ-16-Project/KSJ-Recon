@@ -11,7 +11,7 @@ JavaScript data-flow analysis. It extracts report-friendly evidence:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from html import unescape
 import re
 
@@ -26,8 +26,6 @@ class ContextResult:
     snippet: str = ""
     reason: str = ""
 
-    def to_dict(self) -> dict:
-        return asdict(self)
 
 
 class ContextAnalyzer:

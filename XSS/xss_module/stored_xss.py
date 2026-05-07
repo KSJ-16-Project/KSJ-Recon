@@ -12,10 +12,10 @@ import time
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 
 from .context_analyzer import ContextAnalyzer
-from .csrf import extract_csrf
 from .http_client import HttpClient
-from .payloads import CONTEXT_PAYLOADS, HIGH_VALUE_PARAM_NAMES, SPECIAL_PROBE, WAF_BYPASS_PAYLOADS, WAF_INDICATORS, new_marker
+from .payloads import HIGH_VALUE_PARAM_NAMES, SPECIAL_PROBE, WAF_BYPASS_PAYLOADS, new_marker
 from .result_builder import ResultBuilder
+from .scanner_base import auth_failed, detect_waf, inject_csrf
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ class StoredXSSScanner:
         for i, target in enumerate(candidates):
             params = target.get("params") or {}
             logger.info("[%d/%d] stored scan: %s", i + 1, total, target["url"])
-            for param in self._candidate_params(params):
+            for param in self._candidate_params(target, params):
                 finding = self._test_form(target, params, param)
                 if finding:
                     findings.append(finding)
@@ -100,16 +100,6 @@ class StoredXSSScanner:
         # mismatch when context names are extended.
         return bool(context and context in VERIFIABLE_CONTEXTS)
 
-    def _auth_failed(self, resp) -> bool:
-        if resp.status_code in {401, 403}:
-            return True
-        return "login" in resp.url.lower() or "signin" in resp.url.lower()
-
-    def _detect_waf(self, resp) -> bool:
-        if resp.status_code in {403, 406, 429}:
-            return True
-        body = resp.text.lower()
-        return any(ind in body for ind in WAF_INDICATORS)
 
     def _test_form(self, target: dict, params: dict, param: str) -> dict | None:
         cleanup_marker = new_marker()
@@ -131,7 +121,7 @@ class StoredXSSScanner:
         )
 
         if method == "POST":
-            self._inject_csrf(url, data, req_headers, req_cookies)
+            inject_csrf(self.client, url, data, req_headers, req_cookies)
 
         try:
             submit_resp = self._submit(method, url, data, body_format, req_headers, req_cookies)
@@ -144,7 +134,7 @@ class StoredXSSScanner:
             logger.warning("429 rate-limit on %s [%s] – retrying after 2s", url, param)
             time.sleep(2)
             if method == "POST":
-                self._inject_csrf(url, data, req_headers, req_cookies)
+                inject_csrf(self.client, url, data, req_headers, req_cookies)
             try:
                 submit_resp = self._submit(method, url, data, body_format, req_headers, req_cookies)
             except Exception as e:
@@ -154,21 +144,62 @@ class StoredXSSScanner:
                 self.errors.append(self.builder.error(url=url, phase="stored_submit", error="waf_rate_limited", detail="429 after retry", category="waf_block"))
                 return None
 
-        if self._auth_failed(submit_resp):
+        if auth_failed(submit_resp, original_url=url):
             if self.auth_refresher:
                 self.auth_refresher()
                 if method == "POST":
-                    self._inject_csrf(url, data, req_headers, req_cookies)
+                    inject_csrf(self.client, url, data, req_headers, req_cookies)
                 try:
                     submit_resp = self._submit(method, url, data, body_format, req_headers, req_cookies)
                 except Exception as e:
                     self.errors.append(self.builder.error(url=url, phase="stored_submit_retry", error="request_failed", detail=str(e), category="network_error"))
                     return None
-            if self._auth_failed(submit_resp):
+            if auth_failed(submit_resp, original_url=url):
                 self.errors.append(self.builder.error(url=url, phase="stored_submit", error="auth_failed", detail=f"status={submit_resp.status_code}", category="auth_failed"))
                 return None
 
-        waf = self._detect_waf(submit_resp)
+        waf = detect_waf(submit_resp)
+
+        # POST 응답 자체에 마커가 반영된 경우 먼저 처리 (제출 즉시 같은 페이지에 반영되는 저장형 XSS)
+        submit_analysis = self.analyzer.analyze(submit_resp.text, marker)
+        if submit_analysis.reflected:
+            escaped = self._check_special_encoding(target, params, param, [url], marker)
+            risk = "LOW" if escaped else "MEDIUM"
+            bypass_payload = None
+            if waf and not escaped:
+                bypass_payload = self._find_waf_bypass(target, params, param, submit_analysis.context, req_headers, req_cookies, body_format)
+            return self.builder.finding(
+                type="stored_xss_candidate_limited",
+                url=url,
+                source_url=url,
+                method=method,
+                param=param,
+                marker=marker,
+                reflected=True,
+                context=submit_analysis.context,
+                escaped=escaped,
+                payload=payload,
+                cleanup_marker=cleanup_marker,
+                side_effect_possible=True,
+                stored_xss_submission_warning=STORED_XSS_SUBMISSION_WARNING,
+                browser_verified=False,
+                browser_verification_required=(not escaped) and self._is_verifiable_context(submit_analysis.context),
+                verification_status="skipped",
+                waf_detected=waf,
+                waf_bypass_possible=bypass_payload is not None,
+                waf_bypass_payload=bypass_payload,
+                risk=risk,
+                evidence={
+                    "submit_status": submit_resp.status_code,
+                    "checked_url": url,
+                    "snippet": submit_analysis.snippet,
+                    "reason": f"marker reflected in {method} response body (same-page stored XSS)",
+                    "scope_note": "limited stored XSS check; not a full stored-XSS workflow crawler",
+                    "cleanup_marker": cleanup_marker,
+                    "side_effect_possible": True,
+                    "stored_xss_submission_warning": STORED_XSS_SUBMISSION_WARNING,
+                },
+            )
 
         check_urls = self._check_urls(target, submit_resp.url)
         for check_url in check_urls:
@@ -234,13 +265,13 @@ class StoredXSSScanner:
             test_data = dict(params)
             test_data[param] = payload
             if method == "POST":
-                self._inject_csrf(url, test_data, headers, cookies)
+                inject_csrf(self.client, url, test_data, headers, cookies)
             try:
                 resp = self._submit(method, url, test_data, body_format, headers, cookies)
                 if resp.status_code == 429:
                     time.sleep(2)
                     if method == "POST":
-                        self._inject_csrf(url, test_data, headers, cookies)
+                        inject_csrf(self.client, url, test_data, headers, cookies)
                     try:
                         resp = self._submit(method, url, test_data, body_format, headers, cookies)
                     except Exception:
@@ -249,7 +280,7 @@ class StoredXSSScanner:
                         # Sustained rate limiting means the bypass loop should stop
                         # instead of sending more probes to the target.
                         break
-                if not self._detect_waf(resp):
+                if not detect_waf(resp):
                     logger.info("WAF bypass candidate found (stored): %s [%s]", url, param)
                     return payload
             except Exception:
@@ -260,17 +291,6 @@ class StoredXSSScanner:
     #  CSRF                                                                #
     # ------------------------------------------------------------------ #
 
-    def _inject_csrf(self, url: str, data: dict, headers: dict, cookies: dict) -> None:
-        """Fetch a fresh CSRF token from the form page and inject into data in-place."""
-        try:
-            resp = self.client.get(url, headers=headers, cookies=cookies)
-            result = extract_csrf(resp.text)
-            if result:
-                field, token = result
-                data[field] = token
-                logger.debug("CSRF token injected: %s", field)
-        except Exception:
-            pass
 
     # ------------------------------------------------------------------ #
     #  Helpers                                                             #
@@ -301,7 +321,7 @@ class StoredXSSScanner:
         headers = target.get("headers") or {}
         cookies = target.get("cookies") or {}
         if method == "POST":
-            self._inject_csrf(target["url"], data, headers, cookies)
+            inject_csrf(self.client, target["url"], data, headers, cookies)
         try:
             self._submit(method, target["url"], data, body_format, headers, cookies)
             for url in check_urls:
@@ -323,6 +343,9 @@ class StoredXSSScanner:
                 urls.append(u)
         return urls[:20]
 
-    def _candidate_params(self, params: dict) -> list[str]:
+    def _candidate_params(self, target: dict, params: dict) -> list[str]:
+        requested = [p for p in target.get("attack_params") or [] if p in params]
+        if requested:
+            return requested
         names = [n for n in params.keys() if n.lower() in HIGH_VALUE_PARAM_NAMES]
         return names or list(params.keys())[:2]

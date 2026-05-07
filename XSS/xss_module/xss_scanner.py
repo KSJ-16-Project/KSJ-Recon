@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import atexit
 import json
 import logging
@@ -31,6 +32,8 @@ DEFAULT_OPTIONS = {
     "timeout": 10,
     "verify_tls": False,
     "request_delay": 0.0,   # seconds between HTTP requests; increase to avoid IP blocks
+    "test_attack_params_only": False,
+    "max_params_per_target": 3,
 }
 
 # Global reference for SIGINT handler
@@ -61,6 +64,9 @@ class XSSScanner:
         _current_scanner = self
         self._cookies_refresher = cookies_refresher
 
+        if "xss_data" in input_data and isinstance(input_data["xss_data"], dict):
+            input_data = input_data["xss_data"]
+
         self.input_data = input_data
         self.base_url = self._resolve_base_url(input_data)
         self.options = {**DEFAULT_OPTIONS, **input_data.get("options", {})}
@@ -80,9 +86,6 @@ class XSSScanner:
         self._final_saved: bool = False
         self._auth_applied: bool = False  # set to True when auth credentials are present
 
-        self._login_mock_path: Path | None = (
-            Path(input_data["login_mock_path"]) if input_data.get("login_mock_path") else None
-        )
         self._init_auth(input_data)
 
         # Warn early if no targets were extracted so users can distinguish
@@ -121,47 +124,53 @@ class XSSScanner:
         self._partial_saved = False
 
     def _init_auth(self, input_data: dict) -> None:
-        """Apply auth from input JSON or fall back to login.py."""
+        """Apply auth from input JSON or fall back to ksj_login."""
         session_id = input_data.get("session_id")
         token = input_data.get("token")
-
-        if not session_id and not token:
-            logger.info("no auth in input – trying login.py")
-            try:
-                from .login import get_auth
-                auth = get_auth(self._login_mock_path)
-                session_id = auth.get("session_id")
-                token = auth.get("token")
-                logger.info("auth loaded from login.py")
-            except FileNotFoundError as e:
-                logger.warning("login.py: %s – proceeding without auth", e)
-            except Exception as e:
-                logger.warning("login.py error: %s – proceeding without auth", e)
 
         self.client.update_auth(session_id=session_id, token=token)
         self._auth_applied = bool(session_id or token or input_data.get("cookies"))
 
+        if not self._auth_applied:
+            cookies = self._ksj_get_cookies()
+            if cookies:
+                self.client.update_auth(cookies=cookies)
+                self._auth_applied = True
+
+    def _ksj_get_cookies(self) -> dict | None:
+        """Acquire cookies from ksj_login; returns None if unavailable or failed."""
+        try:
+            import ksj_login
+            if not ksj_login.has_credentials():
+                return None
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                result = ex.submit(lambda: asyncio.run(ksj_login.get_session())).result()
+            if result.success:
+                logger.info("auth acquired from ksj_login")
+                return ksj_login.to_cookie_dict(result.cookies)
+            logger.warning("ksj_login session failed: %s", result.reason)
+        except Exception as e:
+            logger.warning("ksj_login error: %s", e)
+        return None
+
     def _refresh_auth(self) -> None:
-        """Refresh session via cookies_refresher (ksj_login) or fallback to login.py."""
+        """Refresh session via cookies_refresher or ksj_login fallback."""
         if self._cookies_refresher is not None:
             try:
-                new_cookies = self._cookies_refresher()
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                    new_cookies = ex.submit(self._cookies_refresher).result()
                 self.client.update_auth(cookies=new_cookies)
                 logger.info("session refreshed via cookies_refresher")
             except Exception as e:
                 logger.warning("cookies_refresher failed: %s", e)
             return
 
-        try:
-            from .login import get_auth
-            auth = get_auth(self._login_mock_path)
-            self.client.update_auth(
-                session_id=auth.get("session_id"),
-                token=auth.get("token"),
-            )
-            logger.info("session refreshed via login.py")
-        except Exception as e:
-            logger.warning("session refresh failed: %s", e)
+        cookies = self._ksj_get_cookies()
+        if cookies:
+            self.client.update_auth(cookies=cookies)
+            logger.info("session refreshed via ksj_login")
 
     def save_partial(self) -> None:
         if self._final_saved:
@@ -224,6 +233,10 @@ class XSSScanner:
             self.targets, self.client, self.builder,
             auth_refresher=self._refresh_auth,
         )
+        reflected.configure(
+            test_attack_params_only=bool(self.options.get("test_attack_params_only", False)),
+            max_params_per_target=int(self.options.get("max_params_per_target", 3)),
+        )
         results.extend(reflected.scan())
         results.extend(reflected.scan_headers())
         self._set_partial_results(results)
@@ -246,7 +259,6 @@ class XSSScanner:
             logger.info("phase: DOM hash XSS")
             dom = DOMHashXSSVerifier(
                 self.targets, self.builder,
-                auth_refresher=self._refresh_auth,
                 verify_tls=bool(self.options.get("verify_tls", False)),
                 auth_cookies={k: v for k, v in self.client.session.cookies.items()},
                 auth_headers=dict(self.client.session.headers),
@@ -260,8 +272,8 @@ class XSSScanner:
             logger.info("phase: DOM stored XSS")
             dom_stored = DOMStoredXSSVerifier(
                 self.targets, self.builder,
-                auth_refresher=self._refresh_auth,
                 verify_tls=bool(self.options.get("verify_tls", False)),
+                timeout_ms=int(self.options["timeout"]) * 1000,
                 auth_cookies={k: v for k, v in self.client.session.cookies.items()},
                 auth_headers=dict(self.client.session.headers),
             )
