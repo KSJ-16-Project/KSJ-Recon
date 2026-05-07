@@ -71,7 +71,7 @@ _DOM_SELECTOR_JS = """
 
 async def detect_selectors_via_dom(browser: Browser, url: str) -> FormSelectors | None:
     """Playwright로 URL을 직접 방문해 password input 기반으로 FormSelectors를 추론한다.
-    <form> 태그 밖 input도 탐지 가능. networkidle 우선, load 폴백."""
+    <form> 태그 밖 input도 탐지 가능."""
     ctx = None
     try:
         ctx = await browser.new_context(
@@ -79,19 +79,31 @@ async def detect_selectors_via_dom(browser: Browser, url: str) -> FormSelectors 
             user_agent=_UA,
         )
         page = await ctx.new_page()
-        try:
-            await page.goto(url, wait_until="networkidle", timeout=30_000)
-        except PlaywrightTimeoutError:
-            try:
-                await page.goto(url, wait_until="load", timeout=15_000)
-            except PlaywrightError:
-                return None
 
-        # SPA 대응: networkidle 이후에도 컴포넌트 렌더링이 늦을 수 있으므로 추가 대기
+        # domcontentloaded: networkidle보다 빠르게 완료되고 Cloudflare 비콘 등
+        # 지속 요청이 있어도 타임아웃되지 않음
         try:
-            await page.wait_for_selector("input[type='password']", timeout=10_000)
+            await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+        except PlaywrightError:
+            return None
+
+        # SPA 대응: JS 번들 실행 후 React/Vue가 DOM을 그릴 때까지 대기
+        found = False
+        try:
+            await page.wait_for_selector("input[type='password']", timeout=15_000)
+            found = True
         except PlaywrightTimeoutError:
             pass
+
+        # 진단: 폼을 못 찾았을 때 실제 어떤 페이지인지 출력
+        if not found:
+            try:
+                title = await page.title()
+                body_snippet = await page.evaluate("document.body?.innerText?.slice(0,200) ?? ''")
+                print(f"[detect_selectors_via_dom] 폼 미발견 — title: {title!r}, url: {page.url!r}")
+                print(f"[detect_selectors_via_dom] body: {body_snippet!r}")
+            except PlaywrightError:
+                pass
 
         result = await page.evaluate(_DOM_SELECTOR_JS)
         if result:
