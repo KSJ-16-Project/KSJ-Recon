@@ -34,7 +34,8 @@ from XSS.xss_module.xss_scanner import run_xss_scan
 from attacker_module_3.file_download.module import FileDownloadModule
 from attacker_module_3.ssrf.module import SSRFModule
 import ksj_login
-# Rich 콘솔 초기화
+
+
 console = Console()
 
 # Url 검사 로직
@@ -71,6 +72,31 @@ def print_banner():
     ascii_banner = pyfiglet.figlet_format("KSJ-RECON", font="slant")
     console.print(Panel(f"[bold cyan]{ascii_banner}[/bold cyan]", subtitle="[yellow]v1.0.0 - Modular Recon Platform[/yellow]"))
 
+# 병렬로 실행할 작업 정의 (공격 모듈)
+def run_attack_module(module_type, data):
+    """
+    각 스레드에서 독립적으로 실행될 함수
+    """
+    try:
+        if module_type == "sqli":
+            scan_input = ScanInput.from_dict(data)
+            result = asyncio.run(run_scan(scan_input))
+            return "sqli", result.to_json()
+        
+        elif module_type == "xss":
+            result = asyncio.run(run_xss_scan(data))
+            return "xss", result
+            
+        elif module_type == "filedown":
+            result = asyncio.run(FileDownloadModule.run_json(data))
+            return "filedown", result
+            
+        elif module_type == "ssrf":
+            result = asyncio.run(SSRFModule.run_json(data))
+            return "ssrf", result
+            
+    except Exception as e:
+        raise Exception(f"{module_type} 실행 실패: {str(e)}")
 
 # level 1 -> nmap low , fuzzer low
 # level 2 -> nmap hard , fuzzer low
@@ -173,7 +199,6 @@ user_password=""
 if login_choice == 1:
     login_explain = "로그인 정보 입력 완료"
     # URL 입력
-    # 반복문 써야 될듯?
     console.print("\n[bold yellow]로그인 페이지 URL를 입력하세요[/bold yellow]")
     login_url= sys.stdin.readline().strip()
     console.print("\n[bold yellow]아이디를 입력하세요[/bold yellow]")
@@ -273,7 +298,6 @@ if check_Url(recon_url):
                     
                     if target == "nmap":
                         nmap_data = result
-                        print("nmap은",result)
                         progress.update(task1, advance=1, description="[cyan]✔ Nmap 스캔 완료")
                     elif target == "fuzzer":
                         fuzzer_data = result
@@ -307,49 +331,61 @@ if check_Url(recon_url):
             preprocess_task = progress.add_task("[bold blue]각 공격 모듈에 맞는 통합 데이터 전처리 중...", total=1)
             preprocessor = LLMPreprocessor()
             pre_data = preprocessor.generate_preprocess_data(recon_results)
-            # print("데이터 전처리끝")
-            # print()
-            # print(pre_data)
+            preprocessor.save_preprocess_data(pre_data)
             progress.update(preprocess_task, advance=1, description="[bold blue]✔ 각 공격 모듈에 맞는 통합 데이터 전처리 완료")
-            
-            # 공격 모듈에 데이터 넣기
-            sqli_task = progress.add_task("[bold red]SQLi 모듈 동작중...", total=1)
-            sql_data = pre_data["sql_data"]
-            scanInput=ScanInput.from_dict(sql_data)
-            sql_results =(asyncio.run(run_scan(scanInput))).to_json()
-            progress.update(sqli_task, advance=1, description="[bold red]✔ SQLi 모듈 동작 완료[/]")
-            mid_core.set_sqli_data(sql_results)
-            # print("SQLi 모듈", sql_results)
-            
-            xss_task = progress.add_task("[bold red]XSS 공격 모듈 동작중...", total=1)
-            xss_data = pre_data["xss_data"]
-            xss_results=asyncio.run(run_xss_scan(xss_data))
-            mid_core.set_xss_data(xss_results)
-            progress.update(xss_task, advance=1, description="[bold red]✔ XSS 모듈 동작 완료[/]")
-            # print("XSS 모듈", xss_results)
 
+          
+            try:
+                # 2. Rich Progress Task 생성 (4개 모듈)
+                sqli_task = progress.add_task("[bold red]SQLi 모듈 동작중...", total=1)
+                xss_task = progress.add_task("[bold yellow]XSS 모듈 동작중...", total=1)
+                fd_task = progress.add_task("[bold magenta]File-Download 모듈 동작중...", total=1)
+                ssrf_task = progress.add_task("[bold cyan]SSRF 모듈 동작중...", total=1)
+
+                # 3. ThreadPoolExecutor (작업자가 4명이면 동시에 4개가 돌아갑니다)
+                with ThreadPoolExecutor(max_workers=4) as executor:
+                    # 작업 제출 및 매핑
+                    future_to_task = {
+                        executor.submit(run_attack_module, "sqli", pre_data["sql_data"]): sqli_task,
+                        executor.submit(run_attack_module, "xss", pre_data["xss_data"]): xss_task,
+                        executor.submit(run_attack_module, "filedown", pre_data["filedown_data"]): fd_task,
+                        executor.submit(run_attack_module, "ssrf", pre_data["ssrf_data"]): ssrf_task
+                    }
+
+                    # 4. 결과가 완료되는 순서대로 처리
+                    for future in as_completed(future_to_task):
+                        task_id = future_to_task[future]
+                        try:
+                            module_type, results = future.result()
+                            
+                            if module_type == "sqli":
+                                mid_core.set_sqli_data(results)
+                                progress.update(task_id, advance=1, description="[bold red]✔ SQLi 완료[/]")
+                            
+                            elif module_type == "xss":
+                                mid_core.set_xss_data(results)
+                                progress.update(task_id, advance=1, description="[bold yellow]✔ XSS 완료[/]")
+                            
+                            elif module_type == "filedown":
+                                mid_core.set_file_download_data(results)
+                                progress.update(task_id, advance=1, description="[bold magenta]✔ File-Download 완료[/]")
+                            
+                            elif module_type == "ssrf":
+                                mid_core.set_ssrf_data(results)
+                                progress.update(task_id, advance=1, description="[bold cyan]✔ SSRF 완료[/]")
+                        
+                        except Exception as exc:
+                            console.print(f"[bold red] 오류 발생: {exc}")
+                            progress.update(task_id, description="[bold red]✘ 모듈 에러[/]")
+
+            except Exception as e:
+                console.print(f"[bold red] 병렬 공격 프로세스 치명적 오류: {e}")
             
-            fileDownloadModule=FileDownloadModule()
-            sSRFModule=SSRFModule()
-
-            filedown_task = progress.add_task("[bold red]File-download 공격 모듈 동작중...", total=1)
-            filedown_data = pre_data["filedown_data"]
-            filedownload_results=asyncio.run(FileDownloadModule.run_json(filedown_data))
-            mid_core.set_file_download_data(filedownload_results)
-            progress.update(filedown_task, advance=1, description="[bold red]✔ File-download 공격 모듈 완료[/]")
-            # print("filedownload 모듈", filedownload_results)
-
-            ssrf_task = progress.add_task("[bold red]SSRF 공격 모듈 동작중...", total=1)
-            ssrf_data = pre_data["ssrf_data"]
-            ssrf_results=asyncio.run(SSRFModule.run_json(ssrf_data))
-            mid_core.set_ssrf_data(ssrf_results)
-            progress.update(ssrf_task, advance=1, description="[bold red]✔ SSRF 공격 모듈 완료[/]")
-            # print("에스에스알에프",ssrf_results)
             integrated_results=mid_core.get_integrated_results()
             reporter = LLMReporter()
             senario_task = progress.add_task("[bold red]공격 시나리오 생성중...", total=1)
             reporter.generate_dashboard_from_data(integrated_results,recon_mode)
-            progress.update(filedown_task, advance=1, description="[bold red]✔ 공격 시나리오 생성 완료[/]")
+            progress.update(senario_task, advance=1, description="[bold red]✔ 공격 시나리오 생성 완료[/]")
             end = time.time()
             final_time=end - start
             mid_core.set_time(final_time)
