@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+from urllib.parse import parse_qs, urlparse
 
 from playwright.async_api import (
     Browser,
@@ -44,6 +45,26 @@ _MAX_RESPONSE_BYTES = 5 * 1024 * 1024
 
 def _redact(text: str) -> str:
     return _JWT_RE.sub("[REDACTED:JWT]", text)
+
+
+def _parse_params(url: str, post_data: str) -> dict:
+    params: dict = {}
+    qs = urlparse(url).query
+    if qs:
+        parsed = parse_qs(qs)
+        params.update({k: v[0] if len(v) == 1 else v for k, v in parsed.items()})
+    if post_data:
+        try:
+            body = json.loads(post_data)
+            if isinstance(body, dict):
+                params.update(body)
+        except (json.JSONDecodeError, ValueError):
+            try:
+                parsed = parse_qs(post_data)
+                params.update({k: v[0] if len(v) == 1 else v for k, v in parsed.items()})
+            except Exception:
+                pass
+    return params
 
 
 def _is_body_capturable(mime: str) -> bool:
@@ -181,6 +202,7 @@ async def _run(
                 method=req.method,
                 resource_type=req.resource_type,
                 post_data=post_data[:_BODY_LIMIT],
+                params=_parse_params(req.url, post_data),
             ))
 
         page.on("request", on_request)

@@ -75,7 +75,17 @@ async def perform_login(
                               error=f"폼 입력 실패: {e}")
 
         # 3. dialog 핸들러 등록 (alert/confirm 자동 수락) + 제출
-        page.on("dialog", lambda d: asyncio.ensure_future(d.accept()))
+        async def _handle_dialog(d):
+            try:
+                await d.accept()
+            except Exception:
+                pass
+
+        def _on_dialog(d):
+            t = asyncio.ensure_future(_handle_dialog(d))
+            t.add_done_callback(lambda f: f.exception() if not f.cancelled() else None)
+
+        page.on("dialog", _on_dialog)
         before_url = page.url
         try:
             await _submit_login_form(page, selectors)
@@ -100,7 +110,7 @@ async def perform_login(
             return AuthResult(success=False, attempted=True, login_url=login_url,
                               final_url=page.url,
                               reason="login_failed",
-                              error=f"로그인 실패 (성공 조건 미충족) — before={before_url!r}, after={page.url!r}")
+                              error="로그인 실패 (성공 조건 미충족)")
 
         # 6. 쿠키 수집 (Playwright dict 포맷 그대로 반환)
         cookies = await ctx.cookies()

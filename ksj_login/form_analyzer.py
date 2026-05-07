@@ -2,23 +2,9 @@
 
 from __future__ import annotations
 
-import sys
-
 from playwright.async_api import Browser, Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
 
 from .models import FormSelectors
-
-
-def _dbg(*args) -> None:
-    print(*args, file=sys.stderr, flush=True)
-
-
-# detect_selectors_via_dom 실패 시 이유를 저장 — credentials.py가 AuthResult.error에 포함
-_detection_failure_reason: str = ""
-
-
-def get_detection_failure_reason() -> str:
-    return _detection_failure_reason
 
 
 _USERNAME_KEYWORDS = (
@@ -83,46 +69,41 @@ _DOM_SELECTOR_JS = """
 """
 
 
-_DEBUG_LOG = "/tmp/ksj_dom_debug.txt"
-
-
-def _log(msg: str) -> None:
-    _dbg(msg)
-    with open(_DEBUG_LOG, "a", encoding="utf-8") as f:
-        f.write(msg + "\n")
-
-
 async def detect_selectors_via_dom(browser: Browser, url: str) -> FormSelectors | None:
     """Playwright로 URL을 직접 방문해 password input 기반으로 FormSelectors를 추론한다.
     <form> 태그 밖 input도 탐지 가능."""
-    global _detection_failure_reason
     ctx = None
     try:
         ctx = await browser.new_context(
             ignore_https_errors=True,
             user_agent=_UA,
-            extra_http_headers={"Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8"},
         )
         page = await ctx.new_page()
-        await page.add_init_script(
-            "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})"
-        )
 
+        # domcontentloaded: networkidle보다 빠르게 완료되고 Cloudflare 비콘 등
+        # 지속 요청이 있어도 타임아웃되지 않음
         try:
             await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-        except PlaywrightError as e:
-            _detection_failure_reason = f"페이지 로딩 실패: {e}"
+        except PlaywrightError:
             return None
 
+        # SPA 대응: JS 번들 실행 후 React/Vue가 DOM을 그릴 때까지 대기
+        found = False
         try:
             await page.wait_for_selector("input[type='password']", timeout=15_000)
+            found = True
         except PlaywrightTimeoutError:
-            title = await page.title()
-            body_snippet = await page.evaluate("document.body?.innerText?.slice(0, 200) ?? ''")
-            _detection_failure_reason = (
-                f"password input 미발견 — title={title!r}, url={page.url!r}, body={body_snippet!r}"
-            )
-            return None
+            pass
+
+        # 진단: 폼을 못 찾았을 때 실제 어떤 페이지인지 출력
+        if not found:
+            try:
+                title = await page.title()
+                body_snippet = await page.evaluate("document.body?.innerText?.slice(0,200) ?? ''")
+                print(f"[detect_selectors_via_dom] 폼 미발견 — title: {title!r}, url: {page.url!r}")
+                print(f"[detect_selectors_via_dom] body: {body_snippet!r}")
+            except PlaywrightError:
+                pass
 
         result = await page.evaluate(_DOM_SELECTOR_JS)
         if result:
@@ -131,10 +112,8 @@ async def detect_selectors_via_dom(browser: Browser, url: str) -> FormSelectors 
                 password=result["password"],
                 submit=_SUBMIT_SELECTOR,
             )
-        _detection_failure_reason = "JS 셀렉터 추론 실패 (password input 있으나 username 없음)"
         return None
-    except (PlaywrightError, Exception) as e:
-        _detection_failure_reason = f"{type(e).__name__}: {e}"
+    except (PlaywrightError, Exception):
         return None
     finally:
         if ctx is not None:

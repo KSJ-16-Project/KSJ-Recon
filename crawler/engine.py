@@ -4,7 +4,7 @@ import asyncio
 import json
 import time
 from collections import deque
-from urllib.parse import urljoin, urlparse, urlunparse
+from urllib.parse import parse_qs, urljoin, urlparse, urlunparse
 
 from playwright.async_api import Browser
 
@@ -24,6 +24,7 @@ from crawler.parser import (
     extract_scripts,
     extract_url_params,
 )
+from crawler.post_scanner import scan_post_requests
 from crawler.sitemap import fetch_robots, fetch_sitemap, fetch_url
 
 
@@ -63,8 +64,9 @@ async def _crawl_with_browser(browser: Browser, config: CrawlerConfig) -> CrawlR
 
     if ksj_login.has_credentials():
         auth_result = await ksj_login.get_session()
+        result.auth = auth_result
         if auth_result.success:
-            result.auth = auth_result
+
             auth_pages, _, _, auth_errors = await _crawl_once(
                 browser,
                 config,
@@ -167,6 +169,9 @@ async def _crawl_once(
 
             page = _snapshot_from_raw(item[0], item[1], config.target_url)
             await _enrich_from_scripts(page, config, js_cache)
+            post_hints = await scan_post_requests(browser, page, config, cookies=cookies)
+            if post_hints:
+                page.endpoint_hints = _dedupe_endpoints([*page.endpoint_hints, *post_hints])
             pages.append(page)
 
             if page.depth < config.max_depth:
@@ -220,6 +225,7 @@ def _snapshot_from_raw(raw: RawPageData, depth: int, target_url: str) -> PageSna
             method=x.method,
             source=x.resource_type or "xhr",
             page_url=raw.url,
+            params=x.params,
         )
         for x in raw.xhr_list
     ]
@@ -301,11 +307,14 @@ async def _enrich_from_scripts(
 
         for endpoint in extract_endpoints(js_body):
             full = _normalise_url(config.target_url, urljoin(page.url, endpoint))
+            qs = urlparse(full).query
+            params = {k: v[0] if len(v) == 1 else v for k, v in parse_qs(qs).items()} if qs else {}
             hint = EndpointHint(
                 url=full,
                 method="GET",
                 source="js-static",
                 page_url=page.url,
+                params=params,
             )
             if _is_endpoint_in_scope(full, config.target_url):
                 hints.append(hint)
