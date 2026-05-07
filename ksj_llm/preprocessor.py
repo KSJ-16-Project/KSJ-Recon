@@ -359,13 +359,29 @@ Keep JSON keys and enum values in English.
         return options
 
     def _normalize_sql_param(self, item):
-        param = self._as_dict(item).copy()
-        param["name"] = self._as_str(param.get("name"))
-        param["location"] = self._as_str(param.get("location") or "unknown")
-        if param["location"] not in ("query", "body", "path", "header", "unknown"):
-            param["location"] = "unknown"
-        param["value"] = self._as_str(param.get("value"))
-        return param
+        param = self._as_dict(item)
+        location = self._as_str(param.get("location") or "unknown").lower()
+        if location == "param":
+            location = "query"
+        if location not in ("query", "body", "header", "unknown"):
+            location = "unknown"
+
+        return {
+            "name": self._as_str(param.get("name")),
+            "location": location,
+            "value": self._as_str(param.get("value"))
+        }
+
+    def _is_valid_sql_param(self, item):
+        param = self._as_dict(item)
+        location = self._as_str(param.get("location") or "unknown").lower()
+        if location == "param":
+            location = "query"
+        if location == "path":
+            return False
+        if location not in ("query", "body", "header", "unknown"):
+            return False
+        return bool(self._as_str(param.get("name")).strip())
 
     def _normalize_xss_url(self, item):
         target = self._as_dict(item).copy()
@@ -456,6 +472,7 @@ Keep JSON keys and enum values in English.
                 "crawler_data": [
                     self._normalize_sql_param(item)
                     for item in self._as_list(sql_data.get("crawler_data"))
+                    if self._is_valid_sql_param(item)
                 ],
                 "auth": {
                     "cookie": self._as_str(auth.get("cookie")),
