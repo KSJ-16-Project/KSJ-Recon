@@ -87,6 +87,12 @@ async def detect_selectors_via_dom(browser: Browser, url: str) -> FormSelectors 
             except PlaywrightError:
                 return None
 
+        # SPA 대응: networkidle 이후에도 컴포넌트 렌더링이 늦을 수 있으므로 추가 대기
+        try:
+            await page.wait_for_selector("input[type='password']", timeout=10_000)
+        except PlaywrightTimeoutError:
+            pass
+
         result = await page.evaluate(_DOM_SELECTOR_JS)
         if result:
             return FormSelectors(
