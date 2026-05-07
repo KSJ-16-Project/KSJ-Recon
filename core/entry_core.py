@@ -33,6 +33,7 @@ from sql_injection.scanner import  run_scan,ScanInput
 from XSS.xss_module.xss_scanner import run_xss_scan
 from attacker_module_3.file_download.module import FileDownloadModule
 from attacker_module_3.ssrf.module import SSRFModule
+import ksj_login
 # Rich 콘솔 초기화
 console = Console()
 
@@ -172,11 +173,15 @@ user_password=""
 if login_choice == 1:
     login_explain = "로그인 정보 입력 완료"
     # URL 입력
+    # 반복문 써야 될듯?
+    console.print("\n[bold yellow]로그인 페이지 URL를 입력하세요[/bold yellow]")
+    login_url= sys.stdin.readline().strip()
     console.print("\n[bold yellow]아이디를 입력하세요[/bold yellow]")
     user_id = sys.stdin.readline().strip()
     console.print("\n[bold yellow]패스워드를 입력하세요[/bold yellow]")
     user_password = sys.stdin.readline().strip()
     print()
+    
 else:
     login_explain = "로그인이 필요하지 않은 도메인입니다."
 
@@ -191,8 +196,8 @@ print()
 
 #검사 시간 측정
 start = time.time()
-#check_Url(recon_url)
-if True:
+
+if check_Url(recon_url):
 
     mid_core = Middle_core(recon_url)
 
@@ -204,19 +209,12 @@ if True:
         
         
         if login_choice==1:
-            # 로그인이 필요한 도메인이면
-            config = CrawlerConfig(
-                target_url=recon_url, # check_isOrder에서 검증된 url
-                auth = AuthConfig(
-                    username = user_id,
-                    password = user_password,
-                )
-            )
-        else:
-            # Crawler 설정 (config 생성)
-            config = CrawlerConfig(
-                target_url=recon_url # check_isOrder에서 검증된 url
-            )
+            ksj_login.store_credentials(login_url, user_id, user_password)
+            
+        # Crawler 설정 (config 생성)
+        config = CrawlerConfig(
+            target_url=recon_url # check_isOrder에서 검증된 url
+        )
 
 
         # Crawler 전용 프로그레스 바
@@ -331,27 +329,27 @@ if True:
             # print("XSS 모듈", xss_results)
 
             
-            # fileDownloadModule=FileDownloadModule()
-            # sSRFModule=SSRFModule()
+            fileDownloadModule=FileDownloadModule()
+            sSRFModule=SSRFModule()
 
-            # filedown_task = progress.add_task("[bold red]File-download 공격 모듈 동작중...", total=1)
-            # filedown_data = pre_data["filedown_data"]
-            # filedownload_results=asyncio.run(FileDownloadModule.run_json(filedown_data))
-            # mid_core.set_file_download_data(filedownload_results)
-            # progress.update(filedown_task, advance=1, description="[bold red]✔ File-download 공격 모듈 완료[/]")
-            # # print("filedownload 모듈", filedownload_results)
+            filedown_task = progress.add_task("[bold red]File-download 공격 모듈 동작중...", total=1)
+            filedown_data = pre_data["filedown_data"]
+            filedownload_results=asyncio.run(FileDownloadModule.run_json(filedown_data))
+            mid_core.set_file_download_data(filedownload_results)
+            progress.update(filedown_task, advance=1, description="[bold red]✔ File-download 공격 모듈 완료[/]")
+            # print("filedownload 모듈", filedownload_results)
 
-            # ssrf_task = progress.add_task("[bold red]SSRF 공격 모듈 동작중...", total=1)
-            # ssrf_data = pre_data["ssrf_data"]
-            # ssrf_results=asyncio.run(SSRFModule.run_json(ssrf_data))
-            # mid_core.set_ssrf_data(ssrf_results)
-            # progress.update(ssrf_task, advance=1, description="[bold red]✔ SSRF 공격 모듈 완료[/]")
+            ssrf_task = progress.add_task("[bold red]SSRF 공격 모듈 동작중...", total=1)
+            ssrf_data = pre_data["ssrf_data"]
+            ssrf_results=asyncio.run(SSRFModule.run_json(ssrf_data))
+            mid_core.set_ssrf_data(ssrf_results)
+            progress.update(ssrf_task, advance=1, description="[bold red]✔ SSRF 공격 모듈 완료[/]")
             # print("에스에스알에프",ssrf_results)
             integrated_results=mid_core.get_integrated_results()
             reporter = LLMReporter()
             senario_task = progress.add_task("[bold red]공격 시나리오 생성중...", total=1)
             reporter.generate_dashboard_from_data(integrated_results,recon_mode)
-            progress.update(senario_task, advance=1, description="[bold red]✔ 공격 시나리오 생성 완료[/]")
+            progress.update(filedown_task, advance=1, description="[bold red]✔ 공격 시나리오 생성 완료[/]")
             end = time.time()
             final_time=end - start
             mid_core.set_time(final_time)
