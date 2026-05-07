@@ -204,7 +204,7 @@ async def send_probe(
 
         # 인증 만료 감지: auth가 제공된 상태에서 401/403이면 세션 만료로 간주.
         # auth가 비어있으면 만료 개념 없음 (공개 페이지)
-        auth_expired = bool(auth) and resp.status_code in (401, 403)
+        auth_expired = bool(auth) and resp.status_code in (401, 403, 302)
 
         return ProbeLog(
             param=param.name,
@@ -236,7 +236,7 @@ async def send_probes_concurrent(
     method: str = "GET",
 ) -> list[ProbeLog]:
     """파라미터 × 페이로드 전체 조합을 동시에 전송한다."""
-    async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT, follow_redirects=False) as client:
         csrf_tokens: dict[str, str] = {}
 
         # POST 전 현재 세션으로 페이지를 GET해 최신 CSRF 토큰을 취득한다.

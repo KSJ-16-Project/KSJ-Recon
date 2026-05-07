@@ -173,7 +173,7 @@ async def extract_version(
     # 주입 가능한 파라미터 중 첫 번째만 사용 (버전 추출은 단일 파라미터로 충분)
     param = params[0]
 
-    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
         baseline_status, baseline_length = await _fetch_baseline(
             client, url, params, auth, method
         )
