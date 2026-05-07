@@ -108,14 +108,18 @@ async def _safe(element) -> bool:
       - 레이블에 _BLOCKED_TERMS 키워드가 포함된다
       - type="submit" 인 버튼 (폼 제출 방지)
     """
-    if await element.is_disabled():
-        return False
-    label = await _label(element)
-    if any(term in label for term in _BLOCKED_TERMS):
-        return False
-    tag = await element.evaluate("el => el.tagName.toLowerCase()")
-    el_type = (await element.get_attribute("type") or "").lower()
-    if tag == "button" and el_type == "submit":
+    from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+    try:
+        if await element.is_disabled(timeout=3000):
+            return False
+        label = await _label(element)
+        if any(term in label for term in _BLOCKED_TERMS):
+            return False
+        tag = await element.evaluate("el => el.tagName.toLowerCase()", timeout=3000)
+        el_type = (await element.get_attribute("type", timeout=3000) or "").lower()
+        if tag == "button" and el_type == "submit":
+            return False
+    except PlaywrightTimeoutError:
         return False
     return True
 

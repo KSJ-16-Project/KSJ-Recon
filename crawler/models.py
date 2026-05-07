@@ -34,7 +34,7 @@ class CrawlerConfig:
     max_pages: int = 30
     concurrency: int = 4
     timeout: int = 30
-    render_wait: int = 1000
+    render_wait: int = 500
     scan_budget: int = 600
     path_depth_limit: int = 12
     query_variants_limit: int = 3
@@ -47,6 +47,7 @@ class EndpointHint:
     method: str = "GET"
     source: str = ""
     page_url: str = ""
+    params: dict = field(default_factory=dict)
 
 
 @dataclass

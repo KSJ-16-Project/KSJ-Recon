@@ -53,14 +53,17 @@ def _render_text(result: CrawlResult, target_url: str)->None:
     print(bar)
 
     if result.auth is not None:
+        a = result.auth
         print()
         print("  Auth")
-        print(f"    Attempted   {result.auth.attempted}")
-        print(f"    Success     {result.auth.success}")
-        print(f"    Reason      {result.auth.reason}")
-        print(f"    Login URL   {result.auth.login_url}")
-        print(f"    Final URL   {result.auth.final_url}")
-        print(f"    Cookies     {len(result.auth.cookies)}")
+        print(f"    Attempted   {a.attempted}")
+        print(f"    Success     {a.success}")
+        print(f"    Reason      {a.reason}")
+        print(f"    Login URL   {a.login_url}")
+        print(f"    Final URL   {a.final_url}")
+        print(f"    Cookies     {len(a.cookies)}")
+        if not a.success and a.error:
+            print(f"    Error       {a.error}")
 
     if result.errors:
         print()
@@ -74,14 +77,19 @@ def _render_text(result: CrawlResult, target_url: str)->None:
     print()
     print("  Pages")
     print(f"    {'DEP':>3}  {'STAT':>4}  {'FORMS':>5}  {'EP':>4}  PATH")
-    
     for p in result.pages:
         path = _rel_path(p.url, target_url)
-       
         print(f"    {p.depth:>3}  {p.status:>4}  "
               f"{len(p.forms):>5}  {len(p.endpoint_hints):>4}  {path}")
-    
-  
+
+    if result.endpoint_hints:
+        print()
+        print("  Endpoint Hints")
+        print(f"    {'METHOD':<8}  {'SOURCE':<12}  URL")
+        for h in result.endpoint_hints:
+            params_str = f"  {h.params}" if h.params else ""
+            print(f"    {h.method:<8}  {h.source:<12}  {_rel_path(h.url, target_url)}{params_str}")
+
 
 def _render_json(result: CrawlResult) -> None:
     payload = dataclasses.asdict(result)
@@ -115,6 +123,16 @@ async def main() -> int:
     return 0
 
 
+def _suppress_playwright_teardown(loop, context):
+    exc = context.get("exception")
+    msg = str(exc) if exc else context.get("message", "")
+    if "Target page, context or browser has been closed" in msg:
+        return
+    loop.default_exception_handler(context)
+
+
 if __name__ == "__main__":
     ensure_chromium()
-    raise SystemExit(asyncio.run(main()))
+    loop = asyncio.new_event_loop()
+    loop.set_exception_handler(_suppress_playwright_teardown)
+    raise SystemExit(loop.run_until_complete(main()))
