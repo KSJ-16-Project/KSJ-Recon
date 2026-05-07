@@ -91,6 +91,7 @@ Return this exact top-level structure:
       "risk": "MEDIUM",
       "target": "IP:PORT or URL",
       "evidence": "입력 JSON에 근거한 증거를 한국어로 작성합니다.",
+      "payload_example": "-",
       "impact": "예상 영향을 한국어로 작성합니다.",
       "recommendation": "권고사항을 한국어로 작성합니다."
     }
@@ -116,7 +117,9 @@ Return this exact top-level structure:
 - findings[].risk must be one of "HIGH", "MEDIUM", or "LOW".
 - findings[].category must be one of "Network", "Web", or "Other" in mode_a.
 - attack_paths[].likelihood must be one of "HIGH", "MEDIUM", or "LOW".
-- Do not include payload_example in mode_a unless a downstream mode_b attack result explicitly provides it.
+- In mode_a, findings[].payload_example must be "-".
+- In mode_b, findings[].payload_example should include a short non-destructive diagnostic payload or verification string when an attack module result provides one. If there is no provided payload, use "-".
+- Do not invent payloads. Copy or summarize only payloads already present in attack_results.
 - Use empty arrays [] or "-" when evidence is missing.
 - Do not add a comma after the last item in an object or array.
 
