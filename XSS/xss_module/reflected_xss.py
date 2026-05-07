@@ -102,7 +102,7 @@ class ReflectedXSSScanner:
                 self.errors.append(self.builder.error(url=url, phase="reflected_marker", error="waf_rate_limited", detail="429 after retry", category="waf_block"))
                 return None
 
-        if auth_failed(resp):
+        if auth_failed(resp, original_url=base_url):
             if self.auth_refresher:
                 self.auth_refresher()
                 try:
@@ -110,7 +110,7 @@ class ReflectedXSSScanner:
                 except Exception as e:
                     self.errors.append(self.builder.error(url=url, phase="reflected_marker_retry", error="request_failed", detail=str(e), category="network_error"))
                     return None
-            if auth_failed(resp):
+            if auth_failed(resp, original_url=base_url):
                 self.errors.append(self.builder.error(url=url, phase="reflected_marker", error="auth_failed", detail=f"status={resp.status_code}", category="auth_failed"))
                 return None
 
@@ -191,7 +191,7 @@ class ReflectedXSSScanner:
                 self.errors.append(self.builder.error(url=url, phase="reflected_post_marker", error="waf_rate_limited", detail="429 after retry", category="waf_block"))
                 return None
 
-        if auth_failed(resp):
+        if auth_failed(resp, original_url=url):
             if self.auth_refresher:
                 self.auth_refresher()
                 inject_csrf(self.client, url, test_data, headers, cookies)
@@ -200,7 +200,7 @@ class ReflectedXSSScanner:
                 except Exception as e:
                     self.errors.append(self.builder.error(url=url, phase="reflected_post_marker_retry", error="request_failed", detail=str(e), category="network_error"))
                     return None
-            if auth_failed(resp):
+            if auth_failed(resp, original_url=url):
                 self.errors.append(self.builder.error(url=url, phase="reflected_post_marker", error="auth_failed", detail=f"status={resp.status_code}", category="auth_failed"))
                 return None
 

@@ -144,7 +144,7 @@ class StoredXSSScanner:
                 self.errors.append(self.builder.error(url=url, phase="stored_submit", error="waf_rate_limited", detail="429 after retry", category="waf_block"))
                 return None
 
-        if auth_failed(submit_resp):
+        if auth_failed(submit_resp, original_url=url):
             if self.auth_refresher:
                 self.auth_refresher()
                 if method == "POST":
@@ -154,11 +154,52 @@ class StoredXSSScanner:
                 except Exception as e:
                     self.errors.append(self.builder.error(url=url, phase="stored_submit_retry", error="request_failed", detail=str(e), category="network_error"))
                     return None
-            if auth_failed(submit_resp):
+            if auth_failed(submit_resp, original_url=url):
                 self.errors.append(self.builder.error(url=url, phase="stored_submit", error="auth_failed", detail=f"status={submit_resp.status_code}", category="auth_failed"))
                 return None
 
         waf = detect_waf(submit_resp)
+
+        # POST 응답 자체에 마커가 반영된 경우 먼저 처리 (제출 즉시 같은 페이지에 반영되는 저장형 XSS)
+        submit_analysis = self.analyzer.analyze(submit_resp.text, marker)
+        if submit_analysis.reflected:
+            escaped = self._check_special_encoding(target, params, param, [url], marker)
+            risk = "LOW" if escaped else "MEDIUM"
+            bypass_payload = None
+            if waf and not escaped:
+                bypass_payload = self._find_waf_bypass(target, params, param, submit_analysis.context, req_headers, req_cookies, body_format)
+            return self.builder.finding(
+                type="stored_xss_candidate_limited",
+                url=url,
+                source_url=url,
+                method=method,
+                param=param,
+                marker=marker,
+                reflected=True,
+                context=submit_analysis.context,
+                escaped=escaped,
+                payload=payload,
+                cleanup_marker=cleanup_marker,
+                side_effect_possible=True,
+                stored_xss_submission_warning=STORED_XSS_SUBMISSION_WARNING,
+                browser_verified=False,
+                browser_verification_required=(not escaped) and self._is_verifiable_context(submit_analysis.context),
+                verification_status="skipped",
+                waf_detected=waf,
+                waf_bypass_possible=bypass_payload is not None,
+                waf_bypass_payload=bypass_payload,
+                risk=risk,
+                evidence={
+                    "submit_status": submit_resp.status_code,
+                    "checked_url": url,
+                    "snippet": submit_analysis.snippet,
+                    "reason": f"marker reflected in {method} response body (same-page stored XSS)",
+                    "scope_note": "limited stored XSS check; not a full stored-XSS workflow crawler",
+                    "cleanup_marker": cleanup_marker,
+                    "side_effect_possible": True,
+                    "stored_xss_submission_warning": STORED_XSS_SUBMISSION_WARNING,
+                },
+            )
 
         check_urls = self._check_urls(target, submit_resp.url)
         for check_url in check_urls:

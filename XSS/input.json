@@ -15,26 +15,16 @@
     "browser_verify": true,
     "stored_xss": true,
     "dom_hash_xss": true,
-    "dom_stored_xss": false,
+    "dom_stored_xss": true,
     "timeout": 10,
     "verify_tls": false
   },
 
-  "stored_targets": [
+  "urls": [
     {
       "url": "https://xss-game.appspot.com/level2/frame",
-      "method": "POST",
-      "body_format": "form",
-
-      "params": {
-        "content": "test",
-        "action": "sign"
-      },
-
-      "check_urls": [
-        "https://xss-game.appspot.com/level2/frame"
-      ],
-
+      "method": "GET",
+      "type": "form",
       "safe_to_submit": true
     }
   ]

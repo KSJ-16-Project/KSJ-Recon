@@ -45,7 +45,11 @@ class DOMStoredXSSVerifier:
     def scan(self) -> list[dict]:
         form_targets = []
         for target in self.targets:
-            if target.get("type") != "form":
+            is_form_candidate = (
+                target.get("type") == "form"
+                or target.get("source") == "stored_targets"
+            )
+            if not is_form_candidate:
                 continue
             if target.get("safe_to_submit"):
                 form_targets.append(target)
@@ -123,9 +127,9 @@ class DOMStoredXSSVerifier:
         # Include the cleanup marker directly in the submitted payload so test
         # data can be identified and cleaned later.
         return [
-            f'<script data-testid="{cleanup_marker}">alert(1)</script>',
-            f'<svg data-testid="{cleanup_marker}" onload=alert(1)>',
             f'<img data-testid="{cleanup_marker}" src=x onerror=alert(1)>',
+            f'<svg data-testid="{cleanup_marker}" onload=alert(1)>',
+            f'<script data-testid="{cleanup_marker}">alert(1)</script>',
         ]
 
     def _try_payload(self, browser, url: str, payload: str, cookies: dict, headers: dict, cleanup_marker: str) -> dict | None:
@@ -137,7 +141,8 @@ class DOMStoredXSSVerifier:
             with self.engine.context(browser, url=url, headers=headers, cookies=cookies) as ctx:
                 page = ctx.new_page()
                 self.engine.install_alert_capture(page)
-                page.goto(url, timeout=10000, wait_until="domcontentloaded")
+                page.goto(url, timeout=10000, wait_until="load")
+                self._wait_for_client_form_ready(page)
                 self.engine.wait_for_alert_capture(page, timeout_ms=500)
 
                 # Collect ALL visible, enabled text inputs and fill each with the payload.
@@ -224,6 +229,7 @@ class DOMStoredXSSVerifier:
                     ))
                     return None
 
+                page.wait_for_timeout(250)
                 self.engine.wait_for_alert_capture(page, timeout_ms=1000)
 
                 hook_triggered, hook_text = self.engine.read_alert_capture(page)
@@ -233,8 +239,9 @@ class DOMStoredXSSVerifier:
                 else:
                     # Revisit to trigger persisted client-side replay. Reinstall the
                     # hook after navigation because a new document gets a fresh global.
-                    page.goto(url, timeout=10000, wait_until="domcontentloaded")
                     self.engine.install_alert_capture(page)
+                    page.goto(url, timeout=10000, wait_until="load")
+                    self._wait_for_client_form_ready(page)
                     self.engine.wait_for_alert_capture(page, timeout_ms=2000)
                     hook_triggered, hook_text = self.engine.read_alert_capture(page)
                     if hook_triggered:
@@ -286,3 +293,33 @@ class DOMStoredXSSVerifier:
             pass
 
         return None
+
+    def _wait_for_client_form_ready(self, page) -> None:
+        """Wait briefly for client-side form setup to finish.
+
+        Many DOM-stored XSS surfaces bind submit handlers after initial HTML
+        parsing. Waiting for the full load event and a tiny stability window
+        avoids submitting before framework or inline handlers are attached.
+        """
+        try:
+            page.wait_for_load_state("load", timeout=2000)
+        except Exception:
+            pass
+        try:
+            page.wait_for_function(
+                """() => {
+                  if (document.readyState !== 'complete') return false;
+                  const form = document.querySelector('form');
+                  if (!form) return true;
+                  return Boolean(form.querySelector(
+                    'textarea, input[type="text"], input[type="search"], input:not([type])'
+                  ));
+                }""",
+                timeout=2000,
+            )
+        except Exception:
+            pass
+        try:
+            page.wait_for_timeout(100)
+        except Exception:
+            pass

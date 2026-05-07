@@ -102,7 +102,8 @@ class BrowserExecutionEngine:
         lowered = text.lower()
         if "timeout" in lowered:
             return "timeout", text
-        if "401" in lowered or "403" in lowered or "auth" in lowered:
+        _AUTH_SIGNALS = ("401", "403", "auth", "로그인", "세션 만료", "session expired", "please log in")
+        if any(s in lowered for s in _AUTH_SIGNALS):
             return "auth_failed", text
         return "browser_error", text
 
