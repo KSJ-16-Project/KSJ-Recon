@@ -100,7 +100,7 @@ async def perform_login(
             return AuthResult(success=False, attempted=True, login_url=login_url,
                               final_url=page.url,
                               reason="login_failed",
-                              error="로그인 실패 (성공 조건 미충족)")
+                              error=f"로그인 실패 (성공 조건 미충족) — before={before_url!r}, after={page.url!r}")
 
         # 6. 쿠키 수집 (Playwright dict 포맷 그대로 반환)
         cookies = await ctx.cookies()

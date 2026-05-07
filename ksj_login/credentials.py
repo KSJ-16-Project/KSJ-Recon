@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from playwright.async_api import async_playwright
 
-from .form_analyzer import detect_selectors_via_dom
+from .form_analyzer import detect_selectors_via_dom, get_detection_failure_reason
 from .login import perform_login
 from .models import AuthConfig, AuthResult
 
@@ -46,7 +46,10 @@ async def get_session() -> AuthResult:
         return AuthResult(success=False, reason="credentials_not_configured")
 
     async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=True)
+        browser = await pw.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled"],
+        )
         try:
             selectors = await detect_selectors_via_dom(browser, _stored_login_url)
             if selectors is None:
@@ -55,7 +58,7 @@ async def get_session() -> AuthResult:
                     attempted=False,
                     login_url=_stored_login_url,
                     reason="login_page_not_found",
-                    error="로그인 폼을 찾을 수 없습니다",
+                    error=f"로그인 폼을 찾을 수 없습니다 — {get_detection_failure_reason()}",
                 )
 
             result = await perform_login(browser, _stored_login_url, selectors, _stored_config)
