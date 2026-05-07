@@ -34,6 +34,12 @@ class ReflectedXSSScanner:
         self.auth_refresher = auth_refresher
         self.analyzer = ContextAnalyzer()
         self.errors: list[dict] = []
+        self.test_attack_params_only = False
+        self.max_params_per_target = 3
+
+    def configure(self, *, test_attack_params_only: bool = False, max_params_per_target: int = 3) -> None:
+        self.test_attack_params_only = bool(test_attack_params_only)
+        self.max_params_per_target = max(1, int(max_params_per_target or 3))
 
     def scan(self) -> list[dict]:
         findings: list[dict] = []
@@ -44,7 +50,7 @@ class ReflectedXSSScanner:
             if not params:
                 continue
             logger.info("[%d/%d] reflected scan: %s", i + 1, total, target["url"])
-            for param in self._prioritized_params(params):
+            for param in self._candidate_params(target, params):
                 if method == "GET":
                     finding = self._test_param(target, params, param)
                 elif method == "POST":
@@ -115,8 +121,14 @@ class ReflectedXSSScanner:
                 return None
 
         analysis = self.analyzer.analyze(resp.text, marker)
+        view_resp = None
         if not analysis.reflected:
-            return None
+            view_resp = self._fetch_view_response(target, test_params, headers, cookies)
+            if view_resp is None:
+                return None
+            analysis = self.analyzer.analyze(view_resp.text, marker)
+            if not analysis.reflected:
+                return None
 
         escaped = self._check_special_encoding(target, params, param, marker)
         analysis.escaped = escaped
@@ -131,6 +143,7 @@ class ReflectedXSSScanner:
         return self.builder.finding(
             type="reflected_xss_candidate",
             url=url,
+            view_url=target.get("view_url"),
             method="GET",
             param=param,
             source=target.get("source", "input"),
@@ -150,7 +163,8 @@ class ReflectedXSSScanner:
             waf_bypass_payload=bypass_payload,
             evidence={
                 "request_url": resp.url,
-                "status_code": resp.status_code,
+                "checked_url": view_resp.url if view_resp is not None else resp.url,
+                "status_code": (view_resp or resp).status_code,
                 "snippet": analysis.snippet,
                 "reason": analysis.reason,
             },
@@ -205,8 +219,14 @@ class ReflectedXSSScanner:
                 return None
 
         analysis = self.analyzer.analyze(resp.text, marker)
+        view_resp = None
         if not analysis.reflected:
-            return None
+            view_resp = self._fetch_view_response(target, test_data, headers, cookies)
+            if view_resp is None:
+                return None
+            analysis = self.analyzer.analyze(view_resp.text, marker)
+            if not analysis.reflected:
+                return None
 
         escaped = self._check_special_encoding(target, params, param, marker)
         analysis.escaped = escaped
@@ -222,6 +242,7 @@ class ReflectedXSSScanner:
         return self.builder.finding(
             type="reflected_xss_post_candidate",
             url=url,
+            view_url=target.get("view_url"),
             method="POST",
             param=param,
             source=target.get("source", "input"),
@@ -245,7 +266,8 @@ class ReflectedXSSScanner:
             body_params=dict(params),
             evidence={
                 "request_url": url,
-                "status_code": resp.status_code,
+                "checked_url": view_resp.url if view_resp is not None else resp.url,
+                "status_code": (view_resp or resp).status_code,
                 "snippet": analysis.snippet,
                 "reason": analysis.reason,
             },
@@ -387,6 +409,10 @@ class ReflectedXSSScanner:
         except Exception:
             return True
         analysis = self.analyzer.analyze(resp.text, marker, probe=probe)
+        if not analysis.reflected:
+            view_resp = self._fetch_view_response(target, test_params, headers, cookies)
+            if view_resp is not None:
+                analysis = self.analyzer.analyze(view_resp.text, marker, probe=probe)
         return bool(analysis.escaped)
 
     def _risk_and_verify(self, context: str | None, escaped: bool) -> tuple[str, bool]:
@@ -395,13 +421,13 @@ class ReflectedXSSScanner:
             return "MEDIUM", True
         if context == "url_context":
             return "MEDIUM", True
-        if escaped:
-            return "LOW", False
         if context in {
             "html_attribute_double", "html_attribute_single", "html_attribute_unquoted",
             "js_string_double", "js_string_single", "js_block", "html_body", "html_comment",
         }:
             return "MEDIUM", True
+        if escaped:
+            return "LOW", False
         return "LOW", False
 
     def _select_payload(self, context: str | None) -> str:
@@ -411,6 +437,14 @@ class ReflectedXSSScanner:
         names = list(params.keys())
         return sorted(names, key=lambda n: 0 if n.lower() in HIGH_VALUE_PARAM_NAMES else 1)
 
+    def _candidate_params(self, target: dict, params: dict) -> list[str]:
+        requested = [p for p in target.get("attack_params") or [] if p in params]
+        prioritized = self._prioritized_params(params)
+        if self.test_attack_params_only and requested:
+            return requested[:self.max_params_per_target]
+        ordered = requested + [p for p in prioritized if p not in requested]
+        return ordered[:self.max_params_per_target]
+
     def _params_from_url(self, url: str) -> dict:
         parsed = urlparse(url)
         return {k: v[0] if v else "" for k, v in parse_qs(parsed.query, keep_blank_values=True).items()}
@@ -419,3 +453,18 @@ class ReflectedXSSScanner:
         parsed = urlparse(url)
         return urlunparse(parsed._replace(query=""))
 
+    def _fetch_view_response(self, target: dict, data: dict, headers: dict, cookies: dict):
+        view_url = target.get("view_url")
+        if not view_url or view_url == target.get("url"):
+            return None
+        method = target.get("method", "GET").upper()
+        try:
+            if method == "GET":
+                return self.client.get(self._strip_query(view_url), params=data, headers=headers, cookies=cookies)
+            return self.client.get(view_url, headers=headers, cookies=cookies)
+        except Exception as e:
+            self.errors.append(self.builder.error(
+                url=view_url, phase="reflected_view_check",
+                error="request_failed", detail=str(e), category="network_error",
+            ))
+            return None

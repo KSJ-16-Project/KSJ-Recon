@@ -32,6 +32,8 @@ DEFAULT_OPTIONS = {
     "timeout": 10,
     "verify_tls": False,
     "request_delay": 0.0,   # seconds between HTTP requests; increase to avoid IP blocks
+    "test_attack_params_only": False,
+    "max_params_per_target": 3,
 }
 
 # Global reference for SIGINT handler
@@ -61,6 +63,9 @@ class XSSScanner:
         global _current_scanner
         _current_scanner = self
         self._cookies_refresher = cookies_refresher
+
+        if "xss_data" in input_data and isinstance(input_data["xss_data"], dict):
+            input_data = input_data["xss_data"]
 
         self.input_data = input_data
         self.base_url = self._resolve_base_url(input_data)
@@ -227,6 +232,10 @@ class XSSScanner:
         reflected = ReflectedXSSScanner(
             self.targets, self.client, self.builder,
             auth_refresher=self._refresh_auth,
+        )
+        reflected.configure(
+            test_attack_params_only=bool(self.options.get("test_attack_params_only", False)),
+            max_params_per_target=int(self.options.get("max_params_per_target", 3)),
         )
         results.extend(reflected.scan())
         results.extend(reflected.scan_headers())

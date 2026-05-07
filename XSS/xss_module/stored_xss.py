@@ -88,7 +88,7 @@ class StoredXSSScanner:
         for i, target in enumerate(candidates):
             params = target.get("params") or {}
             logger.info("[%d/%d] stored scan: %s", i + 1, total, target["url"])
-            for param in self._candidate_params(params):
+            for param in self._candidate_params(target, params):
                 finding = self._test_form(target, params, param)
                 if finding:
                     findings.append(finding)
@@ -343,6 +343,9 @@ class StoredXSSScanner:
                 urls.append(u)
         return urls[:20]
 
-    def _candidate_params(self, params: dict) -> list[str]:
+    def _candidate_params(self, target: dict, params: dict) -> list[str]:
+        requested = [p for p in target.get("attack_params") or [] if p in params]
+        if requested:
+            return requested
         names = [n for n in params.keys() if n.lower() in HIGH_VALUE_PARAM_NAMES]
         return names or list(params.keys())[:2]

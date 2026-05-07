@@ -125,14 +125,23 @@ class BrowserVerifier:
                 self.engine.install_alert_capture(page)
                 page.goto(url, wait_until="domcontentloaded", timeout=self.timeout_ms)
                 self.engine.wait_for_alert_capture(page, timeout_ms=2000)
+                triggered, alert_text = self.engine.read_alert_capture(page)
+
+                view_url = finding.get("view_url")
+                if not triggered and view_url and view_url != finding.get("url"):
+                    url = self._payload_url(view_url, finding["param"], payload)
+                    action = "view_url_page_load"
+                    page.goto(url, wait_until="domcontentloaded", timeout=self.timeout_ms)
+                    self.engine.wait_for_alert_capture(page, timeout_ms=2000)
+                    triggered, alert_text = self.engine.read_alert_capture(page)
 
                 if not triggered and finding.get("context") == "url_context":
                     action = "click_javascript_href"
                     clicked = self._click_javascript_href(page, finding)
                     if clicked:
                         self.engine.wait_for_alert_capture(page, timeout_ms=800)
+                        triggered, alert_text = self.engine.read_alert_capture(page)
 
-                triggered, alert_text = self.engine.read_alert_capture(page)
                 self._write_browser_evidence(finding, triggered, alert_text, payload, url, action)
         except Exception as e:
             status, detail = self.engine.normalize_error(e)
@@ -204,13 +213,23 @@ class BrowserVerifier:
                     self._submit_form_post(page, url, body)
 
                 self.engine.wait_for_alert_capture(page, timeout_ms=2000)
+                triggered, alert_text = self.engine.read_alert_capture(page)
+
+                view_url = finding.get("view_url")
+                if not triggered and view_url and view_url != url:
+                    action += "+view_url_page_load"
+                    page.goto(view_url, wait_until="domcontentloaded", timeout=self.timeout_ms)
+                    url = view_url
+                    self.engine.wait_for_alert_capture(page, timeout_ms=2000)
+                    triggered, alert_text = self.engine.read_alert_capture(page)
+
                 if not triggered and finding.get("context") == "url_context":
                     action += "+click_javascript_href"
                     clicked = self._click_javascript_href(page, finding)
                     if clicked:
                         self.engine.wait_for_alert_capture(page, timeout_ms=800)
+                        triggered, alert_text = self.engine.read_alert_capture(page)
 
-                triggered, alert_text = self.engine.read_alert_capture(page)
                 self._write_browser_evidence(finding, triggered, alert_text, payload, url, action)
         except Exception as e:
             status, detail = self.engine.normalize_error(e)

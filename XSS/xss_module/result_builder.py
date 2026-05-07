@@ -20,6 +20,7 @@ class ResultBuilder:
         summary = {
             "total_targets": total_targets,
             "total_findings": len(results),
+            "verified_findings": sum(1 for r in results if r.get("browser_verified")),
             "high": sum(1 for r in results if r.get("risk") == "HIGH"),
             "medium": sum(1 for r in results if r.get("risk") == "MEDIUM"),
             "low": sum(1 for r in results if r.get("risk") == "LOW"),
@@ -60,6 +61,7 @@ class ResultBuilder:
                 "options": options,
             },
             "results": results,
+            "llm_evidence": self.to_llm_payload({"base_url": base_url, "timestamp": datetime.now().isoformat(timespec="seconds"), "summary": summary, "results": results}),
             "skipped": skipped,
             "errors": errors,
         }
@@ -67,14 +69,15 @@ class ResultBuilder:
     def to_llm_payload(self, full_result: dict) -> dict:
         """Return a minimal subset of full_result for LLM report generation.
 
-        Each finding is reduced to 5-6 fields:
-          url, param, method, context, verified
-          + payload  (when verified=True)
-          + snippet  (when verified=False, as HTTP-level evidence)
+        Only browser-verified script execution evidence is included. HTTP-only
+        candidates are intentionally omitted to reduce false positives in LLM
+        reporting.
         """
         slim_findings = []
         for f in full_result.get("results", []):
             verified = bool(f.get("browser_verified"))
+            if not verified:
+                continue
             entry: dict = {
                 "url": f.get("url", ""),
                 "param": f.get("param"),
@@ -82,12 +85,11 @@ class ResultBuilder:
                 "context": f.get("context"),
                 "verified": verified,
             }
-            if verified:
-                entry["payload"] = f.get("payload")
-            else:
-                snippet = (f.get("evidence") or {}).get("snippet")
-                if snippet:
-                    entry["snippet"] = snippet
+            entry["payload"] = f.get("payload")
+            evidence = f.get("evidence") or {}
+            entry["target_url"] = evidence.get("target_url") or evidence.get("checked_url") or f.get("url")
+            entry["alert_text"] = evidence.get("alert_text")
+            entry["verification_method"] = evidence.get("verification_method")
             slim_findings.append(entry)
 
         summary = full_result.get("summary", {})
@@ -96,7 +98,7 @@ class ResultBuilder:
             "timestamp": full_result.get("timestamp", ""),
             "summary": {
                 "total_findings": summary.get("total_findings", 0),
-                "verified": summary.get("high", 0),
+                "verified": summary.get("verified_findings", summary.get("high", 0)),
                 "candidates": summary.get("medium", 0) + summary.get("low", 0),
             },
             "findings": slim_findings,
