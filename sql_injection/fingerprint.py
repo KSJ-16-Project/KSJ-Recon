@@ -107,7 +107,7 @@ async def _run_boolean_phase(
     injectable: set[str] = set()
     dbms_scores: dict[DBMSType, int] = {}
 
-    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
         for param in params:
             for dbms, true_payload, false_payload in BOOLEAN_PROBES:
                 tp = transform(true_payload) if transform else true_payload
