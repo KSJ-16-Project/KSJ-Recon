@@ -71,6 +71,8 @@ async def _crawl_with_browser(browser: Browser, config: CrawlerConfig) -> CrawlR
                 seeds=[config.target_url],
                 phase="authenticated",
                 cookies=auth_result.cookies,
+                local_storage=auth_result.local_storage,
+                session_storage=auth_result.session_storage,
             )
             public_signatures = {(p.url, p.status) for p in public_pages}
             result.authenticated_pages = [

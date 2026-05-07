@@ -32,7 +32,7 @@ _ERROR_KEYWORDS = (
 )
 
 # URL이 여전히 로그인 페이지임을 시사하는 키워드
-_LOGIN_INDICATORS = ("login", "signin", "sign-in", "auth/failure", "error")
+_LOGIN_INDICATORS = ("login", "signin", "sign-in", "auth/failure")
 
 
 async def perform_login(
@@ -144,9 +144,21 @@ async def _submit_login_form(page, selectors: FormSelectors) -> None:
                     if (btn) return btn;
                 }
                 const parent = (form && form.parentElement) || el.closest('div, section, main') || document.body;
-                return parent.querySelector(
+                const found = parent.querySelector(
                     "button[onclick], a[onclick], button[type='submit'], input[type='submit']"
                 );
+                if (found) return found;
+
+                // javascript: href 버튼 fallback — password 이후 DOM 순서로 첫 번째 후보
+                const allEls = Array.from(document.body.querySelectorAll('*'));
+                const pwIdx = allEls.indexOf(el);
+                for (const cand of allEls.slice(pwIdx + 1)) {
+                    if (cand.tagName === 'A' && (cand.getAttribute('href') || '').startsWith('javascript:'))
+                        return cand;
+                    if (cand.tagName === 'INPUT' && cand.type === 'image')
+                        return cand;
+                }
+                return null;
             }
         """)
         submit_el = submit_handle.as_element()

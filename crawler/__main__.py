@@ -6,7 +6,6 @@ import dataclasses
 import json
 from urllib.parse import urlparse
 
-from crawler.auth.models import AuthConfig
 from crawler.browser import BrowserManager
 from crawler.engine import crawl_target
 from crawler.models import CrawlerConfig, CrawlResult
@@ -18,6 +17,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--url", default="http://localhost/", help="Target URL")
     parser.add_argument("--username", default="", help="Optional login username")
     parser.add_argument("--password", default="", help="Optional login password")
+    parser.add_argument("--login-url", default="", help="Login page URL")
     parser.add_argument("--max-depth", type=int, default=2)
     parser.add_argument("--max-pages", type=int, default=20)
     parser.add_argument("--concurrency", type=int, default=3)
@@ -90,9 +90,9 @@ def _render_json(result: CrawlResult) -> None:
 
 async def main() -> int:
     args = parse_args()
-    auth = None
-    if args.username or args.password:
-        auth = AuthConfig(username=args.username, password=args.password)
+    if args.login_url and args.username and args.password:
+        import ksj_login
+        ksj_login.store_credentials(args.login_url, args.username, args.password)
 
     config = CrawlerConfig(
         target_url=args.url,
@@ -100,7 +100,6 @@ async def main() -> int:
         max_pages=args.max_pages,
         concurrency=args.concurrency,
         render_wait=args.render_wait,
-        auth=auth,
     )
 
     async with BrowserManager(headless=args.headless) as bm:
