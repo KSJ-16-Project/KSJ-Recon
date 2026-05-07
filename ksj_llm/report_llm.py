@@ -86,6 +86,78 @@ class LLMReporter:
 
         return str(obj)
 
+    def _as_list(self, value):
+        return value if isinstance(value, list) else []
+
+    def _short_text(self, value, limit=240):
+        if value is None:
+            return None
+        text = value if isinstance(value, str) else str(value)
+        text = re.sub(r"\s+", " ", text).strip()
+        if len(text) <= limit:
+            return text
+        return text[:limit] + "...[truncated]"
+
+    def _limited_strings(self, values, max_items=30, text_limit=240):
+        compact = []
+        seen = set()
+        for value in self._as_list(values):
+            text = self._short_text(value, text_limit)
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            compact.append(text)
+            if len(compact) >= max_items:
+                break
+        return compact
+
+    def _compact_forms(self, forms, max_items=8):
+        compact = []
+        for form in self._as_list(forms)[:max_items]:
+            if not isinstance(form, dict):
+                continue
+
+            fields = []
+            for field in self._as_list(form.get("fields") or form.get("inputs"))[:20]:
+                if isinstance(field, dict):
+                    name = field.get("name") or field.get("id")
+                    field_type = field.get("type")
+                    if name or field_type:
+                        fields.append({
+                            key: value
+                            for key, value in {
+                                "name": self._short_text(name, 80),
+                                "type": self._short_text(field_type, 40)
+                            }.items()
+                            if value not in (None, "", [], {})
+                        })
+                elif field:
+                    fields.append({"name": self._short_text(field, 80)})
+
+            item = {
+                "action": self._short_text(form.get("action") or form.get("url"), 240),
+                "method": self._short_text(form.get("method"), 12),
+                "fields": fields
+            }
+            compact.append({
+                key: value
+                for key, value in item.items()
+                if value not in (None, "", [], {})
+            })
+        return compact
+
+    def _cookie_names(self, cookies, max_items=12):
+        names = []
+        for cookie in self._as_list(cookies)[:max_items]:
+            if isinstance(cookie, dict):
+                name = cookie.get("name")
+            else:
+                name = str(cookie).split("=", 1)[0]
+            name = self._short_text(name, 80)
+            if name:
+                names.append(name)
+        return names
+
     def minimize_scan_data(self, scan_data: dict):
         """
         보고서 작성에 필요한 핵심 근거만 남겨 LLM 입력 토큰을 줄인다.
@@ -117,60 +189,75 @@ class LLMReporter:
                 })
 
         pages = []
-        for page in crawler.get("public_pages", []):
+        for page in self._as_list(crawler.get("public_pages"))[:40]:
+            if not isinstance(page, dict):
+                continue
             response_headers = page.get("response_headers") or {}
             pages.append({
-                "url": page.get("url"),
+                "url": self._short_text(page.get("url"), 300),
                 "depth": page.get("depth"),
                 "status": page.get("status"),
-                "links": page.get("links", []),
-                "routes": page.get("routes", []),
-                "forms": page.get("forms", []),
-                "technologies": page.get("technologies", []),
+                "links": self._limited_strings(page.get("links"), 25, 260),
+                "routes": self._limited_strings(page.get("routes"), 35, 220),
+                "forms": self._compact_forms(page.get("forms"), 8),
+                "technologies": self._limited_strings(page.get("technologies"), 20, 80),
                 "render_type": page.get("render_type"),
-                "xhr_list": page.get("xhr_list", []),
-                "ws_list": page.get("ws_list", []),
-                "endpoint_hints": page.get("endpoint_hints", []),
-                "cookies": page.get("cookies", []),
+                "xhr_list": self._limited_strings(page.get("xhr_list"), 35, 260),
+                "ws_list": self._limited_strings(page.get("ws_list"), 10, 260),
+                "endpoint_hints": self._limited_strings(page.get("endpoint_hints"), 35, 260),
+                "cookie_names": self._cookie_names(page.get("cookies")),
                 "response_headers": {
-                    "server": response_headers.get("server"),
-                    "set-cookie": response_headers.get("set-cookie"),
-                    "content-type": response_headers.get("content-type"),
-                    "x-frame-options": response_headers.get("x-frame-options"),
-                    "x-content-type-options": response_headers.get("x-content-type-options")
+                    "server": self._short_text(response_headers.get("server"), 120),
+                    "content-type": self._short_text(response_headers.get("content-type"), 120),
+                    "x-frame-options": self._short_text(response_headers.get("x-frame-options"), 80),
+                    "x-content-type-options": self._short_text(response_headers.get("x-content-type-options"), 80)
                 }
             })
 
         authenticated_pages = []
-        for page in crawler.get("authenticated_pages", []):
+        for page in self._as_list(crawler.get("authenticated_pages"))[:25]:
+            if not isinstance(page, dict):
+                continue
             response_headers = page.get("response_headers") or {}
             authenticated_pages.append({
-                "url": page.get("url"),
+                "url": self._short_text(page.get("url"), 300),
                 "depth": page.get("depth"),
                 "status": page.get("status"),
-                "links": page.get("links", []),
-                "routes": page.get("routes", []),
-                "forms": page.get("forms", []),
-                "technologies": page.get("technologies", []),
+                "links": self._limited_strings(page.get("links"), 25, 260),
+                "routes": self._limited_strings(page.get("routes"), 35, 220),
+                "forms": self._compact_forms(page.get("forms"), 8),
+                "technologies": self._limited_strings(page.get("technologies"), 20, 80),
                 "render_type": page.get("render_type"),
-                "xhr_list": page.get("xhr_list", []),
-                "ws_list": page.get("ws_list", []),
-                "endpoint_hints": page.get("endpoint_hints", []),
-                "cookies": page.get("cookies", []),
+                "xhr_list": self._limited_strings(page.get("xhr_list"), 35, 260),
+                "ws_list": self._limited_strings(page.get("ws_list"), 10, 260),
+                "endpoint_hints": self._limited_strings(page.get("endpoint_hints"), 35, 260),
+                "cookie_names": self._cookie_names(page.get("cookies")),
                 "response_headers": {
-                    "server": response_headers.get("server"),
-                    "set-cookie": response_headers.get("set-cookie"),
-                    "content-type": response_headers.get("content-type"),
-                    "x-frame-options": response_headers.get("x-frame-options"),
-                    "x-content-type-options": response_headers.get("x-content-type-options")
+                    "server": self._short_text(response_headers.get("server"), 120),
+                    "content-type": self._short_text(response_headers.get("content-type"), 120),
+                    "x-frame-options": self._short_text(response_headers.get("x-frame-options"), 80),
+                    "x-content-type-options": self._short_text(response_headers.get("x-content-type-options"), 80)
                 }
             })
 
         fuzzer_results = []
-        for group in fuzzer.get("results", []):
-            for item in group.get("results", []):
+        seen_fuzzer_urls = set()
+        for group in self._as_list(fuzzer.get("results")):
+            if len(fuzzer_results) >= 250:
+                break
+            if not isinstance(group, dict):
+                continue
+            for item in self._as_list(group.get("results")):
+                if len(fuzzer_results) >= 250:
+                    break
+                if not isinstance(item, dict):
+                    continue
+                url = self._short_text(item.get("url"), 300)
+                if not url or url in seen_fuzzer_urls:
+                    continue
+                seen_fuzzer_urls.add(url)
                 fuzzer_results.append({
-                    "url": item.get("url"),
+                    "url": url,
                     "status": item.get("status"),
                     "length": item.get("length"),
                     "risk": item.get("risk")
@@ -190,20 +277,20 @@ class LLMReporter:
                 "public_pages": pages,
                 "authenticated_pages": authenticated_pages,
                 "auth": crawler.get("auth"),
-                "sitemap_urls": crawler.get("sitemap_urls", []),
+                "sitemap_urls": self._limited_strings(crawler.get("sitemap_urls"), 80, 260),
                 "robots_info": {
-                    "disallowed": robots_info.get("disallowed", []),
-                    "sitemaps": robots_info.get("sitemaps", [])
+                    "disallowed": self._limited_strings(robots_info.get("disallowed"), 80, 220),
+                    "sitemaps": self._limited_strings(robots_info.get("sitemaps"), 20, 260)
                 },
-                "endpoint_hints": crawler.get("endpoint_hints", []),
-                "errors": crawler.get("errors", [])
+                "endpoint_hints": self._limited_strings(crawler.get("endpoint_hints"), 120, 260),
+                "errors": self._limited_strings(crawler.get("errors"), 30, 300)
             },
             "fuzzer": {
                 "status": fuzzer.get("status"),
                 "base_url": fuzzer.get("base_url"),
                 "tld1": fuzzer.get("tld1"),
                 "difficulty": fuzzer.get("difficulty"),
-                "spider_urls": fuzzer.get("spider_urls", []),
+                "spider_urls": self._limited_strings(fuzzer.get("spider_urls"), 200, 260),
                 "timestamp": fuzzer.get("timestamp"),
                 "results": fuzzer_results
             }
@@ -315,8 +402,13 @@ class LLMReporter:
             "http_status", "recommendation", "remediation", "fix"
         }
 
+        max_attack_items = 300
         for module_name, module_data in attacks.items():
+            if len(attack_results) >= max_attack_items:
+                break
             for item in self._extract_attack_items(module_data):
+                if len(attack_results) >= max_attack_items:
+                    break
                 if isinstance(item, dict):
                     compact = {
                         "module": str(module_name),
