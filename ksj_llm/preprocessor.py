@@ -335,6 +335,14 @@ Keep JSON keys and enum values in English.
         except (TypeError, ValueError):
             return default
 
+    def _as_port(self, value):
+        if isinstance(value, bool) or value is None:
+            return ""
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return self._as_str(value)
+
     def _as_string_list(self, value):
         return [
             self._as_str(item)
@@ -384,76 +392,116 @@ Keep JSON keys and enum values in English.
         return bool(self._as_str(param.get("name")).strip())
 
     def _normalize_xss_url(self, item):
-        target = self._as_dict(item).copy()
-        target["url"] = self._as_str(target.get("url"))
-        target["method"] = self._as_str(target.get("method") or "GET").upper()
-        if target["method"] not in ("GET", "POST"):
-            target["method"] = "GET"
-        target["type"] = self._as_str(
-            target.get("type") or target.get("body_format") or "unknown"
-        )
-        if target["type"] not in ("form", "json", "raw", "unknown"):
-            target["type"] = "unknown"
-        target["body"] = self._as_dict(target.get("body") or target.get("params"))
-        target["fields"] = self._as_dict(target.get("fields"))
-        target["safe_to_submit"] = self._as_bool(target.get("safe_to_submit"), False)
-        target["cookies"] = self._as_dict(target.get("cookies"))
-        target["headers"] = self._as_dict(target.get("headers"))
-        target["priority"] = self._as_str(target.get("priority") or "MEDIUM").upper()
-        if target["priority"] not in ("HIGH", "MEDIUM", "LOW"):
-            target["priority"] = "MEDIUM"
-        target.pop("reason", None)
-        return target
+        target = self._as_dict(item)
+        url = self._as_str(target.get("url"))
+        method = self._as_str(target.get("method")).upper()
+        target_type = self._as_str(target.get("type") or target.get("body_format"))
+
+        if method == "POST":
+            normalized = {
+                "url": url,
+                "method": "POST"
+            }
+            body = self._as_dict(target.get("body") or target.get("params") or target.get("data"))
+            if body:
+                normalized["body"] = body
+            return normalized
+
+        if target_type == "form":
+            normalized = {
+                "url": url,
+                "type": "form",
+                "fields": self._as_dict(target.get("fields")),
+                "safe_to_submit": self._as_bool(target.get("safe_to_submit"), False)
+            }
+            return normalized
+
+        return {"url": url}
+
+    def _is_valid_xss_url(self, item):
+        target = self._as_dict(item)
+        if not self._as_str(target.get("url")).strip():
+            return False
+        method = self._as_str(target.get("method")).upper()
+        target_type = self._as_str(target.get("type") or target.get("body_format"))
+        return method == "POST" or target_type == "form"
 
     def _normalize_xss_stored_target(self, item):
-        target = self._as_dict(item).copy()
+        target = self._as_dict(item)
         check_urls = self._as_string_list(target.get("check_urls"))
-        target["submit_url"] = self._as_str(
-            target.get("submit_url") or target.get("url")
-        )
-        target["view_url"] = self._as_str(
-            target.get("view_url") or (check_urls[0] if check_urls else "")
-        )
-        target["body"] = self._as_dict(target.get("body") or target.get("params"))
-        target["safe_to_submit"] = self._as_bool(target.get("safe_to_submit"), False)
-        target["cookies"] = self._as_dict(target.get("cookies"))
-        target["headers"] = self._as_dict(target.get("headers"))
-        target["priority"] = self._as_str(target.get("priority") or "MEDIUM").upper()
-        if target["priority"] not in ("HIGH", "MEDIUM", "LOW"):
-            target["priority"] = "MEDIUM"
-
-        normalized_keys = {
-            "submit_url",
-            "view_url",
-            "body",
-            "safe_to_submit",
-            "cookies",
-            "headers",
-            "priority"
-        }
         return {
-            key: target[key]
-            for key in target
-            if key in normalized_keys
+            "submit_url": self._as_str(target.get("submit_url") or target.get("url")),
+            "view_url": self._as_str(target.get("view_url") or (check_urls[0] if check_urls else "")),
+            "body": self._as_dict(target.get("body") or target.get("params")),
+            "safe_to_submit": self._as_bool(target.get("safe_to_submit"), False)
         }
+
+    def _is_valid_xss_stored_target(self, item):
+        target = self._as_dict(item)
+        submit_url = self._as_str(target.get("submit_url") or target.get("url"))
+        check_urls = self._as_string_list(target.get("check_urls"))
+        view_url = self._as_str(target.get("view_url") or (check_urls[0] if check_urls else ""))
+        return bool(submit_url.strip() and view_url.strip())
 
     def _normalize_attack_target(self, item):
-        target = self._as_dict(item).copy()
-        target["url"] = self._as_str(target.get("url"))
-        target["method"] = self._as_str(target.get("method") or "GET").upper()
-        if target["method"] not in ("GET", "POST"):
-            target["method"] = "GET"
-        target["params"] = self._as_dict(target.get("params"))
-        target["data"] = self._as_dict(target.get("data"))
-        target["headers"] = self._as_dict(target.get("headers"))
-        target["inject_params"] = self._as_string_list(target.get("inject_params"))
-        try:
-            target["timeout"] = float(target.get("timeout", 5.0))
-        except (TypeError, ValueError):
-            target["timeout"] = 5.0
-        target.pop("reason", None)
-        target.pop("priority", None)
-        return target
+        target = self._as_dict(item)
+        normalized = {}
+        url = self._as_str(target.get("url"))
+        if url:
+            normalized["url"] = url
+
+        params = self._as_dict(target.get("params"))
+        if params:
+            normalized["params"] = params
+
+        inject_params = self._as_string_list(target.get("inject_params"))
+        if inject_params:
+            normalized["inject_params"] = inject_params
+
+        method = self._as_str(target.get("method")).upper()
+        if method in ("GET", "POST"):
+            normalized["method"] = method
+
+        data = self._as_dict(target.get("data"))
+        if data:
+            normalized["data"] = data
+
+        headers = self._as_dict(target.get("headers"))
+        if headers:
+            normalized["headers"] = headers
+
+        if target.get("timeout") is not None:
+            normalized["timeout"] = self._as_float(target.get("timeout"), 5.0)
+
+        return normalized
+
+    def _normalize_module_options(self, value):
+        options = self._as_dict(value)
+        normalized = {}
+        option_defaults = {
+            "max_workers": 4,
+            "payload_limit": 3,
+            "timeout": 10.0,
+            "verify": False,
+            "allow_redirects": False,
+            "proxies": {},
+            "user_agent": "KSJ-DAST-Scanner/1.0"
+        }
+        for key, default_value in option_defaults.items():
+            if key not in options:
+                continue
+            current_value = options.get(key)
+            if isinstance(default_value, bool):
+                normalized[key] = self._as_bool(current_value, default_value)
+            elif isinstance(default_value, int) and not isinstance(default_value, bool):
+                normalized[key] = self._as_int(current_value, default_value)
+            elif isinstance(default_value, float):
+                normalized[key] = self._as_float(current_value, default_value)
+            elif isinstance(default_value, dict):
+                normalized[key] = self._as_dict(current_value)
+            else:
+                normalized[key] = self._as_str(current_value)
+        return normalized
 
     def normalize_preprocess_data(self, pre_data: dict):
         """
@@ -481,7 +529,7 @@ Keep JSON keys and enum values in English.
                     "Accept-Language": self._as_str(auth.get("Accept-Language"))
                 },
                 "nmap_data": {
-                    "port": self._as_str(nmap_data.get("port")),
+                    "port": self._as_port(nmap_data.get("port")),
                     "service": self._as_str(nmap_data.get("service")),
                     "version": self._as_str(nmap_data.get("version"))
                 },
@@ -493,42 +541,20 @@ Keep JSON keys and enum values in English.
         }
 
         xss_data = self._as_dict(pre_data.get("xss_data")).copy()
-        xss_options = {
-            "browser_verify": True,
-            "stored_xss": True,
-            "dom_hash_xss": True,
-            "dom_stored_xss": False,
-            "timeout": 10,
-            "verify_tls": False
-        }
         normalized["xss_data"] = {
-            "base_url": self._as_str(xss_data.get("base_url")),
-            "session_id": self._as_str(xss_data.get("session_id")),
-            "token": self._as_str(xss_data.get("token")),
-            "login_mock_path": self._as_str(xss_data.get("login_mock_path")),
             "spider_urls": self._as_string_list(xss_data.get("spider_urls")),
             "urls": [
                 self._normalize_xss_url(item)
                 for item in self._as_list(xss_data.get("urls"))
+                if self._is_valid_xss_url(item)
             ],
             "stored_targets": [
                 self._normalize_xss_stored_target(item)
                 for item in self._as_list(xss_data.get("stored_targets"))
-            ],
-            "options": self._normalize_options(xss_data.get("options"), xss_options),
-            "evidence_dir": self._as_str(xss_data.get("evidence_dir") or "evidence"),
-            "results_dir": self._as_str(xss_data.get("results_dir") or "results")
+                if self._is_valid_xss_stored_target(item)
+            ]
         }
 
-        module_options = {
-            "max_workers": 4,
-            "payload_limit": 3,
-            "timeout": 10.0,
-            "verify": False,
-            "allow_redirects": False,
-            "proxies": {},
-            "user_agent": "KSJ-DAST-Scanner/1.0"
-        }
         for key in ("filedown_data", "ssrf_data"):
             module_data = self._as_dict(pre_data.get(key)).copy()
             target = module_data.get("target")
@@ -536,9 +562,11 @@ Keep JSON keys and enum values in English.
                 targets = self._as_list(module_data.get("targets"))
                 target = targets[0] if targets else {}
             normalized[key] = {
-                "target": self._normalize_attack_target(target),
-                "options": self._normalize_options(module_data.get("options"), module_options)
+                "target": self._normalize_attack_target(target)
             }
+            options = self._normalize_module_options(module_data.get("options"))
+            if options:
+                normalized[key]["options"] = options
 
         return normalized
 
