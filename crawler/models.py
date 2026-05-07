@@ -84,6 +84,7 @@ class CrawlResult:
     endpoint_hints: list[EndpointHint] = field(default_factory=list)
     external_endpoint_hints: list[EndpointHint] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    auth: object = None
 
     @property
     def pages(self) -> list[PageSnapshot]:

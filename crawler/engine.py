@@ -64,6 +64,7 @@ async def _crawl_with_browser(browser: Browser, config: CrawlerConfig) -> CrawlR
     if ksj_login.has_credentials():
         auth_result = await ksj_login.get_session()
         if auth_result.success:
+            result.auth = auth_result
             auth_pages, _, _, auth_errors = await _crawl_once(
                 browser,
                 config,
