@@ -7,6 +7,7 @@ login.py — Playwright로 로그인 폼 자동 입력 및 세션 쿠키 획득
 
 from __future__ import annotations
 
+import asyncio
 import re
 from typing import Optional
 
@@ -31,7 +32,7 @@ _ERROR_KEYWORDS = (
 )
 
 # URL이 여전히 로그인 페이지임을 시사하는 키워드
-_LOGIN_INDICATORS = ("login", "signin", "sign-in", "auth/failure", "error")
+_LOGIN_INDICATORS = ("login", "signin", "sign-in", "auth/failure")
 
 
 async def perform_login(
@@ -73,7 +74,8 @@ async def perform_login(
             return AuthResult(success=False, attempted=True, login_url=login_url,
                               error=f"폼 입력 실패: {e}")
 
-        # 3. 제출
+        # 3. dialog 핸들러 등록 (alert/confirm 자동 수락) + 제출
+        page.on("dialog", lambda d: asyncio.ensure_future(d.accept()))
         before_url = page.url
         try:
             await _submit_login_form(page, selectors)
@@ -81,21 +83,24 @@ async def perform_login(
             return AuthResult(success=False, attempted=True, login_url=login_url,
                               error=f"submit 클릭 실패: {e}")
 
-        # 4. 네비게이션 대기 (실패해도 무시 — 성공 판별 단계가 처리)
+        # 4. 네비게이션 대기 — URL 변경 감지 우선, 실패 시 networkidle 폴백
         try:
-            await page.wait_for_load_state("networkidle", timeout=10_000)
+            await page.wait_for_url(lambda url: url != before_url, timeout=10_000)
         except PlaywrightTimeoutError:
             try:
-                await page.wait_for_timeout(1_000)
-            except PlaywrightError:
-                pass
+                await page.wait_for_load_state("networkidle", timeout=5_000)
+            except PlaywrightTimeoutError:
+                try:
+                    await page.wait_for_timeout(1_000)
+                except PlaywrightError:
+                    pass
 
         # 5. 성공 판별
         if not await _is_login_success(page, before_url, config.success_url_pattern):
             return AuthResult(success=False, attempted=True, login_url=login_url,
                               final_url=page.url,
                               reason="login_failed",
-                              error="로그인 실패 (성공 조건 미충족)")
+                              error=f"로그인 실패 (성공 조건 미충족) — before={before_url!r}, after={page.url!r}")
 
         # 6. 쿠키 수집 (Playwright dict 포맷 그대로 반환)
         cookies = await ctx.cookies()
@@ -132,19 +137,32 @@ async def _submit_login_form(page, selectors: FormSelectors) -> None:
         submit_handle = await password.evaluate_handle("""
             el => {
                 const form = el.closest('form');
-                if (!form) return null;
-                return form.querySelector(
-                    "button[type='submit'], input[type='submit'], button, [role='button']"
+                if (form) {
+                    const btn = form.querySelector(
+                        "button[type='submit'], input[type='submit'], button, [role='button']"
+                    );
+                    if (btn) return btn;
+                }
+                const parent = (form && form.parentElement) || el.closest('div, section, main') || document.body;
+                const found = parent.querySelector(
+                    "button[onclick], a[onclick], button[type='submit'], input[type='submit']"
                 );
+                if (found) return found;
+
+                // javascript: href 버튼 fallback — password 이후 DOM 순서로 첫 번째 후보
+                const allEls = Array.from(document.body.querySelectorAll('*'));
+                const pwIdx = allEls.indexOf(el);
+                for (const cand of allEls.slice(pwIdx + 1)) {
+                    if (cand.tagName === 'A' && (cand.getAttribute('href') || '').startsWith('javascript:'))
+                        return cand;
+                    if (cand.tagName === 'INPUT' && cand.type === 'image')
+                        return cand;
+                }
+                return null;
             }
         """)
         submit_el = submit_handle.as_element()
         if submit_el is not None:
-            try:
-                btn_text = ((await submit_el.text_content()) or "")[:40]
-            except PlaywrightError:
-                btn_text = "?"
-            print(f"        [debug] submit form button: '{btn_text}'")
             await submit_el.click(timeout=5_000)
             return
     except PlaywrightError:
@@ -152,17 +170,11 @@ async def _submit_login_form(page, selectors: FormSelectors) -> None:
 
     try:
         submit_btn = page.locator(selectors.submit).first
-        try:
-            btn_text = (await submit_btn.inner_text(timeout=1_000))[:40]
-        except PlaywrightError:
-            btn_text = "?"
-        print(f"        [debug] submit selector button: '{btn_text}'")
         await submit_btn.click(timeout=5_000)
         return
     except PlaywrightError:
         pass
 
-    print("        [debug] submit fallback: press Enter in password field")
     await password.press("Enter", timeout=5_000)
 
 
@@ -181,38 +193,33 @@ async def _read_storage(page) -> dict:
 async def _is_login_success(page, before_url: str, pattern: str) -> bool:
     """
     3단계 휴리스틱으로 로그인 성공 여부 판별:
-      1. success_url_pattern 정규식 매칭 (사용자 지정)
-      2. URL이 변경됐고 login/signin 키워드 미포함
-      3. 페이지 본문에 오류 키워드 탐지 → 실패
+      1. success_url_pattern 정규식 매칭 (사용자 지정) → 성공
+      2. URL이 변경됐고 login/signin 키워드 미포함 → 성공
+         (리다이렉트 성공 → 메인 페이지 내용을 에러 키워드로 오판하지 않도록 여기서 반환)
+      3. URL이 안 바뀌었거나 아직 로그인 페이지에 있는 경우에만 에러 키워드 검사 → 실패
       4. 위 어느 것도 충족 안 되면 실패
     """
     after_url = page.url.lower()
-    print(f"        [debug] before: {before_url}")
-    print(f"        [debug] after:  {page.url}")
 
     # 1. 명시적 성공 URL 패턴
     if pattern:
         try:
             if re.search(pattern, after_url, re.IGNORECASE):
-                print(f"        [debug] success: pattern matched")
                 return True
         except re.error:
-            pass  # 잘못된 정규식은 무시하고 다음 단계로
+            pass
 
-    # 2. URL 변경 + 로그인 페이지 키워드 미포함
+    # 2. URL 변경 + 로그인 페이지 키워드 미포함 → 성공으로 판단, 이하 검사 불필요
     if after_url != before_url.lower() and not any(ind in after_url for ind in _LOGIN_INDICATORS):
-        print(f"        [debug] success: URL changed, no login keyword")
         return True
 
-    # 3. 본문에 오류 메시지가 있으면 실패
+    # 3. 아직 로그인 페이지에 머물러 있는 경우에만 에러 키워드 검사
     try:
-        body = (await page.content()).lower()
+        body = (await page.evaluate("document.body.innerText")).lower()
         for kw in _ERROR_KEYWORDS:
             if kw in body:
-                print(f"        [debug] failure: error keyword '{kw}' found")
                 return False
     except PlaywrightError:
         pass
 
-    print(f"        [debug] failure: URL still on login page or no clear signal")
     return False

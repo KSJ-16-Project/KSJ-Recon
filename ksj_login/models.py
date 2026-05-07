@@ -39,5 +39,4 @@ class AuthResult:
     selectors: Optional[FormSelectors] = None
     reason: str = ""
     error: str = ""
-    login_requests: list = field(default_factory=list)
     config: Optional[AuthConfig] = None
