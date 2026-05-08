@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from urllib.parse import urlparse
 
 
 class ResultBuilder:
@@ -92,6 +93,8 @@ class ResultBuilder:
             entry["verification_method"] = evidence.get("verification_method")
             slim_findings.append(entry)
 
+        slim_findings = self._group_verified_findings(slim_findings)
+
         summary = full_result.get("summary", {})
         return {
             "base_url": full_result.get("base_url", ""),
@@ -103,6 +106,36 @@ class ResultBuilder:
             },
             "findings": slim_findings,
         }
+
+    def _group_verified_findings(self, findings: list[dict]) -> list[dict]:
+        """Group near-duplicate reflected findings for cleaner LLM reporting."""
+        grouped: dict[tuple, dict] = {}
+        ordered: list[dict] = []
+        for f in findings:
+            parsed = urlparse(f.get("url", ""))
+            base_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}" if parsed.scheme and parsed.netloc else f.get("url", "")
+            key = (
+                f.get("method", "GET"),
+                base_url,
+                f.get("param"),
+                f.get("context"),
+            )
+            if key not in grouped:
+                g = dict(f)
+                g["url"] = base_url or f.get("url", "")
+                g["target_examples"] = [f.get("target_url")]
+                g["variant_count"] = 1
+                grouped[key] = g
+                ordered.append(g)
+                continue
+
+            g = grouped[key]
+            g["variant_count"] = int(g.get("variant_count", 1)) + 1
+            t = f.get("target_url")
+            examples = g.setdefault("target_examples", [])
+            if t and t not in examples and len(examples) < 5:
+                examples.append(t)
+        return ordered
 
     def finding(self, **kwargs) -> dict:
         return kwargs

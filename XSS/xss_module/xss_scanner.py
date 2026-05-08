@@ -191,7 +191,7 @@ class XSSScanner:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(output, f, ensure_ascii=False, indent=2)
         self._partial_saved = True
-        print(f"[saved] {path}", flush=True)
+        logger.debug("partial saved: %s", path)
 
     def _save_checkpoint(self) -> None:
         """Save intermediate results without raising; called after each scan phase."""
