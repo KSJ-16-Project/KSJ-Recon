@@ -197,19 +197,28 @@ sys.stdout.write("\033[A\033[K")
 login_explain=""
 user_id=""
 user_password=""
-if login_choice == 1:
-    login_explain = "로그인 정보 입력 완료"
-    # URL 입력
-    console.print("\n[bold yellow]로그인 페이지 URL를 입력하세요[/bold yellow]")
-    login_url= sys.stdin.readline().strip()
-    console.print("\n[bold yellow]아이디를 입력하세요[/bold yellow]")
-    user_id = sys.stdin.readline().strip()
-    console.print("\n[bold yellow]패스워드를 입력하세요[/bold yellow]")
-    user_password = sys.stdin.readline().strip()
-    print()
-    
-else:
-    login_explain = "로그인이 필요하지 않은 도메인입니다."
+if login_choice == 1:                                                                                                             
+      while True:                                                                                                                   
+          console.print("\n[bold yellow]로그인 페이지 URL를 입력하세요[/bold yellow]")
+          login_url = sys.stdin.readline().strip()                                                                                  
+          console.print("\n[bold yellow]아이디를 입력하세요[/bold yellow]")
+          user_id = sys.stdin.readline().strip()                                                                                    
+          console.print("\n[bold yellow]패스워드를 입력하세요[/bold yellow]")
+          user_password = sys.stdin.readline().strip()                                                                              
+          print()                                                                                                                   
+   
+          ksj_login.store_credentials(login_url, user_id, user_password)                                                            
+          console.print("[yellow]로그인 시도 중...[/yellow]")
+          auth_result = asyncio.run(ksj_login.get_session())                                                                        
+   
+          if auth_result.success:                                                                                                   
+              login_explain = "로그인 정보 입력 완료"
+              console.print("[bold green]✔ 로그인 성공[/bold green]")                                                               
+              break                                                                                                                 
+          else:
+              console.print(f"[bold red]✘ 로그인 실패. 다시 입력하세요.[/bold red]")                                                
+else:                                                                                                                             
+      login_explain = "로그인이 필요하지 않은 도메인입니다."
 
 console.print(f"[bold green]✔[/] 로그인 필요 여부: [orange1]{login_explain}[/]")
 
@@ -234,8 +243,8 @@ if check_Url(recon_url):
     ) as progress:
         
         
-        if login_choice==1:
-            ksj_login.store_credentials(login_url, user_id, user_password)
+        # if login_choice==1:
+        #     ksj_login.store_credentials(login_url, user_id, user_password)
             
         # Crawler 설정 (config 생성)
         config = CrawlerConfig(
