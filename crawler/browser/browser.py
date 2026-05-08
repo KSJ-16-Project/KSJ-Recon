@@ -24,6 +24,7 @@ class XHRRecord:
     response_headers: dict = field(default_factory=dict)
     body_preview: str = ""
     mime: str = ""
+    params: dict = field(default_factory=dict)
 
 
 @dataclass
