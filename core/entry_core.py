@@ -1,4 +1,5 @@
 import sys
+import json
 import asyncio
 import os
 import requests
@@ -81,7 +82,7 @@ def run_attack_module(module_type, data):
         if module_type == "sqli":
             scan_input = ScanInput.from_dict(data)
             result = asyncio.run(run_scan(scan_input))
-            return "sqli", result.to_json()
+            return "sqli", result.to_dict()
         
         elif module_type == "xss":
             result = asyncio.run(run_xss_scan(data))
@@ -89,11 +90,11 @@ def run_attack_module(module_type, data):
             
         elif module_type == "filedown":
             result = asyncio.run(FileDownloadModule.run_json(data))
-            return "filedown", result
+            return "filedown", json.loads(result)
             
         elif module_type == "ssrf":
             result = asyncio.run(SSRFModule.run_json(data))
-            return "ssrf", result
+            return "ssrf", json.loads(result)
             
     except Exception as e:
         raise Exception(f"{module_type} 실행 실패: {str(e)}")

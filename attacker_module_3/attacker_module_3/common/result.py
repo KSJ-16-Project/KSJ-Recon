@@ -6,6 +6,13 @@ from enum import Enum
 from typing import Any
 
 
+# 스캔 완료 상태
+class ScanStatus(str, Enum):
+    SAFE       = "safe"        # 정상 스캔, findings 없음
+    VULNERABLE = "vulnerable"  # findings 1개 이상
+    PARTIAL    = "partial"     # payload_limit으로 일부 probe가 잘린 채 완료
+
+
 # 취약점 심각도
 class Severity(str, Enum):
     INFO = "info"
@@ -79,6 +86,7 @@ class ScanReport:
     target_url: str
     started_at: str
     finished_at: str
+    status: ScanStatus = ScanStatus.SAFE
     findings: list[Finding] = field(default_factory=list)
     stats: dict[str, Any] = field(default_factory=dict)
 
@@ -89,6 +97,7 @@ class ScanReport:
             "target_url": self.target_url,
             "started_at": self.started_at,
             "finished_at": self.finished_at,
+            "status": self.status.value,
             "stats": self.stats,
             "findings": [f.to_dict() for f in self.findings],
         }

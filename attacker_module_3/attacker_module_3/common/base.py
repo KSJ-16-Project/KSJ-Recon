@@ -27,6 +27,7 @@ from attacker_module_3.common.result import (
     Confidence,
     Finding,
     ScanReport,
+    ScanStatus,
     Severity,
     confidence_rank,
     severity_rank,
@@ -34,50 +35,23 @@ from attacker_module_3.common.result import (
 from attacker_module_3.common.target import Target
 
 
-async def _do_relogin_async(auth_result: Any) -> Any:
-    """Playwright로 재로그인 후 새 AuthResult 반환."""
-    from playwright.async_api import async_playwright
-    from ksj_login import relogin
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        try:
-            return await relogin(browser, auth_result)
-        finally:
-            await browser.close()
+async def _do_relogin_async() -> Any:
+    """ksj_login.get_session()으로 재로그인 후 새 AuthResult 반환."""
+    from ksj_login import get_session
+    return await get_session()
 
 
-def _auth_result_from_doc(doc: dict[str, Any] | None) -> Any:
-    """auth 딕셔너리를 ksj_login.AuthResult 객체로 변환한다."""
-    if doc is None:
-        return None
-    from ksj_login.models import AuthConfig, AuthResult, FormSelectors
-    selectors = None
-    if doc.get("selectors"):
-        s = doc["selectors"]
-        selectors = FormSelectors(username=s["username"], password=s["password"], submit=s["submit"])
-    config = None
-    if doc.get("config"):
-        c = doc["config"]
-        config = AuthConfig(
-            username=c.get("username", ""),
-            password=c.get("password", ""),
-            success_url_pattern=c.get("success_url_pattern", ""),
-            enabled=c.get("enabled", True),
-        )
-    return AuthResult(
-        success=doc.get("success", False),
-        attempted=doc.get("attempted", False),
-        login_url=doc.get("login_url", ""),
-        final_url=doc.get("final_url", ""),
-        cookies=doc.get("cookies", []),
-        local_storage=doc.get("local_storage", {}),
-        session_storage=doc.get("session_storage", {}),
-        selectors=selectors,
-        reason=doc.get("reason", ""),
-        error=doc.get("error", ""),
-        login_requests=doc.get("login_requests", []),
-        config=config,
-    )
+_AUTH_REDIRECT_HINTS = ("login", "signin", "sign-in", "auth")
+
+
+def _needs_reauth(resp: Any) -> bool:
+    """401/403 또는 로그인 페이지로의 302 리다이렉트이면 재인증 필요로 판단한다."""
+    if resp.status_code in (401, 403):
+        return True
+    if resp.status_code == 302:
+        location = resp.headers.get("Location", "")
+        return any(hint in location.lower() for hint in _AUTH_REDIRECT_HINTS)
+    return False
 
 
 #ScanReport를 위한 현재 시간 변환
@@ -112,12 +86,11 @@ class AttackModule(ABC):
         max_workers: int = 8,
         #실행할 페이로드 개수 제한(None 이면 무제한)
         payload_limit: int | None = None,
-        auth_result: Any | None = None,
     ) -> None:
         self.http = http
         self.max_workers = max(1, int(max_workers))
         self.payload_limit = payload_limit
-        self._auth_result = auth_result
+        self._session_headers: dict[str, str] = {}  # target.headers 참조 — 재로그인 시 Cookie 덮어쓰기용
         self._relogin_lock = threading.Lock()
         self._session_version = 0
 
@@ -134,21 +107,18 @@ class AttackModule(ABC):
         """JSON-in / JSON-out 진입점."""
         try:
             req = load_request(request) #JSON 요청을 프로젝트 내부에서 쓰기 좋은 형태로 파싱
+        except (ValueError, TypeError):
+            return dump_error("invalid_request", 0)
+
+        try:
             http = HttpClient(**req.http_kwargs) #HTTP 클라이언트 생성
-            auth_result = _auth_result_from_doc(req.auth_doc)
-            # 초기 로그인 쿠키가 있으면 세션에 미리 주입
-            if auth_result is not None and auth_result.cookies:
-                from ksj_login import to_cookie_dict
-                http.session.cookies.update(to_cookie_dict(auth_result.cookies))
-            module = cls(http=http, auth_result=auth_result, **req.module_kwargs) #공격 모듈 객체 생성
+            module = cls(http=http, **req.module_kwargs) #공격 모듈 객체 생성
             report = module._run_with_report(req.target) #스캔 실행 후 JSON 반환
             return dump_report(report)
         except AuthenticationError as e:
             return dump_error("auth_required", e.status_code)
         except ImportError:
             return dump_error("ksj_login_unavailable", 0)
-        except (ValueError, TypeError):
-            return dump_error("invalid_request", 0)
 
     # ---- 하위 클래스가 구현해야 하는 훅 ------------------------------------
 
@@ -181,6 +151,9 @@ class AttackModule(ABC):
 
     #Target 스캔 실행 및 ScanReport 생성
     def _run_with_report(self, target: Target) -> ScanReport:
+        if target.headers is None:
+            target.headers = {}
+        self._session_headers = target.headers  # run() / run_json() 양쪽에서 재로그인 Cookie 반영
         started = _now_iso()
         wall_start = time.perf_counter() #스캔 소요 시간 check 용
 
@@ -188,13 +161,22 @@ class AttackModule(ABC):
         requests_made = 0  #실제 보낸 요청 수
         errors = 0
 
+        is_partial = False
         #입력값 주입을 할 곳이 있을 때만 스캔 진행
         if self._candidate_params(target):
             probes = list(self._probes(target))
-            
-            #payload_limit이 설정되어 있으면 그 수만큼의 Probe만 사용
+
+            # payload_limit은 파라미터별 페이로드 수 제한
             if self.payload_limit is not None:
-                probes = probes[: self.payload_limit]
+                by_param: dict[str, list[Probe]] = {}
+                for p in probes:
+                    by_param.setdefault(p.parameter, []).append(p)
+                limited = []
+                for param_probes in by_param.values():
+                    limited.extend(param_probes[: self.payload_limit])
+                if len(limited) < len(probes):
+                    is_partial = True
+                probes = limited
 
             #병렬 실행 준비
             with ThreadPoolExecutor(max_workers=self.max_workers) as ex:
@@ -224,14 +206,21 @@ class AttackModule(ABC):
 
 
         finished = _now_iso()
-        #스캔에 걸린 시간 계산
         elapsed_ms = (time.perf_counter() - wall_start) * 1000.0
-        #ScanReport 객체 생성하여 반환
+
+        if findings:
+            status = ScanStatus.VULNERABLE
+        elif is_partial:
+            status = ScanStatus.PARTIAL
+        else:
+            status = ScanStatus.SAFE
+
         return ScanReport(
             module=self.name,
             target_url=target.url,
             started_at=started,
             finished_at=finished,
+            status=status,
             findings=findings,
             stats={
                 "requests": requests_made,
@@ -252,14 +241,16 @@ class AttackModule(ABC):
         session_ver = self._session_version
         #실제로 요청 전송
         resp = self.http.request(**kwargs)
-        if resp.status_code in (401, 403):
-            if self._auth_result is None:
-                # auth 정보 없음 — 부모 DAST에 재인증 요청 신호
+        if _needs_reauth(resp):
+            from ksj_login import has_credentials
+            if not has_credentials():
+                # 저장된 자격증명 없음 — 부모 DAST에 재인증 요청 신호
                 raise AuthenticationError(resp.status_code)
             # 세션 만료 — ksj_login으로 재로그인 후 한 번 재시도
             self._refresh_session(session_ver)
+            kwargs = inject(target, probe.payload_value, probe.parameter)  # 갱신된 Cookie 반영
             resp = self.http.request(**kwargs)
-            if resp.status_code in (401, 403):
+            if _needs_reauth(resp):
                 raise AuthenticationError(resp.status_code)
         #응답이 실패하면, finding 없이 끝내기
         if not resp.ok:
@@ -273,16 +264,27 @@ class AttackModule(ABC):
         return resp, self._build_finding(target, probe, sig, kwargs, resp)
 
     def _refresh_session(self, session_version: int) -> None:
-        """ksj_login으로 재로그인해 세션 쿠키를 갱신한다. 다른 스레드가 이미 갱신했으면 건너뛴다."""
+        """ksj_login으로 재로그인해 세션을 갱신한다. 다른 스레드가 이미 갱신했으면 건너뛴다."""
         with self._relogin_lock:
             # 다른 스레드가 먼저 갱신 완료한 경우 재로그인 불필요
             if self._session_version != session_version:
                 return
-            new_result = asyncio.run(_do_relogin_async(self._auth_result))
+            new_result = asyncio.run(_do_relogin_async())
             if not new_result.success:
                 raise AuthenticationError(401)
-            from ksj_login import to_cookie_dict
-            self.http.session.cookies.clear()
-            self.http.session.cookies.update(to_cookie_dict(new_result.cookies))
-            self._auth_result = new_result
+            from ksj_login import to_cookie_header
+            self._session_headers["Cookie"] = to_cookie_header(new_result.cookies)
+            # CSRF 쿠키가 바뀌었으면 대응 헤더도 갱신 — 이미 있는 헤더 키만 업데이트
+            _CSRF_MAP = {
+                "csrftoken":  "X-CSRFToken",
+                "XSRF-TOKEN": "X-XSRF-TOKEN",
+                "csrf_token": "X-CSRF-Token",
+                "_csrf":      "X-CSRF-Token",
+            }
+            new_cookie_values = {
+                c["name"]: c["value"] for c in new_result.cookies if c.get("name")
+            }
+            for cookie_name, header_name in _CSRF_MAP.items():
+                if cookie_name in new_cookie_values and header_name in self._session_headers:
+                    self._session_headers[header_name] = new_cookie_values[cookie_name]
             self._session_version += 1
