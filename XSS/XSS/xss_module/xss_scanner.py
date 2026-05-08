@@ -52,7 +52,9 @@ signal.signal(signal.SIGINT, _handle_sigint)
 
 async def run_xss_scan(input_json: dict, *, cookies_refresher: Callable[[], dict] | None = None) -> dict:
     scanner = XSSScanner(input_json, cookies_refresher=cookies_refresher)
-    output = scanner.run()
+    # Run the scan in a worker thread so Playwright sync APIs never execute
+    # inside the active asyncio event loop thread.
+    output = await asyncio.to_thread(scanner.run)
     scanner.mark_final_saved()
     scanner.cleanup_partial()
     return output
