@@ -27,6 +27,7 @@ class _PageParser(HTMLParser):
         self.base_url = base_url
         self.title: str = ""
         self.links: list[str] = []
+        self.onclick_urls: list[str] = []
         self.scripts: list[str] = []
         self.forms: list[FormInfo] = []
         self.manifest_url: str = ""
@@ -40,6 +41,12 @@ class _PageParser(HTMLParser):
             href = attr.get("href") or ""
             if href and not href.startswith(("#", "mailto:", "javascript:")):
                 self.links.append(urljoin(self.base_url, href))
+
+            onclick = attr.get("onclick") or ""
+            if onclick:
+                match = re.search(r"""['"]([./][^'"]+)['"]""", onclick)
+                if match:
+                    self.onclick_urls.append(urljoin(self.base_url, match.group(1)))
 
         elif tag == "script":
             src = attr.get("src") or ""
@@ -142,6 +149,19 @@ _ROUTE_PATTERNS: list[str] = [
 def is_html(content_type: str) -> bool:
     """응답이 HTML인지 확인. 크롤링 대상 여부 판단에 사용."""
     return "text/html" in content_type.lower()
+
+
+def extract_onclick_urls(html: str, base_url: str) -> list[str]:
+    """HTML에서 onclick 속성에 포함된 URL 추출 (endpoint hint 용)."""
+    parser = _PageParser(base_url)
+    parser.feed(html)
+    seen: set[str] = set()
+    result: list[str] = []
+    for url in parser.onclick_urls:
+        if url not in seen:
+            seen.add(url)
+            result.append(url)
+    return result
 
 
 def extract_links(html: str, base_url: str) -> list[str]:

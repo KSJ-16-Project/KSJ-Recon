@@ -138,6 +138,7 @@ async def _run(
         user_agent=_UA,
         ignore_https_errors=True,
         extra_http_headers=extra_headers,
+        accept_downloads=True,
     )
     discovered_urls: list[str] = []
 
@@ -185,6 +186,7 @@ async def _run(
 
         xhr_list: list[XHRRecord] = []
         ws_list: list[WSRecord] = []
+        download_urls: list[str] = []
         body_budget = {"used": 0}
 
         def on_request(req):
@@ -206,6 +208,7 @@ async def _run(
             ))
 
         page.on("request", on_request)
+        page.on("download", lambda dl: download_urls.append(dl.url))
 
         async def on_response(resp):
             try:
@@ -354,6 +357,7 @@ async def _run(
         ws_list=ws_list,
         cookies=cookies,
         discovered_urls=discovered_urls,
+        download_urls=download_urls,
     )
 
 

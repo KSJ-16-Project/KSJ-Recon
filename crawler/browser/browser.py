@@ -48,6 +48,7 @@ class RawPageData:
     ws_list: list = field(default_factory=list)
     cookies: list = field(default_factory=list)
     discovered_urls: list = field(default_factory=list)
+    download_urls: list = field(default_factory=list)
 
 
 class BrowserManager:

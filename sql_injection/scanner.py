@@ -23,7 +23,9 @@ def _select_techniques(
 
     # confirmed: Phase 1 ERROR_PROBES 중 실제 에러 패턴이 매칭된 페이로드만
     # (버전 프로브 등 다른 Phase 페이로드가 우연히 에러를 내도 포함하지 않음)
-    error_payloads = [log.payload for log in all_logs if log.matched_pattern and log.payload in ERROR_PROBES]
+    error_payloads = list(dict.fromkeys(
+        log.payload for log in all_logs if log.matched_pattern and log.payload in ERROR_PROBES
+    ))
     if error_payloads:
         confirmed["Error-based"] = error_payloads
 
@@ -72,7 +74,10 @@ def _check_auth_expired(all_logs: list[ProbeLog]) -> bool:
 
 # ── 메인 오케스트레이션 ─────────────────────────────────────────
 
-async def run_scan(scan_input: ScanInput) -> ScanOutput:
+async def run_scan(
+    scan_input: ScanInput,
+    relogin_callback=None,  # async () -> dict[str, str] | None
+) -> ScanOutput:
     auth = scan_input.auth
     all_logs: list[ProbeLog] = []
 
@@ -92,9 +97,15 @@ async def run_scan(scan_input: ScanInput) -> ScanOutput:
         # 프로빙할 URL 목록: target_url + fuzzer_data
         target_urls = [scan_input.target_url] + scan_input.fuzzer_data
         best_result: DBMSDetectResult | None = None
+        all_injectable: list[dict] = []       # [{"param": str, "url": str}]
+        seen_injectable: set[tuple] = set()   # (param, url) 중복 방지
+        failed_urls: set[str] = set()         # 재시도 후에도 실패한 URL
 
-        # DBMS 탐지 — 첫 번째로 UNKNOWN 아닌 결과 채택
+        # DBMS 탐지 — 전체 URL 순회, DBMS 확정 후에도 injectable params 계속 수집
         for url in target_urls:
+            if url in failed_urls:
+                continue
+
             result = await detect_dbms(
                 url=url,
                 params=scan_input.crawler_data,
@@ -103,27 +114,59 @@ async def run_scan(scan_input: ScanInput) -> ScanOutput:
             )
             all_logs.extend(result.probe_log)
 
+            if _check_auth_expired(result.probe_log):
+                if relogin_callback:
+                    new_auth = await relogin_callback()
+                    if new_auth:
+                        auth = new_auth
+                        # 같은 URL 재시도
+                        result = await detect_dbms(
+                            url=url,
+                            params=scan_input.crawler_data,
+                            auth=auth,
+                            nmap_data=scan_input.nmap_data,
+                        )
+                        all_logs.extend(result.probe_log)
+                        if _check_auth_expired(result.probe_log):
+                            # 재시도 후에도 실패 → 이유 불문 스킵
+                            failed_urls.add(url)
+                            continue
+                    else:
+                        # 재로그인 실패 → 전체 중단
+                        return ScanOutput(
+                            dbms_type=DBMSType.UNKNOWN,
+                            dbms_version=None,
+                            confidence=Confidence.LOW,
+                            injectable_params=[],
+                            technique_queries=TechniqueQueries(confirmed={}, possible={}),
+                            probe_log=all_logs,
+                            auth_expired=True,
+                        )
+                else:
+                    # 콜백 없음 → 기존 방식대로 즉시 반환
+                    return ScanOutput(
+                        dbms_type=DBMSType.UNKNOWN,
+                        dbms_version=None,
+                        confidence=Confidence.LOW,
+                        injectable_params=[],
+                        technique_queries=TechniqueQueries(confirmed={}, possible={}),
+                        probe_log=all_logs,
+                        auth_expired=True,
+                    )
+
+            for param_name in result.injectable_params:
+                key = (param_name, url)
+                if key not in seen_injectable:
+                    seen_injectable.add(key)
+                    all_injectable.append({"param": param_name, "url": url})
             if best_result is None:
                 best_result = result
             if result.dbms != DBMSType.UNKNOWN:
                 best_result = result
-                break
-
-        # 세션 만료 감지 → 즉시 반환 (오케스트레이터가 Login 모듈 재호출)
-        if _check_auth_expired(all_logs):
-            return ScanOutput(
-                dbms_type=DBMSType.UNKNOWN,
-                dbms_version=None,
-                confidence=Confidence.LOW,
-                injectable_params=[],
-                technique_queries=TechniqueQueries(confirmed={}, possible={}),
-                probe_log=all_logs,
-                auth_expired=True,
-            )
 
         # 버전 추출 — DBMS가 실제로 식별된 URL을 사용해야 함
         # (메인 타겟이 막혀 있고 fuzzer URL에서 식별된 경우, 메인으로 가면 항상 실패)
-        injectable_names = set(best_result.injectable_params)
+        injectable_names = {item["param"] for item in all_injectable}
         injectable_params = [p for p in scan_input.crawler_data if p.name in injectable_names]
         version, version_logs = await extract_version(
             dbms=best_result.dbms,
@@ -146,7 +189,7 @@ async def run_scan(scan_input: ScanInput) -> ScanOutput:
             dbms_type=best_result.dbms,
             dbms_version=version,
             confidence=best_result.confidence,
-            injectable_params=best_result.injectable_params,
+            injectable_params=all_injectable,
             technique_queries=techniques,
             probe_log=all_logs,
             auth_expired=False,
