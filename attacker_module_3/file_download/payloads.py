@@ -23,7 +23,7 @@ class PathPayload:
 _PASSWD_SIG = (b"root:x:0:0",)
 _WIN_INI_SIG = (b"[fonts]", b"[extensions]")
 
-# 깊이 범위: 2~10 (루트 위로는 올라가지 않으므로 상한은 안전)
+# 깊이 범위: 4~8 (4부터면 깊이 1~4를 한번에 커버, 8이면 대부분의 환경 대응)
 _DEPTHS = range(4, 9)
 
 

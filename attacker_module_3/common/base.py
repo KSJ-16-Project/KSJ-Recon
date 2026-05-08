@@ -77,6 +77,8 @@ class Probe:
 class AttackModule(ABC):
     # 공격 모듈의 식별을 위한 고유 이름
     name: ClassVar[str]
+    # True 이면 첫 finding 발견 시 나머지 probe 취소 후 중단
+    stop_on_first_finding: ClassVar[bool] = False
 
     #공격 모듈 객체를 위한 필수 공통 설정
     def __init__(
@@ -190,10 +192,10 @@ class AttackModule(ABC):
                             errors += 1
                         if finding is not None:
                             findings.append(finding)
-                            # 첫 finding 발견 시 pending 상태 future 취소 후 중단
-                            for f in futures:
-                                f.cancel()
-                            break
+                            if self.stop_on_first_finding:
+                                for f in futures:
+                                    f.cancel()
+                                break
                 except KeyboardInterrupt:
                     for f in futures:
                         f.cancel()
@@ -253,8 +255,8 @@ class AttackModule(ABC):
             resp = self.http.request(**kwargs)
             if _needs_reauth(resp):
                 raise AuthenticationError(resp.status_code)
-        #응답이 실패하면, finding 없이 끝내기
-        if not resp.ok:
+        #응답이 실패하거나 HTTP 에러이면 finding 없이 끝내기
+        if not resp.ok or resp.status_code >= 400:
             return resp, None
         #응답에서 시그니처 매칭 시도
         sig = match(resp.body, probe.signatures)
