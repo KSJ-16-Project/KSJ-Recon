@@ -13,6 +13,7 @@ from attacker_module_3.file_download.payloads import PAYLOADS
 
 class FileDownloadModule(AttackModule):
     name = "file_download"
+    stop_on_first_finding = True
 
     # 검사 후보 목록 생성
     def _probes(self, target: Target) -> Iterable[Probe]:
