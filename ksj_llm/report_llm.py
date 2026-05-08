@@ -630,6 +630,9 @@ Write human-readable report fields such as "summary", "title", "evidence", "impa
         원칙적으로 JSON만 반환해야 하지만, 코드블록이나 앞뒤 설명이 섞인
         경우를 대비해 JSON 객체 영역을 한 번 더 추출한다.
         """
+        return self._parse_llm_json_text(response_text)
+
+    def _strip_json_text(self, response_text: str):
         text = response_text.strip()
 
         if text.startswith("```"):
@@ -637,26 +640,89 @@ Write human-readable report fields such as "summary", "title", "evidence", "impa
             text = re.sub(r"\s*```$", "", text)
             text = text.strip()
 
-        text = re.sub(r",\s*([}\]])", r"\1", text)
+        return re.sub(r",\s*([}\]])", r"\1", text)
+
+    def _extract_json_object_text(self, text: str):
+        start = text.find("{")
+        if start == -1:
+            return None
+
+        in_string = False
+        escaped = False
+        depth = 0
+
+        for index in range(start, len(text)):
+            char = text[index]
+
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == "\"":
+                    in_string = False
+                continue
+
+            if char == "\"":
+                in_string = True
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start:index + 1]
+
+        end = text.rfind("}")
+        if end != -1 and start < end:
+            return text[start:end + 1]
+
+        return None
+
+    def _parse_llm_json_text(self, response_text: str):
+        text = self._strip_json_text(response_text)
 
         try:
             return json.loads(text)
-        except json.JSONDecodeError:
-            start = text.find("{")
-            end = text.rfind("}")
+        except json.JSONDecodeError as original_error:
+            candidate = self._extract_json_object_text(text)
 
-            if start != -1 and end != -1 and start < end:
-                candidate = text[start:end + 1]
+            if candidate:
                 candidate = re.sub(r",\s*([}\]])", r"\1", candidate)
                 try:
                     return json.loads(candidate)
-                except json.JSONDecodeError:
-                    pass
+                except json.JSONDecodeError as candidate_error:
+                    original_error = candidate_error
 
             raise ValueError(
                 "LLM 응답이 올바른 JSON 형식이 아닙니다. "
-                "프롬프트의 JSON 출력 강제 조건을 확인하세요."
-            )
+                "프롬프트의 JSON 출력 강제 조건을 확인하세요. "
+                f"JSON error: {original_error.msg} "
+                f"(line {original_error.lineno}, column {original_error.colno}, char {original_error.pos})"
+            ) from original_error
+
+    def repair_llm_json(self, response_text: str, parse_error: Exception):
+        repair_prompt = f"""
+Return only one valid JSON object.
+Fix the malformed dashboard JSON below so it can be parsed by json.loads.
+Preserve the original meaning and available fields as much as possible.
+If the text is truncated, close the current string/object/array and use "-" or [] for missing values.
+Do not include markdown, comments, explanations, or code fences.
+
+[Parse Error]
+{parse_error}
+
+[Malformed JSON]
+{response_text}
+"""
+
+        response = self.client.messages.create(
+            model=self.model.strip(),
+            max_tokens=8192,
+            messages=[
+                {"role": "user", "content": repair_prompt}
+            ]
+        )
+        return self._parse_llm_json_text(response.content[0].text)
 
     def generate_report_from_data(self, scan_data: dict, mode="mode_a"):
         mode = self.normalize_mode(mode)
@@ -671,7 +737,10 @@ Write human-readable report fields such as "summary", "title", "evidence", "impa
         )
         response_text = response.content[0].text
 
-        return self.parse_llm_json(response_text)
+        try:
+            return self.parse_llm_json(response_text)
+        except ValueError as error:
+            return self.repair_llm_json(response_text, error)
 
     def render_dashboard(self, report_data: dict, output_filename="dashboard.html"):
         return self.renderer.render_from_report_data(
