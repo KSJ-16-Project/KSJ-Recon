@@ -186,14 +186,15 @@ class AttackModule(ABC):
                     for fut in as_completed(futures):
                         resp, finding = fut.result()
                         requests_made += 1
-                        #결과가 이상하면 에러 추가
                         if not resp.ok:
                             errors += 1
-                        #이미 finding이 만들어진 경우에는 기존 목록에 추가
                         if finding is not None:
                             findings.append(finding)
+                            # 첫 finding 발견 시 pending 상태 future 취소 후 중단
+                            for f in futures:
+                                f.cancel()
+                            break
                 except KeyboardInterrupt:
-                    # 아직 시작 안 한 probe는 취소, 실행 중인 것은 자연 종료 대기
                     for f in futures:
                         f.cancel()
                     raise
