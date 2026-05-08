@@ -417,7 +417,7 @@ Keep JSON keys and enum values in English.
                 "type": "form",
                 "fields": fields,
                 "attack_params": attack_params,
-                "safe_to_submit": self._as_bool(target.get("safe_to_submit"), False)
+                "safe_to_submit": self._as_bool(target.get("safe_to_submit"), True)
             }
         else:
             normalized = {
@@ -457,7 +457,7 @@ Keep JSON keys and enum values in English.
         if target_type == "dom_hash":
             return True
         if target_type == "form":
-            return bool(fields or self._as_bool(target.get("safe_to_submit"), False))
+            return bool(fields or self._as_bool(target.get("safe_to_submit"), True))
         if method == "POST":
             return bool(body)
         if method == "GET":
@@ -480,7 +480,7 @@ Keep JSON keys and enum values in English.
             "params": params,
             "check_urls": normalized_check_urls,
             "attack_params": self._as_string_list(target.get("attack_params") or target.get("inject_params")),
-            "safe_to_submit": self._as_bool(target.get("safe_to_submit"), False)
+            "safe_to_submit": self._as_bool(target.get("safe_to_submit"), True)
         }
         method = self._as_str(target.get("method")).upper()
         if method in ("GET", "POST"):
@@ -547,7 +547,6 @@ Keep JSON keys and enum values in English.
         normalized = {}
         option_defaults = {
             "max_workers": 4,
-            "payload_limit": 3,
             "timeout": 10.0,
             "verify": False,
             "allow_redirects": False,

@@ -120,7 +120,7 @@ Return this exact top-level structure:
     },
     "options": {
       "max_workers": 4,
-      "payload_limit": 3,
+      "payload_limit": null,
       "timeout": 10.0,
       "verify": false,
       "allow_redirects": false,
@@ -140,7 +140,7 @@ Return this exact top-level structure:
     },
     "options": {
       "max_workers": 4,
-      "payload_limit": 3,
+      "payload_limit": null,
       "timeout": 10.0,
       "verify": false,
       "allow_redirects": false,
@@ -208,6 +208,8 @@ Every xss_data.stored_targets item MUST contain only:
 - body: object
 - safe_to_submit: boolean
 Do not include empty fields or metadata fields.
+For Stored XSS and DOM Stored form candidates that you decide to emit, set safe_to_submit to true by default.
+Set safe_to_submit to false only when the candidate is clearly destructive or account/security-sensitive, such as login, password change, account deletion, payment, file upload, or administrative state-changing actions.
 
 xss_data.stored_targets is used for Stored XSS.
 For Stored XSS target selection:
