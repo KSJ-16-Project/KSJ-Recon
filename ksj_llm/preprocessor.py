@@ -392,11 +392,14 @@ Keep JSON keys and enum values in English.
         return bool(self._as_str(param.get("name")).strip())
 
     def _normalize_xss_url(self, item):
+        if isinstance(item, str):
+            return {"url": item}
+
         target = self._as_dict(item)
         submit_url = self._as_str(target.get("submit_url") or target.get("url"))
         view_url = self._as_str(target.get("view_url"))
         source_url = self._as_str(target.get("source_url") or target.get("source"))
-        method = self._as_str(target.get("method")).upper()
+        method = self._as_str(target.get("method") or "GET").upper()
         target_type = self._as_str(target.get("type")).lower()
         body_format = self._as_str(target.get("body_format")).lower()
         body = self._as_dict(target.get("body") or target.get("params") or target.get("data"))
@@ -405,12 +408,12 @@ Keep JSON keys and enum values in English.
 
         if target_type == "dom_hash":
             normalized = {
-                "submit_url": submit_url,
+                "url": submit_url,
                 "type": "dom_hash"
             }
         elif target_type == "form":
             normalized = {
-                "submit_url": submit_url,
+                "url": submit_url,
                 "type": "form",
                 "fields": fields,
                 "attack_params": attack_params,
@@ -418,9 +421,9 @@ Keep JSON keys and enum values in English.
             }
         else:
             normalized = {
-                "submit_url": submit_url,
+                "url": submit_url,
                 "method": method if method in ("GET", "POST") else "GET",
-                "body": body,
+                "params": body,
                 "attack_params": attack_params
             }
 
@@ -439,32 +442,43 @@ Keep JSON keys and enum values in English.
         return normalized
 
     def _is_valid_xss_url(self, item):
+        if isinstance(item, str):
+            return bool(parse_qs(urlparse(item).query, keep_blank_values=True))
+
         target = self._as_dict(item)
         submit_url = self._as_str(target.get("submit_url") or target.get("url"))
         if not submit_url.strip():
             return False
-        method = self._as_str(target.get("method")).upper()
+        method = self._as_str(target.get("method") or "GET").upper()
         target_type = self._as_str(target.get("type")).lower()
         body = self._as_dict(target.get("body") or target.get("params") or target.get("data"))
         fields = self._as_dict(target.get("fields"))
-        attack_params = self._as_string_list(target.get("attack_params") or target.get("inject_params"))
 
         if target_type == "dom_hash":
             return True
         if target_type == "form":
-            return bool(fields and attack_params and self._as_bool(target.get("safe_to_submit"), False))
-        if method in ("GET", "POST"):
-            return bool(body and attack_params)
+            return bool(fields or self._as_bool(target.get("safe_to_submit"), False))
+        if method == "POST":
+            return bool(body)
+        if method == "GET":
+            return bool(body or parse_qs(urlparse(submit_url).query, keep_blank_values=True))
         return False
 
     def _normalize_xss_stored_target(self, item):
         target = self._as_dict(item)
         check_urls = self._as_string_list(target.get("check_urls"))
+        view_url = self._as_str(target.get("view_url") or (check_urls[0] if check_urls else ""))
         body_format = self._as_str(target.get("body_format")).lower()
+        params = self._as_dict(target.get("body") or target.get("params"))
+        normalized_check_urls = []
+        for url in [view_url, *check_urls]:
+            if url and url not in normalized_check_urls:
+                normalized_check_urls.append(url)
+
         normalized = {
-            "submit_url": self._as_str(target.get("submit_url") or target.get("url")),
-            "view_url": self._as_str(target.get("view_url") or (check_urls[0] if check_urls else "")),
-            "body": self._as_dict(target.get("body") or target.get("params")),
+            "url": self._as_str(target.get("submit_url") or target.get("url")),
+            "params": params,
+            "check_urls": normalized_check_urls,
             "attack_params": self._as_string_list(target.get("attack_params") or target.get("inject_params")),
             "safe_to_submit": self._as_bool(target.get("safe_to_submit"), False)
         }
@@ -487,13 +501,10 @@ Keep JSON keys and enum values in English.
         check_urls = self._as_string_list(target.get("check_urls"))
         view_url = self._as_str(target.get("view_url") or (check_urls[0] if check_urls else ""))
         body = self._as_dict(target.get("body") or target.get("params"))
-        attack_params = self._as_string_list(target.get("attack_params") or target.get("inject_params"))
         return bool(
             submit_url.strip()
             and view_url.strip()
             and body
-            and attack_params
-            and self._as_bool(target.get("safe_to_submit"), False)
         )
 
     def _normalize_xss_options(self, value):

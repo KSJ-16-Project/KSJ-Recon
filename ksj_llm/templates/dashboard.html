@@ -192,10 +192,17 @@ body {
 .finding p {
   margin: 8px 0;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .muted {
   color: #64748b;
+}
+
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 table {
@@ -307,19 +314,21 @@ td {
 
   <div class="section">
     <h2>Finding Table</h2>
-    <table>
-      <thead>
-        <tr id="tableHeader">
-          <th>Risk</th>
-          <th>Category</th>
-          <th>Title</th>
-          <th>Evidence</th>
-          <th>Impact</th>
-          <th>Recommendation</th>
-        </tr>
-      </thead>
-      <tbody id="tableBody"></tbody>
-    </table>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr id="tableHeader">
+            <th>Risk</th>
+            <th>Category</th>
+            <th>Title</th>
+            <th>Evidence</th>
+            <th>Impact</th>
+            <th>Recommendation</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
   </div>
 
   {% if attack_paths %}
