@@ -20,6 +20,7 @@ from crawler.parser import (
     extract_forms,
     extract_links,
     extract_manifest_url,
+    extract_onclick_urls,
     extract_routes_from_js,
     extract_scripts,
     extract_url_params,
@@ -232,6 +233,14 @@ def _snapshot_from_raw(raw: RawPageData, depth: int, target_url: str) -> PageSna
     all_endpoint_hints.extend(
         EndpointHint(url=w.url, method="WS", source="websocket", page_url=raw.url)
         for w in raw.ws_list
+    )
+    all_endpoint_hints.extend(
+        EndpointHint(url=u, method="GET", source="download", page_url=raw.url)
+        for u in raw.download_urls
+    )
+    all_endpoint_hints.extend(
+        EndpointHint(url=u, method="GET", source="onclick", page_url=raw.url)
+        for u in extract_onclick_urls(html, raw.url)
     )
     # Keep external observations separate so core only consumes in-scope endpoints.
 
