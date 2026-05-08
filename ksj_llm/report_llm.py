@@ -4,6 +4,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 import anthropic
 import re
+from urllib.parse import urlsplit
 
 try:
     from .dashboard_renderer import DashboardRenderer
@@ -409,6 +410,58 @@ class LLMReporter:
 
         return [module_data]
 
+    def _url_path_param_key(self, url, param):
+        try:
+            parsed = urlsplit(str(url or ""))
+            path_key = f"{parsed.scheme}://{parsed.netloc}{parsed.path}" if parsed.scheme and parsed.netloc else str(url or "")
+        except ValueError:
+            path_key = str(url or "")
+
+        return (path_key.rstrip("/"), str(param or "").strip())
+
+    def _extract_sqli_items(self, module_data):
+        if not isinstance(module_data, dict):
+            return []
+
+        injectable_params = module_data.get("injectable_params")
+        if not isinstance(injectable_params, list):
+            return []
+
+        dbms_type = module_data.get("dbms_type")
+        confidence = module_data.get("confidence")
+        status = "confirmed" if str(confidence or "").strip().lower() == "high" else "detected"
+
+        deduped = {}
+        for item in injectable_params:
+            if not isinstance(item, dict):
+                continue
+
+            url = item.get("url") or item.get("target") or item.get("endpoint")
+            param = item.get("param") or item.get("parameter")
+            if not url and not param:
+                continue
+
+            key = self._url_path_param_key(url, param)
+            if key not in deduped:
+                deduped[key] = {
+                    "target": url,
+                    "parameter": param,
+                    "vulnerability": "SQL injection candidate",
+                    "risk": "HIGH" if status == "confirmed" else "MEDIUM",
+                    "status": status,
+                    "evidence": (
+                        f"SQLi module reported injectable parameter '{param}' "
+                        f"on this path with confidence={confidence or '-'}"
+                    ),
+                    "dbms_type": dbms_type,
+                    "confidence": confidence,
+                    "duplicate_count": 1
+                }
+            else:
+                deduped[key]["duplicate_count"] += 1
+
+        return list(deduped.values())
+
     def minimize_attack_results(self, attacks: dict):
         """
         공격 모듈 결과를 보고서 근거로 쓰기 좋게 축약한다.
@@ -442,7 +495,13 @@ class LLMReporter:
         for module_name, module_data in attacks.items():
             if len(attack_results) >= max_attack_items:
                 break
-            for item in self._extract_attack_items(module_data):
+            module_items = []
+            if str(module_name).strip().lower() == "sqli":
+                module_items = self._extract_sqli_items(module_data)
+            if not module_items:
+                module_items = self._extract_attack_items(module_data)
+
+            for item in module_items:
                 if len(attack_results) >= max_attack_items:
                     break
                 if isinstance(item, dict):
@@ -513,6 +572,7 @@ class LLMReporter:
                 "Do not describe inconclusive, failed, not_confirmed, or missing results as confirmed vulnerabilities.",
                 "For attack-module findings, use one category from SQLi, XSS, FileDownload, SSRF, Web, Network, or Other.",
                 "For SQLi, XSS, FileDownload, and SSRF findings, include findings[].payload_example when attack_results contains payload_example, test_payload, proof_payload, payload, or payloads.",
+                "When attack_results contains multiple SQLi items with different target path and parameter pairs, preserve them as distinct findings instead of collapsing them into one generic SQLi finding.",
                 "Use payload_example only as a short diagnostic verification string copied or summarized from attack_results. Do not invent payloads."
             ],
             "metadata": {
@@ -537,6 +597,7 @@ class LLMReporter:
 - In mode_b, findings[].category may be one of "Network", "Web", "SQLi", "XSS", "FileDownload", "SSRF", or "Other".
 - This category rule overrides the mode_a category restriction from report_prompt.txt.
 - Write all human-readable report fields in Korean.
+- If attack_results contains multiple SQLi items with different target path and parameter pairs, keep those distinct SQLi candidates as separate findings. Do not collapse all SQLi evidence into one finding unless the target path and parameter are the same.
 - For findings derived from SQLi, XSS, FileDownload, or SSRF attack_results, include findings[].payload_example when a provided payload_example, test_payload, proof_payload, payload, or payloads value exists.
 - payload_example must be copied or briefly summarized from attack_results and must remain a short diagnostic verification string, not a full exploit procedure.
 - If no provided payload exists for a finding, set payload_example to "-".
