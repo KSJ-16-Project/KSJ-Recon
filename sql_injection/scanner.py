@@ -1,5 +1,7 @@
 import asyncio
 
+import ksj_login
+
 from .models import (
     ScanInput, ScanOutput, TechniqueQueries,
     ProbeLog, ParamLocation, DBMSType, Confidence,
@@ -72,12 +74,26 @@ def _check_auth_expired(all_logs: list[ProbeLog]) -> bool:
     return any(log.auth_expired for log in all_logs)
 
 
+# ── 직접 재로그인 ───────────────────────────────────────────────
+
+async def _try_relogin() -> dict[str, str] | None:
+    """ksj_login 모듈에서 직접 새 세션을 받아온다.
+
+    Core가 사전에 store_credentials()를 호출해두면 이 함수가
+    호출될 때 has_credentials()가 True가 되어 직접 재로그인이 가능하다.
+    실패 시 None 반환.
+    """
+    if not ksj_login.has_credentials():
+        return None
+    auth_result = await ksj_login.get_session()
+    if not auth_result.success:
+        return None
+    return {"cookie": ksj_login.to_cookie_header(auth_result.cookies)}
+
+
 # ── 메인 오케스트레이션 ─────────────────────────────────────────
 
-async def run_scan(
-    scan_input: ScanInput,
-    relogin_callback=None,  # async () -> dict[str, str] | None
-) -> ScanOutput:
+async def run_scan(scan_input: ScanInput) -> ScanOutput:
     auth = scan_input.auth
     all_logs: list[ProbeLog] = []
 
@@ -100,6 +116,7 @@ async def run_scan(
         all_injectable: list[dict] = []       # [{"param": str, "url": str}]
         seen_injectable: set[tuple] = set()   # (param, url) 중복 방지
         failed_urls: set[str] = set()         # 재시도 후에도 실패한 URL
+        relogin_unavailable = False           # 한 번이라도 재로그인 불가 발생
 
         # DBMS 탐지 — 전체 URL 순회, DBMS 확정 후에도 injectable params 계속 수집
         for url in target_urls:
@@ -115,44 +132,27 @@ async def run_scan(
             all_logs.extend(result.probe_log)
 
             if _check_auth_expired(result.probe_log):
-                if relogin_callback:
-                    new_auth = await relogin_callback()
-                    if new_auth:
-                        auth = new_auth
-                        # 같은 URL 재시도
-                        result = await detect_dbms(
-                            url=url,
-                            params=scan_input.crawler_data,
-                            auth=auth,
-                            nmap_data=scan_input.nmap_data,
-                        )
-                        all_logs.extend(result.probe_log)
-                        if _check_auth_expired(result.probe_log):
-                            # 재시도 후에도 실패 → 이유 불문 스킵
-                            failed_urls.add(url)
-                            continue
-                    else:
-                        # 재로그인 실패 → 전체 중단
-                        return ScanOutput(
-                            dbms_type=DBMSType.UNKNOWN,
-                            dbms_version=None,
-                            confidence=Confidence.LOW,
-                            injectable_params=[],
-                            technique_queries=TechniqueQueries(confirmed={}, possible={}),
-                            probe_log=all_logs,
-                            auth_expired=True,
-                        )
-                else:
-                    # 콜백 없음 → 기존 방식대로 즉시 반환
-                    return ScanOutput(
-                        dbms_type=DBMSType.UNKNOWN,
-                        dbms_version=None,
-                        confidence=Confidence.LOW,
-                        injectable_params=[],
-                        technique_queries=TechniqueQueries(confirmed={}, possible={}),
-                        probe_log=all_logs,
-                        auth_expired=True,
+                new_auth = await _try_relogin()
+                if new_auth:
+                    auth = new_auth
+                    # 같은 URL 재시도
+                    result = await detect_dbms(
+                        url=url,
+                        params=scan_input.crawler_data,
+                        auth=auth,
+                        nmap_data=scan_input.nmap_data,
                     )
+                    all_logs.extend(result.probe_log)
+                    if _check_auth_expired(result.probe_log):
+                        # 재시도 후에도 실패 → 이유 불문 스킵
+                        failed_urls.add(url)
+                        continue
+                else:
+                    # 재로그인 불가(자격증명 없음 또는 로그인 실패)
+                    # → 이 URL은 스킵하지만 스캔 자체는 계속 (공개 URL 시도 보존)
+                    failed_urls.add(url)
+                    relogin_unavailable = True
+                    continue
 
             for param_name in result.injectable_params:
                 key = (param_name, url)
@@ -163,6 +163,18 @@ async def run_scan(
                 best_result = result
             if result.dbms != DBMSType.UNKNOWN:
                 best_result = result
+
+        # 모든 URL이 auth_expired로 막힌 경우 (best_result 미설정)
+        if best_result is None:
+            return ScanOutput(
+                dbms_type=DBMSType.UNKNOWN,
+                dbms_version=None,
+                confidence=Confidence.LOW,
+                injectable_params=[],
+                technique_queries=TechniqueQueries(confirmed={}, possible={}),
+                probe_log=all_logs,
+                auth_expired=relogin_unavailable,
+            )
 
         # 버전 추출 — DBMS가 실제로 식별된 URL을 사용해야 함
         # (메인 타겟이 막혀 있고 fuzzer URL에서 식별된 경우, 메인으로 가면 항상 실패)
@@ -192,7 +204,7 @@ async def run_scan(
             injectable_params=all_injectable,
             technique_queries=techniques,
             probe_log=all_logs,
-            auth_expired=False,
+            auth_expired=relogin_unavailable,
         )
 
     except asyncio.CancelledError:
