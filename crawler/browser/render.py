@@ -344,7 +344,7 @@ async def _run(
     req_headers = {"User-Agent": _UA, **extra_headers}
 
     return RawPageData(
-        url=url,
+        url=page.url,
         status=status,
         request_headers=req_headers,
         response_headers=resp_headers,
