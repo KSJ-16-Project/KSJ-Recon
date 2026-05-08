@@ -36,6 +36,26 @@ __all__ = ["FuzzOrchestrator", "AggressiveFuzzer"]
 
 logger = logging.getLogger(__name__)
 
+# 디렉터리 퍼징이 의미 없는 파일 확장자
+_FILE_EXTENSIONS = frozenset({
+    ".php", ".html", ".htm", ".asp", ".aspx", ".jsp",
+    ".do", ".cgi", ".pl", ".py", ".rb",
+})
+
+
+def _normalise_fuzz_target(url: str) -> str:
+    """퍼징 대상 URL 정규화.
+    - 쿼리 파라미터 제거 (?id=1 등)
+    - 파일 URL이면 부모 디렉터리로 변환 (login.php → 상위 경로)
+    """
+    p = urlparse(url)
+    path = p.path.rstrip("/") or "/"
+    last_seg = path.rsplit("/", 1)[-1]
+    _, ext = os.path.splitext(last_seg)
+    if ext.lower() in _FILE_EXTENSIONS:
+        path = path.rsplit("/", 1)[0] or "/"
+    return f"{p.scheme}://{p.netloc}{path}".rstrip("/")
+
 
 def _enable_verbose():
     """verbose 모드 시 모듈 logger에 stderr 핸들러 부착 (멱등)."""
@@ -184,7 +204,7 @@ class AggressiveFuzzer:
         if verbose:
             _enable_verbose()
 
-        target = target.rstrip("/")
+        target = _normalise_fuzz_target(target.rstrip("/"))
 
         if not self.ffuf_bin.exists():
             return self._error(target, f"엔진 없음: {self.ffuf_bin}")
@@ -679,9 +699,15 @@ class FuzzOrchestrator:
 
     # ---------- 태스크 빌드 ----------
     def _build_tasks(self, base_url: str, spider_urls: list) -> list:
-        """(url, filename) 튜플 리스트 생성"""
-        spider_tasks = [(url, f"fuzzer_spider_{i}.json")
-                        for i, url in enumerate(spider_urls, 1)]
+        """(url, filename) 튜플 리스트 생성.
+        spider_urls는 정규화(쿼리 제거·파일→부모 디렉터리) 후 중복 제거."""
+        seen = {base_url}
+        spider_tasks = []
+        for url in spider_urls:
+            normalised = _normalise_fuzz_target(url)
+            if normalised not in seen:
+                seen.add(normalised)
+                spider_tasks.append((normalised, f"fuzzer_spider_{len(spider_tasks) + 1}.json"))
         return [(base_url, "fuzzer_directory.json")] + spider_tasks
 
     # ---------- 단일 태스크 실행 ----------

@@ -2,8 +2,28 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from crawler.auth.models import AuthConfig, AuthResult
-from crawler.parser import FormInfo
+
+@dataclass
+class FormField:
+    name: str = ""
+    field_type: str = "text"
+    id: str = ""
+    placeholder: str = ""
+    aria_label: str = ""
+    value: str = ""
+    required: bool = False
+
+    @property
+    def type(self) -> str:
+        return self.field_type
+
+
+@dataclass
+class FormInfo:
+    action: str = ""
+    method: str = "GET"
+    enctype: str = ""
+    fields: list[FormField] = field(default_factory=list)
 
 
 @dataclass
@@ -19,8 +39,6 @@ class CrawlerConfig:
     path_depth_limit: int = 12
     query_variants_limit: int = 3
     block_heavy_resources: bool = True
-    enable_dynamic_discovery: bool = False
-    auth: AuthConfig | None = None
 
 
 @dataclass
@@ -47,9 +65,13 @@ class PageSnapshot:
     xhr_list: list = field(default_factory=list)
     ws_list: list = field(default_factory=list)
     endpoint_hints: list[EndpointHint] = field(default_factory=list)
+    external_endpoint_hints: list[EndpointHint] = field(default_factory=list)
     request_headers: dict = field(default_factory=dict)
     response_headers: dict = field(default_factory=dict)
     cookies: list = field(default_factory=list)
+    comments: list[str] = field(default_factory=list)
+    url_params: dict[str, list[str]] = field(default_factory=dict)
+    csr_framework: str = ""
 
 
 @dataclass
@@ -57,11 +79,12 @@ class CrawlResult:
     target_url: str
     public_pages: list[PageSnapshot] = field(default_factory=list)
     authenticated_pages: list[PageSnapshot] = field(default_factory=list)
-    auth: AuthResult | None = None
     sitemap_urls: list[str] = field(default_factory=list)
     robots_info: dict = field(default_factory=dict)
     endpoint_hints: list[EndpointHint] = field(default_factory=list)
+    external_endpoint_hints: list[EndpointHint] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    auth: object = None
 
     @property
     def pages(self) -> list[PageSnapshot]:

@@ -8,43 +8,11 @@ piscovery 참고: piscovery/spider/parse.py
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from typing import Optional
 from urllib.parse import parse_qs, urljoin, urlparse
 
-
-# 테스트용 타깃 URL
-# core/models.py 의 Config 가 확정되면 이 상수를 삭제하고
-# core 로부터 target_url 을 전달받는 방식으로 교체한다.
-TARGET_URL = "https://www.hotspotfan.online"
-
-
-# ── 임시 데이터 모델 ─────────────────────────────────────────
-# core/models.py 확정 후 아래 두 클래스를 삭제하고
-# from core.models import FormField, FormInfo 로 교체한다.
-
-@dataclass
-class FormField:
-    name: str = ""
-    field_type: str = "text"
-    id: str = ""
-    placeholder: str = ""
-    aria_label: str = ""
-    value: str = ""
-    required: bool = False
-
-    @property
-    def type(self) -> str:
-        return self.field_type
-
-
-@dataclass
-class FormInfo:
-    action: str = ""
-    method: str = "GET"
-    enctype: str = ""
-    fields: list[FormField] = field(default_factory=list)
+from crawler.models import FormField, FormInfo
 
 
 # ── 내부용 HTML 파서 ──────────────────────────────────────

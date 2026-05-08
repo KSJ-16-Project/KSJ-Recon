@@ -22,14 +22,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-pages", type=int, default=20)
     parser.add_argument("--concurrency", type=int, default=3)
     parser.add_argument("--render-wait", type=int, default=1000)
-    parser.add_argument("--dynamic-discovery", action="store_true",
-                        help="Click safe controls and collect SPA route changes")
     parser.add_argument("--headless", action="store_true",
                         help="Run without opening a browser window")
     parser.add_argument("--format", choices=["text", "json"], default="json",
                         help="Output format (default: json)")
     return parser.parse_args()
-
 
 def _rel_path(url: str, base: str) -> str:
     """Strip scheme+host so URLs render as relative paths when on the same host."""
@@ -42,7 +39,7 @@ def _rel_path(url: str, base: str) -> str:
     return path
 
 
-def _render_text(result: CrawlResult, target_url: str) -> None:
+def _render_text(result: CrawlResult, target_url: str)->None:
     bar = "=" * 64
 
     print(bar)
@@ -77,11 +74,14 @@ def _render_text(result: CrawlResult, target_url: str) -> None:
     print()
     print("  Pages")
     print(f"    {'DEP':>3}  {'STAT':>4}  {'FORMS':>5}  {'EP':>4}  PATH")
+    
     for p in result.pages:
         path = _rel_path(p.url, target_url)
+       
         print(f"    {p.depth:>3}  {p.status:>4}  "
               f"{len(p.forms):>5}  {len(p.endpoint_hints):>4}  {path}")
-
+    
+  
 
 def _render_json(result: CrawlResult) -> None:
     payload = dataclasses.asdict(result)
@@ -100,7 +100,6 @@ async def main() -> int:
         max_pages=args.max_pages,
         concurrency=args.concurrency,
         render_wait=args.render_wait,
-        enable_dynamic_discovery=args.dynamic_discovery,
         auth=auth,
     )
 
