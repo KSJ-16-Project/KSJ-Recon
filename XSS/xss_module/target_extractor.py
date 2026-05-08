@@ -48,13 +48,23 @@ class TargetExtractor:
             if isinstance(item, dict) and (item.get("url") or item.get("submit_url")):
                 targets.append(self._from_item(item, source="stored_targets"))
 
-        # Deduplicate by method + defragmented URL + params + type.
+        # Deduplicate by method + defragmented URL + params + type + storage intent.
+        # safe_to_submit/source/check_urls affect stored-XSS behavior and must be
+        # preserved to avoid collapsing a safe stored target into an unsafe one.
         seen = set()
         unique: list[dict] = []
         for t in targets:
             d = t.to_dict()
             norm_url, _frag = urldefrag(d["url"])
-            key = (d["method"], norm_url, tuple(sorted((d.get("params") or {}).items())), d.get("type"))
+            key = (
+                d["method"],
+                norm_url,
+                tuple(sorted((d.get("params") or {}).items())),
+                d.get("type"),
+                bool(d.get("safe_to_submit", False)),
+                d.get("source"),
+                tuple(sorted(d.get("check_urls") or [])),
+            )
             if key in seen:
                 continue
             seen.add(key)
