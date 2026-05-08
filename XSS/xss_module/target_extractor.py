@@ -14,7 +14,7 @@ class Target:
     headers: dict | None = None
     cookies: dict | None = None
     type: str = "page"
-    safe_to_submit: bool = True
+    safe_to_submit: bool = False
     check_urls: list[str] | None = None
     source: str = "input"
     body_format: str = "form"
@@ -70,7 +70,7 @@ class TargetExtractor:
         if params is None and method == "GET":
             parsed = urlparse(url)
             params = {k: v[0] if v else "" for k, v in parse_qs(parsed.query, keep_blank_values=True).items()}
-        safe = bool(item.get("safe_to_submit", True))
+        safe = bool(item.get("safe_to_submit", False))
         return Target(
             url=url,
             method=method,
