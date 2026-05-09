@@ -36,13 +36,6 @@ __all__ = ["FuzzOrchestrator", "AggressiveFuzzer"]
 
 logger = logging.getLogger(__name__)
 
-# 디렉터리 퍼징이 의미 없는 파일 확장자
-_FILE_EXTENSIONS = frozenset({
-    ".php", ".html", ".htm", ".asp", ".aspx", ".jsp",
-    ".do", ".cgi", ".pl", ".py", ".rb",
-})
-
-
 def _normalise_fuzz_target(url: str) -> str:
     """퍼징 대상 URL 정규화.
     - 쿼리 파라미터 제거 (?id=1 등)
@@ -52,7 +45,7 @@ def _normalise_fuzz_target(url: str) -> str:
     path = p.path.rstrip("/") or "/"
     last_seg = path.rsplit("/", 1)[-1]
     _, ext = os.path.splitext(last_seg)
-    if ext.lower() in _FILE_EXTENSIONS:
+    if ext:
         path = path.rsplit("/", 1)[0] or "/"
     return f"{p.scheme}://{p.netloc}{path}".rstrip("/")
 
