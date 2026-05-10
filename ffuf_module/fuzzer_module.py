@@ -91,21 +91,21 @@ class AggressiveFuzzer:
 
     # 난이도별 wordlist
     WORDLISTS = {
-        1: "raft-small-words-lowercase.txt",   # 이지: ~17,000개
-        2: "raft-large-words-lowercase.txt",   # 하드: ~62,000개
+        1: "raft-small-words-lowercase.txt",   # 이지: ~38,000개
+        2: "raft-large-words-lowercase.txt",   # 하드: ~108,000개
     }
 
     # 난이도별 실행 옵션
     OPTIONS = {
         1: {
             "threads": 40,
-            "timeout_sec": 600,
+            "timeout_sec": 420,
             "depth": 0,
             "recursion": False,
         },
         2: {
             "threads": 60,
-            "timeout_sec": 7200,
+            "timeout_sec": 2700,
             "depth": 1,
             "recursion": True,
         }
