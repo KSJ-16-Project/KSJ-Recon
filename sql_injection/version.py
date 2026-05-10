@@ -41,6 +41,7 @@ async def _fetch_baseline(
     params: list[Parameter],
     auth: dict[str, str],
     method: str,
+    enctype: str = "",
 ) -> tuple[int, int]:
     """모든 파라미터 원본 값으로 요청해 baseline 상태코드와 응답 길이를 확보한다."""
     baseline_url, body = _build_baseline_request(url, params)
@@ -48,7 +49,13 @@ async def _fetch_baseline(
     cookies = _build_cookies(auth)
     try:
         if method == "POST":
-            resp = await client.post(baseline_url, data=body, headers=headers, cookies=cookies)
+            if enctype == "multipart/form-data":
+                files = {k: (None, str(v)) for k, v in body.items()}
+                resp = await client.post(baseline_url, files=files, headers=headers, cookies=cookies)
+            elif enctype == "application/json":
+                resp = await client.post(baseline_url, json=body, headers=headers, cookies=cookies)
+            else:
+                resp = await client.post(baseline_url, data=body, headers=headers, cookies=cookies)
         else:
             resp = await client.get(baseline_url, headers=headers, cookies=cookies)
         return resp.status_code, len(resp.content)
@@ -65,11 +72,16 @@ async def _try_version_probes(
     probes: list[tuple[str, str]],
     baseline_status: int,
     baseline_length: int,
+    enctype: str = "",
+    all_params: list[Parameter] | None = None,
 ) -> tuple[str | None, list[ProbeLog]]:
     """주어진 프로브 목록을 순회하며 baseline과 일치하는 응답을 찾으면 해당 라벨 반환."""
     logs: list[ProbeLog] = []
     for label, payload in probes:
-        log = await send_probe(client, url, param, payload, auth, method)
+        log = await send_probe(
+            client, url, param, payload, auth, method,
+            enctype=enctype, all_params=all_params,
+        )
         logs.append(log)
 
         if log.response_status == 0:
@@ -93,18 +105,27 @@ async def _try_error_version_extraction(
     auth: dict[str, str],
     method: str,
     dbms: DBMSType,
+    enctype: str = "",
+    all_params: list[Parameter] | None = None,
 ) -> tuple[str | None, list[ProbeLog]]:
     """에러 메시지에서 직접 버전을 파싱한다. Boolean 프로빙 실패 시 fallback."""
     logs: list[ProbeLog] = []
     for payload, pattern in ERROR_VERSION_PROBES.get(dbms, []):
-        injected_url, body = _inject_param(url, param, payload)
+        injected_url, body = _inject_param(url, param, payload, all_params)
         headers = _build_headers(param, payload, auth)
         cookies = _build_cookies(auth)
 
         start = time.monotonic()
         try:
-            if method == "POST" or param.location == ParamLocation.BODY:
-                resp = await client.post(injected_url, data=body, headers=headers, cookies=cookies)
+            is_post = method == "POST" or param.location == ParamLocation.BODY
+            if is_post:
+                if enctype == "multipart/form-data":
+                    files = {k: (None, str(v)) for k, v in body.items()}
+                    resp = await client.post(injected_url, files=files, headers=headers, cookies=cookies)
+                elif enctype == "application/json":
+                    resp = await client.post(injected_url, json=body, headers=headers, cookies=cookies)
+                else:
+                    resp = await client.post(injected_url, data=body, headers=headers, cookies=cookies)
             else:
                 resp = await client.get(injected_url, headers=headers, cookies=cookies)
             elapsed_ms = (time.monotonic() - start) * 1000
@@ -141,6 +162,7 @@ async def extract_version(
     auth: dict[str, str],
     nmap_data: NmapDBInfo | None = None,
     method: str = "GET",
+    enctype: str = "",
 ) -> tuple[str | None, list[ProbeLog]]:
     """
     DBMS 버전을 추출한다.
@@ -175,12 +197,13 @@ async def extract_version(
 
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
         baseline_status, baseline_length = await _fetch_baseline(
-            client, url, params, auth, method
+            client, url, params, auth, method, enctype
         )
 
         # 1차: string context
         version, str_logs = await _try_version_probes(
-            client, url, param, auth, method, probes_str, baseline_status, baseline_length
+            client, url, param, auth, method, probes_str,
+            baseline_status, baseline_length, enctype, params,
         )
         logs.extend(str_logs)
         if version:
@@ -188,7 +211,8 @@ async def extract_version(
 
         # 2차: integer context fallback
         version, int_logs = await _try_version_probes(
-            client, url, param, auth, method, probes_int, baseline_status, baseline_length
+            client, url, param, auth, method, probes_int,
+            baseline_status, baseline_length, enctype, params,
         )
         logs.extend(int_logs)
         if version:
@@ -196,7 +220,7 @@ async def extract_version(
 
         # 3차: 에러 메시지 파싱 fallback (boolean 비교가 불가능한 환경 대응)
         version, err_logs = await _try_error_version_extraction(
-            client, url, param, auth, method, dbms
+            client, url, param, auth, method, dbms, enctype, params
         )
         logs.extend(err_logs)
         return version, logs
