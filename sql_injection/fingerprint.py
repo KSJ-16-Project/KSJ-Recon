@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from .models import DBMSType, Confidence, Parameter, ProbeLog, NmapDBInfo
+from .models import DBMSType, Confidence, Parameter, ParamLocation, ProbeLog, NmapDBInfo
 from .payloads import (
     NMAP_PORT_MAP,
     NMAP_SERVICE_MAP,
@@ -14,6 +14,7 @@ from .payloads import (
 from .prober import (
     send_probes_concurrent, send_probe,
     _to_integer_context,
+    fetch_csrf_token,
 )
 
 
@@ -110,13 +111,20 @@ async def _run_boolean_phase(
     dbms_scores: dict[DBMSType, int] = {}
 
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
+        # POST/BODY 조건이면 CSRF 토큰 1회 취득 (phase 마다 새 client라 Phase 1 토큰 재사용 불가)
+        csrf_tokens: dict[str, str] = {}
+        if method == "POST" or any(p.location == ParamLocation.BODY for p in params):
+            csrf_tokens = await fetch_csrf_token(client, url, auth)
+
         for param in params:
             for dbms, true_payload, false_payload in BOOLEAN_PROBES:
                 tp = transform(true_payload) if transform else true_payload
                 fp = transform(false_payload) if transform else false_payload
                 true_log, false_log = await asyncio.gather(
-                    send_probe(client, url, param, tp, auth, method, enctype=enctype, all_params=params),
-                    send_probe(client, url, param, fp, auth, method, enctype=enctype, all_params=params),
+                    send_probe(client, url, param, tp, auth, method,
+                               csrf_tokens=csrf_tokens or None, enctype=enctype, all_params=params),
+                    send_probe(client, url, param, fp, auth, method,
+                               csrf_tokens=csrf_tokens or None, enctype=enctype, all_params=params),
                 )
                 all_logs.extend([true_log, false_log])
 

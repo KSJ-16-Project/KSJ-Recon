@@ -74,6 +74,7 @@ class ScanInput:
                             value=str(p.get("value", "")),
                         )
                         for p in e.get("params", [])
+                        if p.get("location") in {"query", "body", "cookie", "header"}
                     ],
                 )
                 for e in data.get("endpoints", [])
