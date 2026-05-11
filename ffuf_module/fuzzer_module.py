@@ -36,13 +36,6 @@ __all__ = ["FuzzOrchestrator", "AggressiveFuzzer"]
 
 logger = logging.getLogger(__name__)
 
-# 디렉터리 퍼징이 의미 없는 파일 확장자
-_FILE_EXTENSIONS = frozenset({
-    ".php", ".html", ".htm", ".asp", ".aspx", ".jsp",
-    ".do", ".cgi", ".pl", ".py", ".rb",
-})
-
-
 def _normalise_fuzz_target(url: str) -> str:
     """퍼징 대상 URL 정규화.
     - 쿼리 파라미터 제거 (?id=1 등)
@@ -52,7 +45,7 @@ def _normalise_fuzz_target(url: str) -> str:
     path = p.path.rstrip("/") or "/"
     last_seg = path.rsplit("/", 1)[-1]
     _, ext = os.path.splitext(last_seg)
-    if ext.lower() in _FILE_EXTENSIONS:
+    if ext:
         path = path.rsplit("/", 1)[0] or "/"
     return f"{p.scheme}://{p.netloc}{path}".rstrip("/")
 
@@ -98,21 +91,21 @@ class AggressiveFuzzer:
 
     # 난이도별 wordlist
     WORDLISTS = {
-        1: "raft-small-words-lowercase.txt",   # 이지: ~17,000개
-        2: "raft-large-words-lowercase.txt",   # 하드: ~62,000개
+        1: "raft-small-words-lowercase.txt",   # 이지: ~38,000개
+        2: "raft-large-words-lowercase.txt",   # 하드: ~108,000개
     }
 
     # 난이도별 실행 옵션
     OPTIONS = {
         1: {
             "threads": 40,
-            "timeout_sec": 600,
+            "timeout_sec": 420,
             "depth": 0,
             "recursion": False,
         },
         2: {
             "threads": 60,
-            "timeout_sec": 7200,
+            "timeout_sec": 2700,
             "depth": 1,
             "recursion": True,
         }
