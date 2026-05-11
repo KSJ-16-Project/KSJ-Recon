@@ -495,7 +495,7 @@ Keep JSON keys and enum values in English.
         target = self._as_dict(item)
         check_urls = self._as_string_list(target.get("check_urls"))
         view_url = self._as_str(target.get("view_url") or (check_urls[0] if check_urls else ""))
-        body_format = self._as_str(target.get("body_format")).lower()
+        body_format = self._as_str(target.get("body_format") or "form").lower()
         params = self._as_dict(target.get("body") or target.get("params"))
         normalized_check_urls = []
         for url in [view_url, *check_urls]:
@@ -509,11 +509,9 @@ Keep JSON keys and enum values in English.
             "attack_params": self._as_string_list(target.get("attack_params") or target.get("inject_params")),
             "safe_to_submit": self._as_bool(target.get("safe_to_submit"), True)
         }
-        method = self._as_str(target.get("method")).upper()
-        if method in ("GET", "POST"):
-            normalized["method"] = method
-        if body_format in ("form", "json"):
-            normalized["body_format"] = body_format
+        method = self._as_str(target.get("method") or "POST").upper()
+        normalized["method"] = method if method in ("GET", "POST") else "POST"
+        normalized["body_format"] = body_format if body_format in ("form", "json") else "form"
         headers = self._as_dict(target.get("headers"))
         if headers:
             normalized["headers"] = headers
