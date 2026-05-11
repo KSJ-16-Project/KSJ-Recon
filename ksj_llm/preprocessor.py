@@ -420,7 +420,7 @@ Keep JSON keys and enum values in English.
 
     def _normalize_xss_url(self, item):
         if isinstance(item, str):
-            return {"url": item}
+            return {"submit_url": item}
 
         target = self._as_dict(item)
         submit_url = self._as_str(target.get("submit_url") or target.get("url"))
@@ -435,12 +435,12 @@ Keep JSON keys and enum values in English.
 
         if target_type == "dom_hash":
             normalized = {
-                "url": submit_url,
+                "submit_url": submit_url,
                 "type": "dom_hash"
             }
         elif target_type == "form":
             normalized = {
-                "url": submit_url,
+                "submit_url": submit_url,
                 "type": "form",
                 "fields": fields,
                 "attack_params": attack_params,
@@ -448,9 +448,9 @@ Keep JSON keys and enum values in English.
             }
         else:
             normalized = {
-                "url": submit_url,
+                "submit_url": submit_url,
                 "method": method if method in ("GET", "POST") else "GET",
-                "params": body,
+                "body": body,
                 "attack_params": attack_params
             }
 
@@ -497,15 +497,11 @@ Keep JSON keys and enum values in English.
         view_url = self._as_str(target.get("view_url") or (check_urls[0] if check_urls else ""))
         body_format = self._as_str(target.get("body_format") or "form").lower()
         params = self._as_dict(target.get("body") or target.get("params"))
-        normalized_check_urls = []
-        for url in [view_url, *check_urls]:
-            if url and url not in normalized_check_urls:
-                normalized_check_urls.append(url)
 
         normalized = {
-            "url": self._as_str(target.get("submit_url") or target.get("url")),
-            "params": params,
-            "check_urls": normalized_check_urls,
+            "submit_url": self._as_str(target.get("submit_url") or target.get("url")),
+            "view_url": view_url,
+            "body": params,
             "attack_params": self._as_string_list(target.get("attack_params") or target.get("inject_params")),
             "safe_to_submit": self._as_bool(target.get("safe_to_submit"), True)
         }
@@ -534,6 +530,51 @@ Keep JSON keys and enum values in English.
 
     def _normalize_xss_options(self, value):
         return self._as_dict(value).copy()
+
+    def _cookie_header_to_dict(self, value):
+        cookies = {}
+        cookie_header = self._as_str(value).strip()
+        if not cookie_header:
+            return cookies
+
+        for part in cookie_header.split(";"):
+            if "=" not in part:
+                continue
+            name, cookie_value = part.split("=", 1)
+            name = name.strip()
+            if not name:
+                continue
+            cookies[name] = cookie_value.strip()
+        return cookies
+
+    def _headers_from_auth(self, auth):
+        auth = self._as_dict(auth)
+        headers = {}
+        for key in ("Authorization", "Referer", "Accept-Language"):
+            value = self._as_str(auth.get(key)).strip()
+            if value:
+                headers[key] = value
+        return headers
+
+    def _base_url_from_xss_data(self, xss_data):
+        xss_data = self._as_dict(xss_data)
+        candidates = self._as_string_list(xss_data.get("spider_urls"))
+        candidates.extend(
+            self._as_str(item.get("url") or item.get("submit_url"))
+            for item in self._as_list(xss_data.get("urls"))
+            if isinstance(item, dict)
+        )
+        candidates.extend(
+            self._as_str(item.get("url") or item.get("submit_url"))
+            for item in self._as_list(xss_data.get("stored_targets"))
+            if isinstance(item, dict)
+        )
+
+        for url in candidates:
+            parsed = urlparse(url)
+            if parsed.scheme and parsed.netloc:
+                return f"{parsed.scheme}://{parsed.netloc}"
+        return ""
 
     def _normalize_attack_target(self, item):
         target = self._as_dict(item)
@@ -631,10 +672,23 @@ Keep JSON keys and enum values in English.
         }
 
         xss_data = self._as_dict(pre_data.get("xss_data")).copy()
+        xss_headers = self._as_dict(xss_data.get("headers")).copy()
+        for key, value in self._headers_from_auth(auth).items():
+            xss_headers.setdefault(key, value)
+
+        xss_cookies = self._as_dict(xss_data.get("cookies")).copy()
+        for key, value in self._cookie_header_to_dict(auth.get("cookie")).items():
+            xss_cookies.setdefault(key, value)
+
+        xss_base_url = (
+            self._as_str(xss_data.get("base_url"))
+            or self._as_str(sql_data.get("target_url"))
+            or self._base_url_from_xss_data(xss_data)
+        )
         normalized["xss_data"] = {
-            "base_url": self._as_str(xss_data.get("base_url")),
-            "headers": self._as_dict(xss_data.get("headers")),
-            "cookies": self._as_dict(xss_data.get("cookies")),
+            "base_url": xss_base_url,
+            "headers": xss_headers,
+            "cookies": xss_cookies,
             "spider_urls": self._as_string_list(xss_data.get("spider_urls")),
             "urls": [
                 self._normalize_xss_url(item)
