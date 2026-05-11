@@ -103,9 +103,13 @@ Return this exact top-level structure:
     "endpoints": []
   },
   "xss_data": {
+    "base_url": "",
+    "headers": {},
+    "cookies": {},
     "spider_urls": [],
     "urls": [],
-    "stored_targets": []
+    "stored_targets": [],
+    "options": {}
   },
   "filedown_data": {
     "target": {
@@ -197,14 +201,30 @@ sql_data.nmap_data MUST contain port, service, and version.
 Use the highest-relevance open service from scan_data.nmap.ports when available.
 If a value is missing, use "".
 
+xss_data.base_url must be copied from crawler.target_url or fuzzer.base_url.
+If both are missing, use "".
+
+xss_data.headers MUST be an object containing only request headers needed by the XSS module.
+Use Authorization, Referer, and Accept-Language from scan_data.crawler.auth when available.
+If no header values are available, use {}.
+
+xss_data.cookies MUST be an object of cookie name/value pairs needed by the XSS module.
+Use scan_data.crawler.auth.cookie when available by splitting a Cookie header such as "a=b; c=d" into {"a":"b","c":"d"}.
+If no cookie values are available, use {}.
+
 xss_data.spider_urls MUST be an array of URL strings copied from scan_data only.
-xss_data MUST contain only spider_urls, urls, and stored_targets.
-Do not include base_url, session_id, token, login_mock_path, options, evidence_dir, results_dir, cookies, headers, priority, reason, evidence, or any other metadata in xss_data.
+xss_data.options MUST be an object. Use {} unless scan_data provides an explicit XSS scanner option.
+xss_data MUST contain only base_url, headers, cookies, spider_urls, urls, stored_targets, and options.
+Do not include session_id, token, login_mock_path, evidence_dir, results_dir, priority, reason, evidence, or any other metadata in xss_data.
 
 Every xss_data.urls item MUST contain only fields needed by the XSS module:
-- url: string, copied from scan_data only
-- For POST Reflected XSS: method and body.
-- For DOM Stored XSS: type, fields, and safe_to_submit.
+- submit_url: string, copied from scan_data only
+- view_url: string, copied from scan_data only, when a separate response/view page is known
+- method: "GET" or "POST", when HTTP submission is needed
+- body_format: "form" or "json", when a POST body format is known
+- body: object, when request parameters or form fields are known
+- attack_params: array of parameter names that can receive the XSS payload
+- For DOM Stored XSS: type, fields, attack_params, and safe_to_submit.
 Do not include empty fields or metadata fields.
 
 xss_data.urls is used for:
