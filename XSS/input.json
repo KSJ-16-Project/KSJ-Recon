@@ -1,0 +1,183 @@
+{
+  "base_url": "http://gym.contentshub.kr:58252",
+  "headers": {
+    "User-Agent": "KSJ-XSS-Scanner/1.0"
+  },
+  "cookies": {},
+  "auth": {
+    "type": "form_login",
+    "login_url": "http://gym.contentshub.kr:58252/kisec/member/login.html",
+    "username": "Pzlamq@gmail.com",
+    "password": "1q2w3e4r!",
+    "username_field_candidates": [
+      "id",
+      "user_id",
+      "login_id",
+      "email",
+      "con_id"
+    ],
+    "password_field_candidates": [
+      "pw",
+      "password",
+      "passwd",
+      "user_pw"
+    ]
+  },
+  "spider_urls": [
+    "http://gym.contentshub.kr:58252/kisec/_action/faq.do.php",
+    "http://gym.contentshub.kr:58252/kisec/educationInquiry/qna.html",
+    "http://gym.contentshub.kr:58252/kisec/mypage/mypage_mtm_list.html",
+    "http://gym.contentshub.kr:58252/kisec/mypage/mypage_mtm_register.html",
+    "http://gym.contentshub.kr:58252/kisec/mypage/mypage_mtm_view.html?idx=3566",
+    "http://gym.contentshub.kr:58252/kisec/dataRoom/notice.html?page=&keyfield=&keyword=",
+    "http://gym.contentshub.kr:58252/kisec/dataRoom/kisec_lab.html?page=&keyfield=&keyword=",
+    "http://gym.contentshub.kr:58252/kisec/dataRoom/after.html?page=&keyfield=&keyword=",
+    "http://gym.contentshub.kr:58252/kisec/dataRoom/kisec_album_view.html?idx=76&page=1&keyfield=&keyword=",
+    "http://gym.contentshub.kr:58252/kisec/dataRoom/kisec_album_view.html?idx=62&page=1&keyfield=&keyword="
+  ],
+  "urls": [
+    {
+      "url": "http://gym.contentshub.kr:58252/kisec/dataRoom/notice.html",
+      "method": "GET",
+      "params": {
+        "page": "",
+        "keyfield": "test",
+        "keyword": "test"
+      },
+      "attack_params": [
+        "keyfield",
+        "keyword"
+      ]
+    },
+    {
+      "url": "http://gym.contentshub.kr:58252/kisec/dataRoom/kisec_lab.html",
+      "method": "GET",
+      "params": {
+        "page": "",
+        "keyfield": "test",
+        "keyword": "test"
+      },
+      "attack_params": [
+        "keyfield",
+        "keyword"
+      ]
+    },
+    {
+      "url": "http://gym.contentshub.kr:58252/kisec/dataRoom/after.html",
+      "method": "GET",
+      "params": {
+        "page": "",
+        "keyfield": "test",
+        "keyword": "test"
+      },
+      "attack_params": [
+        "keyfield",
+        "keyword"
+      ]
+    },
+    {
+      "url": "http://gym.contentshub.kr:58252/kisec/dataRoom/kisec_album_view.html",
+      "method": "GET",
+      "params": {
+        "idx": "76",
+        "page": "1",
+        "keyfield": "",
+        "keyword": ""
+      },
+      "attack_params": [
+        "page",
+        "keyword"
+      ]
+    },
+    {
+      "url": "http://gym.contentshub.kr:58252/kisec/dataRoom/kisec_album_view.html",
+      "method": "GET",
+      "params": {
+        "idx": "62",
+        "page": "1",
+        "keyfield": "",
+        "keyword": ""
+      },
+      "attack_params": [
+        "page",
+        "keyword"
+      ]
+    }
+  ],
+  "stored_targets": [
+    {
+      "url": "http://gym.contentshub.kr:58252/kisec/_action/faq.do.php",
+      "method": "POST",
+      "enctype": "multipart/form-data",
+      "params": {
+        "reg_date": "2026-05-11 02:07:12",
+        "con_idx": "test",
+        "c_kind": "kisec",
+        "Mode": "add_faq",
+        "c_type": "test",
+        "con_writer": "test",
+        "con_id": "test",
+        "con_title": "test",
+        "question": "test"
+      },
+      "attack_params": [
+        "reg_date"
+      ],
+      "check_urls": [
+        "http://gym.contentshub.kr:58252/kisec/educationInquiry/qna.html",
+        "http://gym.contentshub.kr:58252/kisec/mypage/mypage_mtm_list.html",
+        "http://gym.contentshub.kr:58252/kisec/mypage/mypage_mtm_view.html?idx=3566"
+      ],
+      "safe_to_submit": true,
+      "expected_source": {
+        "category": "stored_xss",
+        "source_url": "http://gym.contentshub.kr:58252/kisec/_action/faq.do.php",
+        "source_param": "reg_date",
+        "display_target": "http://gym.contentshub.kr:58252/kisec/_action/faq.do.php (parameter: reg_date)"
+      }
+    },
+    {
+      "url": "http://gym.contentshub.kr:58252/kisec/_action/faq.do.php",
+      "method": "POST",
+      "enctype": "multipart/form-data",
+      "params": {
+        "reg_date": "2026-05-11 02:07:12",
+        "con_idx": "test",
+        "c_kind": "kisec",
+        "Mode": "add_faq",
+        "c_type": "test",
+        "con_writer": "test",
+        "con_id": "test",
+        "con_title": "test",
+        "question": "test"
+      },
+      "attack_params": [
+        "con_idx"
+      ],
+      "check_urls": [
+        "http://gym.contentshub.kr:58252/kisec/educationInquiry/qna.html",
+        "http://gym.contentshub.kr:58252/kisec/mypage/mypage_mtm_list.html",
+        "http://gym.contentshub.kr:58252/kisec/mypage/mypage_mtm_view.html?idx=3566"
+      ],
+      "safe_to_submit": true,
+      "expected_source": {
+        "category": "stored_xss",
+        "source_url": "http://gym.contentshub.kr:58252/kisec/_action/faq.do.php",
+        "source_param": "con_idx",
+        "display_target": "http://gym.contentshub.kr:58252/kisec/_action/faq.do.php (parameter: con_idx)"
+      }
+    }
+  ],
+  "options": {
+    "verify_browser": true,
+    "stored_check_mode": "explicit_check_urls_only",
+    "deduplicate_by": [
+      "type",
+      "source_url",
+      "source_param"
+    ],
+    "prefer_source_url_for_stored_findings": true,
+    "timeout": 10,
+    "safe_to_submit_required": true
+  }
+}

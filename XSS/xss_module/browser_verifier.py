@@ -7,7 +7,7 @@ import logging
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 from .browser_engine import BrowserExecutionEngine
-from .payloads import CONTEXT_PAYLOADS, WAF_BYPASS_PAYLOADS
+from .payloads import CONTEXT_PAYLOADS, WAF_BYPASS_PAYLOADS, next_alert_id, inject_alert_id
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +109,8 @@ class BrowserVerifier:
         finding.setdefault("evidence", {})["browser_reason"] = "payloads_tested_but_no_alert_hook"
 
     def _try_reflected_payload(self, browser, finding: dict, payload: str) -> tuple[bool, str]:
+        alert_id = next_alert_id()
+        payload = inject_alert_id(payload, alert_id)
         url = self._payload_url(finding["url"], finding["param"], payload)
         context = None
         triggered = False
@@ -142,6 +144,9 @@ class BrowserVerifier:
                         self.engine.wait_for_alert_capture(page, timeout_ms=800)
                         triggered, alert_text = self.engine.read_alert_capture(page)
 
+                if triggered and alert_text and str(alert_id) not in alert_text:
+                    triggered = False
+                    alert_text = None
                 self._write_browser_evidence(finding, triggered, alert_text, payload, url, action)
         except Exception as e:
             status, detail = self.engine.normalize_error(e)
@@ -188,6 +193,8 @@ class BrowserVerifier:
         finding.setdefault("evidence", {})["browser_reason"] = "payloads_tested_but_no_alert_hook"
 
     def _try_post_reflected_payload(self, browser, finding: dict, payload: str) -> tuple[bool, str]:
+        alert_id = next_alert_id()
+        payload = inject_alert_id(payload, alert_id)
         url = finding.get("url", "")
         body_format = finding.get("body_format", "form")
         param = finding.get("param")
@@ -230,6 +237,9 @@ class BrowserVerifier:
                         self.engine.wait_for_alert_capture(page, timeout_ms=800)
                         triggered, alert_text = self.engine.read_alert_capture(page)
 
+                if triggered and alert_text and str(alert_id) not in alert_text:
+                    triggered = False
+                    alert_text = None
                 self._write_browser_evidence(finding, triggered, alert_text, payload, url, action)
         except Exception as e:
             status, detail = self.engine.normalize_error(e)
@@ -315,6 +325,8 @@ class BrowserVerifier:
         finding.setdefault("evidence", {})["browser_reason"] = "payloads_tested_but_no_alert_hook"
 
     def _try_header_payload(self, browser, url: str, header_name: str, payload: str, finding: dict) -> bool:
+        alert_id = next_alert_id()
+        payload = inject_alert_id(payload, alert_id)
         triggered = False
         alert_text = None
         try:
@@ -329,6 +341,9 @@ class BrowserVerifier:
                 page.goto(url, wait_until="domcontentloaded", timeout=self.timeout_ms)
                 self.engine.wait_for_alert_capture(page, timeout_ms=2000)
                 triggered, alert_text = self.engine.read_alert_capture(page)
+                if triggered and alert_text and str(alert_id) not in alert_text:
+                    triggered = False
+                    alert_text = None
                 self._write_browser_evidence(finding, triggered, alert_text, payload, url, f"header_{header_name}_injected")
         except Exception as e:
             status, detail = self.engine.normalize_error(e)
@@ -354,6 +369,7 @@ class BrowserVerifier:
         alert_text = None
         action = "page_load"
         payload = finding.get("payload", "")
+        expected_alert_number = finding.get("alert_number")
         try:
             with self.engine.context(
                 browser,
@@ -373,6 +389,10 @@ class BrowserVerifier:
                         self.engine.wait_for_alert_capture(page, timeout_ms=800)
 
                 triggered, alert_text = self.engine.read_alert_capture(page)
+                if triggered and expected_alert_number is not None and alert_text:
+                    if str(expected_alert_number) not in alert_text:
+                        triggered = False
+                        alert_text = None
                 self._write_browser_evidence(finding, triggered, alert_text, payload, url, action)
 
             if triggered:
