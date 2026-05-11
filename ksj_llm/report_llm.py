@@ -719,7 +719,7 @@ Do not include markdown, comments, explanations, or code fences.
 
         response = self.client.messages.create(
             model=self.model.strip(),
-            max_tokens=8192,
+            max_tokens=24000,
             messages=[
                 {"role": "user", "content": repair_prompt}
             ]
@@ -732,7 +732,7 @@ Do not include markdown, comments, explanations, or code fences.
 
         response = self.client.messages.create(
             model=self.model.strip(),
-            max_tokens=8192,
+            max_tokens=24000,
             messages=[
                 {"role": "user", "content": prompt}
             ]
