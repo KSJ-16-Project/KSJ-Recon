@@ -4,23 +4,28 @@ import asyncio
 import json
 import time
 from collections import deque
-from urllib.parse import urljoin, urlparse, urlunparse
+from urllib.parse import parse_qs, urljoin, urlparse, urlunparse
 
 from playwright.async_api import Browser
 
-from crawler.auth.layer import run_auth_layer
+import ksj_login
 from crawler.browser import BrowserManager, RawPageData, render
 from crawler.models import CrawlResult, CrawlerConfig, EndpointHint, PageSnapshot
 from crawler.parser import (
+    detect_csr_framework,
     detect_render_type,
     detect_technologies,
+    extract_comments,
     extract_endpoints,
     extract_forms,
     extract_links,
     extract_manifest_url,
+    extract_onclick_urls,
     extract_routes_from_js,
     extract_scripts,
+    extract_url_params,
 )
+from crawler.post_scanner import scan_post_requests
 from crawler.sitemap import fetch_robots, fetch_sitemap, fetch_url
 
 
@@ -58,20 +63,19 @@ async def _crawl_with_browser(browser: Browser, config: CrawlerConfig) -> CrawlR
     result.robots_info = robots_info
     result.errors.extend(errors)
 
-    if config.auth is not None:
-        result.auth = await run_auth_layer(browser, public_pages, config.auth)
-        if result.auth.success:
-            seeds = [config.target_url]
-            if result.auth.final_url:
-                seeds.append(result.auth.final_url)
+    if ksj_login.has_credentials():
+        auth_result = await ksj_login.get_session()
+        result.auth = auth_result
+        if auth_result.success:
+
             auth_pages, _, _, auth_errors = await _crawl_once(
                 browser,
                 config,
-                seeds=seeds,
+                seeds=[config.target_url],
                 phase="authenticated",
-                cookies=result.auth.cookies,
-                local_storage=result.auth.local_storage,
-                session_storage=result.auth.session_storage,
+                cookies=auth_result.cookies,
+                local_storage=auth_result.local_storage,
+                session_storage=auth_result.session_storage,
             )
             public_signatures = {(p.url, p.status) for p in public_pages}
             result.authenticated_pages = [
@@ -81,6 +85,9 @@ async def _crawl_with_browser(browser: Browser, config: CrawlerConfig) -> CrawlR
 
     result.endpoint_hints = _dedupe_endpoints(
         hint for page in result.pages for hint in page.endpoint_hints
+    )
+    result.external_endpoint_hints = _dedupe_endpoints(
+        hint for page in result.pages for hint in page.external_endpoint_hints
     )
     return result
 
@@ -161,8 +168,11 @@ async def _crawl_once(
             if len(pages) >= config.max_pages:
                 break
 
-            page = _snapshot_from_raw(item[0], item[1])
+            page = _snapshot_from_raw(item[0], item[1], config.target_url)
             await _enrich_from_scripts(page, config, js_cache)
+            post_hints = await scan_post_requests(browser, page, config, cookies=cookies)
+            if post_hints:
+                page.endpoint_hints = _dedupe_endpoints([*page.endpoint_hints, *post_hints])
             pages.append(page)
 
             if page.depth < config.max_depth:
@@ -202,28 +212,54 @@ async def _render_one(
             cookies=cookies,
             local_storage=local_storage,
             session_storage=session_storage,
-            enable_dynamic_discovery=config.enable_dynamic_discovery,
         )
         if raw is None:
             return None
         return raw, depth
 
 
-def _snapshot_from_raw(raw: RawPageData, depth: int) -> PageSnapshot:
+def _snapshot_from_raw(raw: RawPageData, depth: int, target_url: str) -> PageSnapshot:
     html = raw.rendered_html or raw.raw_html
-    endpoint_hints = [
+    all_endpoint_hints = [
         EndpointHint(
             url=x.url,
             method=x.method,
             source=x.resource_type or "xhr",
             page_url=raw.url,
+            params=x.params,
         )
         for x in raw.xhr_list
     ]
-    endpoint_hints.extend(
+    all_endpoint_hints.extend(
         EndpointHint(url=w.url, method="WS", source="websocket", page_url=raw.url)
         for w in raw.ws_list
     )
+    all_endpoint_hints.extend(
+        EndpointHint(url=u, method="GET", source="download", page_url=raw.url)
+        for u in raw.download_urls
+    )
+    all_endpoint_hints.extend(
+        EndpointHint(url=u, method="GET", source="onclick", page_url=raw.url)
+        for u in extract_onclick_urls(html, raw.url)
+    )
+    # Keep external observations separate so core only consumes in-scope endpoints.
+
+    endpoint_hints = [
+        hint for hint in all_endpoint_hints
+        if _is_endpoint_in_scope(hint.url, target_url)
+    ]
+    external_endpoint_hints = [
+        hint for hint in all_endpoint_hints
+        if not _is_endpoint_in_scope(hint.url, target_url)
+    ]
+    scoped_xhr_list = [
+        xhr for xhr in raw.xhr_list
+        if _is_endpoint_in_scope(xhr.url, target_url)
+    ]
+    scoped_ws_list = [
+        ws for ws in raw.ws_list
+        if _is_endpoint_in_scope(ws.url, target_url)
+    ]
 
     snapshot = PageSnapshot(
         url=raw.url,
@@ -231,19 +267,26 @@ def _snapshot_from_raw(raw: RawPageData, depth: int) -> PageSnapshot:
         status=raw.status,
         raw_html=raw.raw_html,
         rendered_html=raw.rendered_html,
-        links=extract_links(html, raw.url),
-        scripts=extract_scripts(html, raw.url),
+        links=_scope_urls(extract_links(html, raw.url), target_url),
+        scripts=_scope_urls(extract_scripts(html, raw.url), target_url),
         forms=extract_forms(html, raw.url),
         technologies=detect_technologies(html, raw.response_headers),
         render_type=detect_render_type(raw.raw_html, raw.rendered_html),
-        xhr_list=raw.xhr_list,
-        ws_list=raw.ws_list,
+        xhr_list=scoped_xhr_list,
+        ws_list=scoped_ws_list,
         endpoint_hints=endpoint_hints,
+        external_endpoint_hints=external_endpoint_hints,
         request_headers=raw.request_headers,
         response_headers=raw.response_headers,
         cookies=raw.cookies,
+        comments=extract_comments(html),
+        url_params=extract_url_params(raw.url),
+        csr_framework=detect_csr_framework(html) or "",
     )
-    snapshot.routes = _dedupe_strings([*snapshot.routes, *getattr(raw, "discovered_urls", [])])
+    snapshot.routes = _scope_urls(
+        [*snapshot.routes, *getattr(raw, "discovered_urls", [])],
+        target_url,
+    )
     return snapshot
 
 
@@ -254,6 +297,7 @@ async def _enrich_from_scripts(
 ) -> None:
     routes: set[str] = set(page.routes)
     hints: list[EndpointHint] = list(page.endpoint_hints)
+    external_hints: list[EndpointHint] = list(page.external_endpoint_hints)
 
     for script_url in page.scripts[:10]:
         if not _is_in_scope(script_url, config.target_url):
@@ -272,16 +316,23 @@ async def _enrich_from_scripts(
 
         for endpoint in extract_endpoints(js_body):
             full = _normalise_url(config.target_url, urljoin(page.url, endpoint))
-            if _is_in_scope(full, config.target_url):
-                hints.append(EndpointHint(
-                    url=full,
-                    method="GET",
-                    source="js-static",
-                    page_url=page.url,
-                ))
+            qs = urlparse(full).query
+            params = {k: v[0] if len(v) == 1 else v for k, v in parse_qs(qs).items()} if qs else {}
+            hint = EndpointHint(
+                url=full,
+                method="GET",
+                source="js-static",
+                page_url=page.url,
+                params=params,
+            )
+            if _is_endpoint_in_scope(full, config.target_url):
+                hints.append(hint)
+            else:
+                external_hints.append(hint)
 
     page.routes = sorted(routes)
     page.endpoint_hints = _dedupe_endpoints(hints)
+    page.external_endpoint_hints = _dedupe_endpoints(external_hints)
 
 
 async def _manifest_links(manifest_url: str) -> list[str]:
@@ -340,6 +391,19 @@ def _is_in_scope(url: str, target_url: str) -> bool:
     parsed = urlparse(url)
     target = urlparse(target_url)
     return parsed.scheme in ("http", "https") and parsed.netloc == target.netloc
+
+
+def _is_endpoint_in_scope(url: str, target_url: str) -> bool:
+    parsed = urlparse(urljoin(target_url, url))
+    target = urlparse(target_url)
+    return parsed.scheme in ("http", "https", "ws", "wss") and parsed.netloc == target.netloc
+
+
+def _scope_urls(urls, target_url: str) -> list[str]:
+    return _dedupe_strings(
+        url for url in urls
+        if _is_in_scope(_normalise_url(target_url, url), target_url)
+    )
 
 
 def _path_too_deep(url: str, limit: int) -> bool:

@@ -8,43 +8,11 @@ piscovery 참고: piscovery/spider/parse.py
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from typing import Optional
 from urllib.parse import parse_qs, urljoin, urlparse
 
-
-# 테스트용 타깃 URL
-# core/models.py 의 Config 가 확정되면 이 상수를 삭제하고
-# core 로부터 target_url 을 전달받는 방식으로 교체한다.
-TARGET_URL = "https://www.hotspotfan.online"
-
-
-# ── 임시 데이터 모델 ─────────────────────────────────────────
-# core/models.py 확정 후 아래 두 클래스를 삭제하고
-# from core.models import FormField, FormInfo 로 교체한다.
-
-@dataclass
-class FormField:
-    name: str = ""
-    field_type: str = "text"
-    id: str = ""
-    placeholder: str = ""
-    aria_label: str = ""
-    value: str = ""
-    required: bool = False
-
-    @property
-    def type(self) -> str:
-        return self.field_type
-
-
-@dataclass
-class FormInfo:
-    action: str = ""
-    method: str = "GET"
-    enctype: str = ""
-    fields: list[FormField] = field(default_factory=list)
+from crawler.models import FormField, FormInfo
 
 
 # ── 내부용 HTML 파서 ──────────────────────────────────────
@@ -59,6 +27,7 @@ class _PageParser(HTMLParser):
         self.base_url = base_url
         self.title: str = ""
         self.links: list[str] = []
+        self.onclick_urls: list[str] = []
         self.scripts: list[str] = []
         self.forms: list[FormInfo] = []
         self.manifest_url: str = ""
@@ -72,6 +41,12 @@ class _PageParser(HTMLParser):
             href = attr.get("href") or ""
             if href and not href.startswith(("#", "mailto:", "javascript:")):
                 self.links.append(urljoin(self.base_url, href))
+
+            onclick = attr.get("onclick") or ""
+            if onclick:
+                match = re.search(r"""['"]([./][^'"]+)['"]""", onclick)
+                if match:
+                    self.onclick_urls.append(urljoin(self.base_url, match.group(1)))
 
         elif tag == "script":
             src = attr.get("src") or ""
@@ -174,6 +149,19 @@ _ROUTE_PATTERNS: list[str] = [
 def is_html(content_type: str) -> bool:
     """응답이 HTML인지 확인. 크롤링 대상 여부 판단에 사용."""
     return "text/html" in content_type.lower()
+
+
+def extract_onclick_urls(html: str, base_url: str) -> list[str]:
+    """HTML에서 onclick 속성에 포함된 URL 추출 (endpoint hint 용)."""
+    parser = _PageParser(base_url)
+    parser.feed(html)
+    seen: set[str] = set()
+    result: list[str] = []
+    for url in parser.onclick_urls:
+        if url not in seen:
+            seen.add(url)
+            result.append(url)
+    return result
 
 
 def extract_links(html: str, base_url: str) -> list[str]:

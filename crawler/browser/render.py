@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+from urllib.parse import parse_qs, urlparse
 
 from playwright.async_api import (
     Browser,
@@ -46,6 +47,26 @@ def _redact(text: str) -> str:
     return _JWT_RE.sub("[REDACTED:JWT]", text)
 
 
+def _parse_params(url: str, post_data: str) -> dict:
+    params: dict = {}
+    qs = urlparse(url).query
+    if qs:
+        parsed = parse_qs(qs)
+        params.update({k: v[0] if len(v) == 1 else v for k, v in parsed.items()})
+    if post_data:
+        try:
+            body = json.loads(post_data)
+            if isinstance(body, dict):
+                params.update(body)
+        except (json.JSONDecodeError, ValueError):
+            try:
+                parsed = parse_qs(post_data)
+                params.update({k: v[0] if len(v) == 1 else v for k, v in parsed.items()})
+            except Exception:
+                pass
+    return params
+
+
 def _is_body_capturable(mime: str) -> bool:
     if not mime:
         return False
@@ -82,7 +103,6 @@ async def render(
     cookies: list[dict] | None = None,
     local_storage: dict | None = None,
     session_storage: dict | None = None,
-    enable_dynamic_discovery: bool = False,
 ) -> RawPageData | None:
     try:
         return await asyncio.wait_for(
@@ -96,7 +116,6 @@ async def render(
                 cookies or [],
                 local_storage or {},
                 session_storage or {},
-                enable_dynamic_discovery,
             ),
             timeout=timeout + 10,
         )
@@ -114,12 +133,12 @@ async def _run(
     cookies: list[dict],
     local_storage: dict,
     session_storage: dict,
-    enable_dynamic_discovery: bool,
 ) -> RawPageData | None:
     ctx = await browser.new_context(
         user_agent=_UA,
         ignore_https_errors=True,
         extra_http_headers=extra_headers,
+        accept_downloads=True,
     )
     discovered_urls: list[str] = []
 
@@ -152,11 +171,10 @@ async def _run(
                 )
             )
 
-        if enable_dynamic_discovery:
-            try:
-                await ctx.add_init_script(HISTORY_SHIM)
-            except PlaywrightError:
-                pass
+        try:
+            await ctx.add_init_script(HISTORY_SHIM)
+        except PlaywrightError:
+            pass
 
         if block_heavy_resources:
             try:
@@ -168,6 +186,7 @@ async def _run(
 
         xhr_list: list[XHRRecord] = []
         ws_list: list[WSRecord] = []
+        download_urls: list[str] = []
         body_budget = {"used": 0}
 
         def on_request(req):
@@ -185,9 +204,11 @@ async def _run(
                 method=req.method,
                 resource_type=req.resource_type,
                 post_data=post_data[:_BODY_LIMIT],
+                params=_parse_params(req.url, post_data),
             ))
 
         page.on("request", on_request)
+        page.on("download", lambda dl: download_urls.append(dl.url))
 
         async def on_response(resp):
             try:
@@ -297,17 +318,16 @@ async def _run(
         except PlaywrightError:
             rendered_html = ""
 
-        if enable_dynamic_discovery:
-            try:
-                from_history = await history_urls(page, url)
-                from_clicks = await click_walk(page, url)
-                seen_discovered: set[str] = set()
-                for discovered in [*from_history, *from_clicks]:
-                    if discovered not in seen_discovered:
-                        seen_discovered.add(discovered)
-                        discovered_urls.append(discovered)
-            except Exception:
-                pass
+        try:
+            from_history = await history_urls(page, url)
+            from_clicks = await click_walk(page, url, timeout=max(5, timeout - 5))
+            seen_discovered: set[str] = set()
+            for discovered in [*from_history, *from_clicks]:
+                if discovered not in seen_discovered:
+                    seen_discovered.add(discovered)
+                    discovered_urls.append(discovered)
+        except Exception:
+            pass
 
         try:
             jar = await ctx.cookies([url])
@@ -327,7 +347,7 @@ async def _run(
     req_headers = {"User-Agent": _UA, **extra_headers}
 
     return RawPageData(
-        url=url,
+        url=page.url,
         status=status,
         request_headers=req_headers,
         response_headers=resp_headers,
@@ -337,6 +357,7 @@ async def _run(
         ws_list=ws_list,
         cookies=cookies,
         discovered_urls=discovered_urls,
+        download_urls=download_urls,
     )
 
 
