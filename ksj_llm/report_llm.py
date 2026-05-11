@@ -419,6 +419,38 @@ class LLMReporter:
 
         return (path_key.rstrip("/"), str(param or "").strip())
 
+    def _pick_sqli_payload_example(self, module_data):
+        if not isinstance(module_data, dict):
+            return None
+
+        technique_queries = module_data.get("technique_queries")
+        if not isinstance(technique_queries, dict):
+            return self._pick_payload_example(module_data)
+
+        unsafe_technique_words = (
+            "file", "outfiles", "outfile", "xp_cmdshell", "stacked", "info"
+        )
+
+        examples = []
+        for section_name in ("confirmed", "possible"):
+            section = technique_queries.get(section_name)
+            if not isinstance(section, dict):
+                continue
+
+            for technique, payloads in section.items():
+                technique_text = str(technique or "").strip().lower()
+                if any(word in technique_text for word in unsafe_technique_words):
+                    continue
+
+                for payload in self._as_list(payloads):
+                    text = self._truncate_text(payload, limit=240)
+                    if text:
+                        examples.append(text)
+                    if len(examples) >= 2:
+                        return " | ".join(examples)
+
+        return examples[0] if examples else None
+
     def _extract_sqli_items(self, module_data):
         if not isinstance(module_data, dict):
             return []
@@ -431,6 +463,7 @@ class LLMReporter:
         confidence = module_data.get("confidence")
         status = "confirmed" if str(confidence or "").strip().lower() == "high" else "detected"
         module_target = self._pick_first(module_data, ("target", "target_url", "url", "endpoint", "request_url", "path"))
+        payload_example = self._pick_sqli_payload_example(module_data)
 
         deduped = {}
         for item in injectable_params:
@@ -455,6 +488,7 @@ class LLMReporter:
                         f"SQLi module reported injectable parameter '{param}' "
                         f"with confidence={confidence or '-'}"
                     ),
+                    "payload_example": payload_example,
                     "dbms_type": dbms_type,
                     "confidence": confidence,
                     "duplicate_count": 1
