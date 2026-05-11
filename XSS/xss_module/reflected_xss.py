@@ -82,7 +82,7 @@ class ReflectedXSSScanner:
 
     def _test_param(self, target: dict, params: dict, param: str) -> dict | None:
         url = target["url"]
-        marker = new_marker()
+        marker, _ = new_marker()
         test_params = dict(params)
         test_params[param] = marker
         headers = target.get("headers") or {}
@@ -176,7 +176,7 @@ class ReflectedXSSScanner:
 
     def _test_post_param(self, target: dict, params: dict, param: str) -> dict | None:
         url = target["url"]
-        marker = new_marker()
+        marker, _ = new_marker()
         test_data = dict(params)
         test_data[param] = marker
         headers = target.get("headers") or {}
@@ -279,7 +279,7 @@ class ReflectedXSSScanner:
 
     def _test_header(self, target: dict, header_name: str) -> dict | None:
         url = target["url"]
-        marker = new_marker()
+        marker, _ = new_marker()
         inject_headers = dict(target.get("headers") or {})
         inject_headers[header_name] = marker
         cookies = target.get("cookies") or {}

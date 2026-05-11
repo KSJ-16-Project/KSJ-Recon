@@ -111,13 +111,14 @@ class StoredXSSScanner:
 
 
     def _test_form(self, target: dict, params: dict, param: str) -> dict | None:
-        cleanup_marker = new_marker()
+        cleanup_marker, alert_number = new_marker()  # Returns (marker, alert_number)
         marker = cleanup_marker
         # Keep a unique plain-text marker around the script payload so stored
         # views that sanitize tags but still render text remain detectable.
+        # Each test gets a different alert number to avoid false positives from previous test data.
         payload = (
             f"{cleanup_marker}"
-            f'<script data-testid="{cleanup_marker}">alert(1)</script>'
+            f'<script data-testid="{cleanup_marker}">alert({alert_number})</script>'
             f"{cleanup_marker}"
         )
         data = dict(params)
@@ -194,6 +195,7 @@ class StoredXSSScanner:
                 context=submit_analysis.context,
                 escaped=escaped,
                 payload=payload,
+                alert_number=alert_number,
                 cleanup_marker=cleanup_marker,
                 side_effect_possible=True,
                 stored_xss_submission_warning=STORED_XSS_SUBMISSION_WARNING,
@@ -246,6 +248,7 @@ class StoredXSSScanner:
                 context=analysis.context,
                 escaped=escaped,
                 payload=payload,
+                alert_number=alert_number,
                 cleanup_marker=cleanup_marker,
                 side_effect_possible=True,
                 stored_xss_submission_warning=STORED_XSS_SUBMISSION_WARNING,
@@ -270,7 +273,11 @@ class StoredXSSScanner:
 
         # Fallback: when list/detail pages transform text and strict marker
         # matching fails, verify real JS execution in the browser.
-        triggered, triggered_url, alert_text = self._browser_verify_stored(check_urls, req_headers, req_cookies)
+        triggered, triggered_url, alert_text = self._browser_verify_stored(
+            check_urls, req_headers, req_cookies, 
+            expected_marker=cleanup_marker,
+            expected_alert_number=alert_number
+        )
         if triggered:
             return self.builder.finding(
                 type="stored_xss_candidate_limited",
@@ -437,7 +444,14 @@ class StoredXSSScanner:
                     return results
         return results
 
-    def _browser_verify_stored(self, check_urls: list[str], headers: dict, cookies: dict) -> tuple[bool, str | None, str | None]:
+    def _browser_verify_stored(
+        self, 
+        check_urls: list[str], 
+        headers: dict, 
+        cookies: dict,
+        expected_marker: str | None = None,
+        expected_alert_number: int | None = None
+    ) -> tuple[bool, str | None, str | None]:
         if not check_urls:
             return False, None, None
         try:
@@ -456,6 +470,23 @@ class StoredXSSScanner:
                             self.browser_engine.wait_for_alert_capture(page, timeout_ms=1500)
                             triggered, alert_text = self.browser_engine.read_alert_capture(page)
                             if triggered:
+                                # Verify that the alert matches the expected marker and alert number
+                                if expected_marker and expected_alert_number:
+                                    page_content = page.content()
+                                    # Check if expected marker is in page content
+                                    if expected_marker not in page_content:
+                                        logger.debug(
+                                            "[stored_xss] alert triggered (alert_text=%s) but expected_marker '%s' not in page; skipping (likely previous test data)",
+                                            alert_text, expected_marker[:20]
+                                        )
+                                        continue
+                                    # Check if alert_text matches expected alert number
+                                    if alert_text and str(expected_alert_number) not in alert_text:
+                                        logger.debug(
+                                            "[stored_xss] alert triggered with unexpected value '%s' (expected %s); skipping",
+                                            alert_text, expected_alert_number
+                                        )
+                                        continue
                                 return True, check_url, alert_text
                     except Exception:
                         continue

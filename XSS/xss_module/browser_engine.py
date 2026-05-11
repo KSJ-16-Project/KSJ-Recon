@@ -58,28 +58,28 @@ class BrowserExecutionEngine:
 
     def install_alert_capture(self, page) -> None:
         script = r'''
-        (() => {
-          if (window.__xssAlertHookInstalled) return;
-          window.__xssAlertHookInstalled = true;
-          window.__xssAlertTriggered = false;
-          window.__xssAlertText = null;
-          const record = (kind, message) => {
-            window.__xssAlertTriggered = true;
-            window.__xssAlertText = kind + ':' + String(message ?? '');
+        (() => {  // 즉시 실행 함수: 페이지에 스크립트가 삽입되면 바로 실행
+          if (window.__xssAlertHookInstalled) return;  // 중복 설치 방지
+          window.__xssAlertHookInstalled = true;  // alert 감지 훅 설치 여부 저장
+          window.__xssAlertTriggered = false;  // alert/confirm/prompt 발생 여부 초기화
+          window.__xssAlertText = null;  // 발생한 팝업 종류와 메시지 저장 변수 초기화
+          const record = (kind, message) => {  // 팝업 발생 정보를 기록하는 공통 함수
+            window.__xssAlertTriggered = true;  // 팝업이 발생했음을 표시
+            window.__xssAlertText = kind + ':' + String(message ?? '');  // 팝업 종류와 메시지 저장
           };
-          window.alert = (message) => { record('alert', message); };
-          window.confirm = (message) => { record('confirm', message); return true; };
-          window.prompt = (message, defaultValue) => { record('prompt', message); return defaultValue || ''; };
+          window.alert = (message) => { record('alert', message); };  // alert 호출을 가로채서 기록
+          window.confirm = (message) => { record('confirm', message); return true; };  // confirm 호출 기록 후 true 반환
+          window.prompt = (message, defaultValue) => { record('prompt', message); return defaultValue || ''; };  // prompt 호출 기록 후 기본값 반환
         })();
         '''
         try:
-            page.add_init_script(script)
+            page.add_init_script(script)  # 새 문서가 로드되기 전에 스크립트를 먼저 삽입
         except Exception:
-            pass
+            pass  # 삽입 실패 시에도 전체 탐지 흐름이 중단되지 않도록 무시
         try:
-            page.evaluate(script)
+            page.evaluate(script)  # 이미 로드된 현재 페이지에도 즉시 스크립트 실행
         except Exception:
-            pass
+            pass  # 실행 실패 시에도 전체 스캔이 멈추지 않도록 무시
 
     def read_alert_capture(self, page) -> tuple[bool, str | None]:
         try:

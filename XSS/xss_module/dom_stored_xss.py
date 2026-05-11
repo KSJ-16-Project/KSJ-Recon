@@ -116,23 +116,24 @@ class DOMStoredXSSVerifier:
             "[dom_stored_xss] safe_to_submit=True – 실제 폼 제출이 발생합니다. "
             "테스트 데이터가 서버에 저장될 수 있습니다. (%s)", url,
         )
-        cleanup_marker = new_marker()
-        for payload in self._payloads_with_marker(cleanup_marker):
-            result = self._try_payload(browser, url, payload, cookies, headers, cleanup_marker)
+        cleanup_marker, alert_number = new_marker()  # Returns (marker, alert_number)
+        for payload in self._payloads_with_marker(cleanup_marker, alert_number):
+            result = self._try_payload(browser, url, payload, cookies, headers, cleanup_marker, alert_number)
             if result:
                 return result
         return None
 
-    def _payloads_with_marker(self, cleanup_marker: str) -> list[str]:
+    def _payloads_with_marker(self, cleanup_marker: str, alert_number: int) -> list[str]:
         # Include the cleanup marker directly in the submitted payload so test
         # data can be identified and cleaned later.
+        # Use different alert numbers for each payload variant
         return [
-            f'<img data-testid="{cleanup_marker}" src=x onerror=alert(1)>',
-            f'<svg data-testid="{cleanup_marker}" onload=alert(1)>',
-            f'<script data-testid="{cleanup_marker}">alert(1)</script>',
+            f'<img data-testid="{cleanup_marker}" src=x onerror=alert({alert_number})>',
+            f'<svg data-testid="{cleanup_marker}" onload=alert({alert_number})>',
+            f'<script data-testid="{cleanup_marker}">alert({alert_number})</script>',
         ]
 
-    def _try_payload(self, browser, url: str, payload: str, cookies: dict, headers: dict, cleanup_marker: str) -> dict | None:
+    def _try_payload(self, browser, url: str, payload: str, cookies: dict, headers: dict, cleanup_marker: str, alert_number: int) -> dict | None:
         param_name = "form_input"
         trigger_stage = None
         alert_text = None
@@ -234,9 +235,15 @@ class DOMStoredXSSVerifier:
 
                 hook_triggered, hook_text = self.engine.read_alert_capture(page)
                 if hook_triggered:
-                    trigger_stage = "after_submit_same_document"
-                    alert_text = hook_text
-                else:
+                    # Verify alert matches expected alert number
+                    if hook_text and str(alert_number) in hook_text:
+                        trigger_stage = "after_submit_same_document"
+                        alert_text = hook_text
+                    else:
+                        logger.debug("dom_stored_xss alert triggered but unexpected value '%s' (expected %s)", hook_text, alert_number)
+                        hook_triggered = False
+                
+                if not hook_triggered:
                     # Revisit to trigger persisted client-side replay. Reinstall the
                     # hook after navigation because a new document gets a fresh global.
                     self.engine.install_alert_capture(page)
@@ -245,8 +252,13 @@ class DOMStoredXSSVerifier:
                     self.engine.wait_for_alert_capture(page, timeout_ms=2000)
                     hook_triggered, hook_text = self.engine.read_alert_capture(page)
                     if hook_triggered:
-                        trigger_stage = "after_revisit"
-                        alert_text = hook_text
+                        # Verify alert matches expected alert number
+                        if hook_text and str(alert_number) in hook_text:
+                            trigger_stage = "after_revisit"
+                            alert_text = hook_text
+                        else:
+                            logger.debug("dom_stored_xss alert triggered but unexpected value '%s' (expected %s)", hook_text, alert_number)
+                            hook_triggered = False
 
                 if trigger_stage:
                     logger.info("dom_stored_xss confirmed: %s [%s]", url, param_name)
