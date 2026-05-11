@@ -125,8 +125,8 @@ async def run_scan(scan_input: ScanInput) -> ScanOutput:
     try:
         best_result: DBMSDetectResult | None = None
         best_endpoint: Endpoint | None = None
-        all_injectable: list[dict] = []        # [{"param": str, "url": str, "method": str}]
-        seen_injectable: set[tuple] = set()    # (param, url, method) 중복 방지
+        # (param, url, method) 트리플 → 출력 dict. 같은 트리플의 다른 value들은 values 배열에 누적
+        injectable_map: dict[tuple, dict] = {}
         failed: set[tuple] = set()             # 재시도 후에도 실패한 (url, method)
         relogin_unavailable = False            # 한 번이라도 재로그인 불가 발생
 
@@ -174,13 +174,17 @@ async def run_scan(scan_input: ScanInput) -> ScanOutput:
 
             for param_name in result.injectable_params:
                 triple = (param_name, ep.url, ep.method)
-                if triple not in seen_injectable:
-                    seen_injectable.add(triple)
-                    all_injectable.append({
+                value = next((p.value for p in ep.params if p.name == param_name), "")
+                entry = injectable_map.get(triple)
+                if entry is None:
+                    injectable_map[triple] = {
                         "param": param_name,
+                        "values": [value],
                         "url": ep.url,
                         "method": ep.method,
-                    })
+                    }
+                elif value not in entry["values"]:
+                    entry["values"].append(value)
 
             if best_result is None:
                 best_result = result
@@ -195,6 +199,7 @@ async def run_scan(scan_input: ScanInput) -> ScanOutput:
 
         # 버전 추출 — DBMS가 식별된 endpoint를 그대로 사용
         # (URL/method/enctype/폼 묶음을 그대로 쓰지 않으면 Phase 3가 항상 실패)
+        all_injectable = list(injectable_map.values())
         injectable_names = {
             item["param"] for item in all_injectable
             if item["url"] == best_endpoint.url and item["method"] == best_endpoint.method
