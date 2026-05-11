@@ -391,6 +391,33 @@ Keep JSON keys and enum values in English.
             return False
         return bool(self._as_str(param.get("name")).strip())
 
+    def _normalize_sql_endpoint(self, item):
+        endpoint = self._as_dict(item)
+        method = self._as_str(endpoint.get("method") or "GET").upper()
+        if method not in ("GET", "POST"):
+            method = "GET"
+
+        return {
+            "url": self._as_str(endpoint.get("url")),
+            "method": method,
+            "enctype": self._as_str(endpoint.get("enctype")),
+            "params": [
+                self._normalize_sql_param(param)
+                for param in self._as_list(endpoint.get("params"))
+                if self._is_valid_sql_param(param)
+            ]
+        }
+
+    def _is_valid_sql_endpoint(self, item):
+        endpoint = self._as_dict(item)
+        return bool(
+            self._as_str(endpoint.get("url")).strip()
+            and any(
+                self._is_valid_sql_param(param)
+                for param in self._as_list(endpoint.get("params"))
+            )
+        )
+
     def _normalize_xss_url(self, item):
         if isinstance(item, str):
             return {"url": item}
@@ -583,11 +610,6 @@ Keep JSON keys and enum values in English.
         normalized = {
             "sql_data": {
                 "target_url": self._as_str(sql_data.get("target_url")),
-                "crawler_data": [
-                    self._normalize_sql_param(item)
-                    for item in self._as_list(sql_data.get("crawler_data"))
-                    if self._is_valid_sql_param(item)
-                ],
                 "auth": {
                     "cookie": self._as_str(auth.get("cookie")),
                     "Authorization": self._as_str(auth.get("Authorization")),
@@ -599,7 +621,11 @@ Keep JSON keys and enum values in English.
                     "service": self._as_str(nmap_data.get("service")),
                     "version": self._as_str(nmap_data.get("version"))
                 },
-                "fuzzer_data": self._as_string_list(sql_data.get("fuzzer_data"))
+                "endpoints": [
+                    self._normalize_sql_endpoint(item)
+                    for item in self._as_list(sql_data.get("endpoints"))
+                    if self._is_valid_sql_endpoint(item)
+                ]
             },
             "xss_data": {},
             "filedown_data": {},

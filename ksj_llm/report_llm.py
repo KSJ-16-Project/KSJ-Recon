@@ -430,14 +430,16 @@ class LLMReporter:
         dbms_type = module_data.get("dbms_type")
         confidence = module_data.get("confidence")
         status = "confirmed" if str(confidence or "").strip().lower() == "high" else "detected"
+        module_target = self._pick_first(module_data, ("target", "target_url", "url", "endpoint", "request_url", "path"))
 
         deduped = {}
         for item in injectable_params:
-            if not isinstance(item, dict):
-                continue
-
-            url = item.get("url") or item.get("target") or item.get("endpoint")
-            param = item.get("param") or item.get("parameter")
+            if isinstance(item, dict):
+                url = self._pick_first(item, ("target", "target_url", "url", "endpoint", "request_url", "path"))
+                param = self._pick_first(item, ("param", "parameter", "field", "input_name", "name"))
+            else:
+                url = module_target
+                param = str(item).strip()
             if not url and not param:
                 continue
 
@@ -451,7 +453,7 @@ class LLMReporter:
                     "status": status,
                     "evidence": (
                         f"SQLi module reported injectable parameter '{param}' "
-                        f"on this path with confidence={confidence or '-'}"
+                        f"with confidence={confidence or '-'}"
                     ),
                     "dbms_type": dbms_type,
                     "confidence": confidence,
@@ -480,7 +482,7 @@ class LLMReporter:
         }
 
         known_keys = {
-            "target", "url", "endpoint", "request_url", "path",
+            "target", "target_url", "url", "endpoint", "request_url", "path",
             "method", "http_method", "parameter", "param", "field", "input_name",
             "vulnerability", "type", "name", "title", "check",
             "risk", "severity", "level", "status", "result", "state",
@@ -507,7 +509,7 @@ class LLMReporter:
                 if isinstance(item, dict):
                     compact = {
                         "module": str(module_name),
-                        "target": self._pick_first(item, ("target", "url", "endpoint", "request_url", "path")),
+                        "target": self._pick_first(item, ("target", "target_url", "url", "endpoint", "request_url", "path")),
                         "method": self._pick_first(item, ("method", "http_method")),
                         "parameter": self._pick_first(item, ("parameter", "param", "field", "input_name")),
                         "vulnerability": self._pick_first(item, ("vulnerability", "type", "name", "title", "check")),
