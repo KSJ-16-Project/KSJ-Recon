@@ -751,27 +751,29 @@ Do not include markdown, comments, explanations, or code fences.
 {response_text}
 """
 
-        response = self.client.messages.create(
+        repaired_text = self.create_message_text(repair_prompt, max_tokens=24000)
+        return self._parse_llm_json_text(repaired_text)
+
+    def create_message_text(self, prompt: str, max_tokens=24000):
+        chunks = []
+
+        with self.client.messages.stream(
             model=self.model.strip(),
-            max_tokens=24000,
+            max_tokens=max_tokens,
             messages=[
-                {"role": "user", "content": repair_prompt}
+                {"role": "user", "content": prompt}
             ]
-        )
-        return self._parse_llm_json_text(response.content[0].text)
+        ) as stream:
+            for text in stream.text_stream:
+                chunks.append(text)
+
+        return "".join(chunks)
 
     def generate_report_from_data(self, scan_data: dict, mode="mode_a"):
         mode = self.normalize_mode(mode)
         prompt = self.build_prompt(scan_data, mode=mode)
 
-        response = self.client.messages.create(
-            model=self.model.strip(),
-            max_tokens=24000,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
-        response_text = response.content[0].text
+        response_text = self.create_message_text(prompt, max_tokens=24000)
 
         try:
             return self.parse_llm_json(response_text)
