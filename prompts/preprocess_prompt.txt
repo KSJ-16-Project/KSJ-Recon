@@ -214,7 +214,10 @@ xss_data.urls is used for:
 Every xss_data.stored_targets item MUST contain only:
 - submit_url: string, copied from scan_data only
 - view_url: string, copied from scan_data only
+- method: "GET" or "POST"
+- body_format: "form" or "json"
 - body: object
+- attack_params: array of parameter names that can receive the XSS payload
 - safe_to_submit: boolean
 Do not include empty fields or metadata fields.
 For Stored XSS and DOM Stored form candidates that you decide to emit, set safe_to_submit to true by default.
