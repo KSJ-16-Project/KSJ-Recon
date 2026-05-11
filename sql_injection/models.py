@@ -114,7 +114,7 @@ class ScanOutput:
     dbms_type: DBMSType
     dbms_version: Optional[str]
     confidence: Confidence
-    injectable_params: list[dict]  # [{"param": str, "url": str, "method": str}]
+    injectable_params: list[dict]  # [{"param": str, "values": list[str], "url": str, "method": str}]
     technique_queries: TechniqueQueries
     probe_log: list[ProbeLog]
     auth_expired: bool = False  # True면 오케스트레이터가 Login 모듈 재호출

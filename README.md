@@ -117,9 +117,9 @@ MySQL / PostgreSQL / MSSQL / Oracle / SQLite
   "dbms_version": "2012",
   "confidence": "high",
   "injectable_params": [
-    {"param": "top",       "url": "http://.../shop_topview.asp",   "method": "GET"},
-    {"param": "g_code",    "url": "http://.../shop_goodsview.asp", "method": "GET"},
-    {"param": "con_title", "url": "http://.../_action/faq.do.php", "method": "POST"}
+    {"param": "top",       "values": ["1"],          "url": "http://.../shop_topview.asp",   "method": "GET"},
+    {"param": "g_code",    "values": ["200811816461"], "url": "http://.../shop_goodsview.asp", "method": "GET"},
+    {"param": "con_title", "values": [""],           "url": "http://.../_action/faq.do.php", "method": "POST"}
   ],
   "technique_queries": {
     "confirmed": {
@@ -134,7 +134,7 @@ MySQL / PostgreSQL / MSSQL / Oracle / SQLite
 }
 ```
 
-- `injectable_params` 항목은 `(param, url, method)` 트리플 단위로 누적되며 중복 제거됨
+- `injectable_params` 항목은 `(param, url, method)` 트리플 단위로 중복 제거되며, 같은 트리플이 다른 value로 여러 endpoint에서 발견되면 `values` 배열에 누적
 - `to_dict()` / `to_json()` 출력에는 `probe_log`가 포함되지 않음 (대용량이라 제외)
 - `auth_expired=true`는 모든 endpoint가 세션 만료/재로그인 불가로 막혔음을 의미
 
@@ -246,8 +246,10 @@ async def _try_relogin() -> dict[str, str] | None:
 
 ```diff
 - injectable_params: [{"param": str, "url": str}]
-+ injectable_params: [{"param": str, "url": str, "method": str}]
++ injectable_params: [{"param": str, "values": list[str], "url": str, "method": str}]
 ```
+
+`(param, url, method)` 트리플 기준 중복 제거 + 같은 트리플의 다른 value들은 `values` 배열에 누적 (11차 보완).
 
 ### 동반 문서
 
