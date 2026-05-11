@@ -465,21 +465,49 @@ class LLMReporter:
         module_target = self._pick_first(module_data, ("target", "target_url", "url", "endpoint", "request_url", "path"))
         payload_example = self._pick_sqli_payload_example(module_data)
 
+        def normalize_values(value):
+            values = value if isinstance(value, list) else []
+            normalized = []
+            for item_value in values:
+                if item_value in (None, "", [], {}):
+                    continue
+                text = self._short_text(item_value, 80)
+                if text and text not in normalized:
+                    normalized.append(text)
+                if len(normalized) >= 5:
+                    break
+            return normalized
+
+        def target_with_values(url, param, values):
+            if not url or not param or not values:
+                return url
+            try:
+                parsed = urlsplit(str(url))
+                if parsed.query:
+                    return url
+            except ValueError:
+                pass
+            return f"{url}?{param}={values[0]}"
+
         deduped = {}
         for item in injectable_params:
             if isinstance(item, dict):
                 url = self._pick_first(item, ("target", "target_url", "url", "endpoint", "request_url", "path"))
                 param = self._pick_first(item, ("param", "parameter", "field", "input_name", "name"))
+                values = normalize_values(
+                    item.get("values") or item.get("observed_values") or item.get("sample_values")
+                )
             else:
                 url = module_target
                 param = str(item).strip()
+                values = []
             if not url and not param:
                 continue
 
             key = self._url_path_param_key(url, param)
             if key not in deduped:
                 deduped[key] = {
-                    "target": url,
+                    "target": target_with_values(url, param, values),
                     "parameter": param,
                     "vulnerability": "SQL injection candidate",
                     "risk": "HIGH" if status == "confirmed" else "MEDIUM",
@@ -487,14 +515,32 @@ class LLMReporter:
                     "evidence": (
                         f"SQLi module reported injectable parameter '{param}' "
                         f"with confidence={confidence or '-'}"
+                        + (f"; observed values: {', '.join(values)}" if values else "")
                     ),
                     "payload_example": payload_example,
+                    "observed_values": ", ".join(values) if values else None,
                     "dbms_type": dbms_type,
                     "confidence": confidence,
                     "duplicate_count": 1
                 }
             else:
                 deduped[key]["duplicate_count"] += 1
+                existing_values = deduped[key].get("observed_values")
+                existing = [value.strip() for value in str(existing_values or "").split(",") if value.strip()]
+                changed = False
+                for value in values:
+                    if value not in existing:
+                        existing.append(value)
+                        changed = True
+                    if len(existing) >= 5:
+                        break
+                if changed:
+                    deduped[key]["observed_values"] = ", ".join(existing)
+                    deduped[key]["evidence"] = (
+                        f"SQLi module reported injectable parameter '{param}' "
+                        f"with confidence={confidence or '-'}"
+                        f"; observed values: {', '.join(existing)}"
+                    )
 
         return list(deduped.values())
 
@@ -609,6 +655,7 @@ class LLMReporter:
                 "For attack-module findings, use one category from SQLi, XSS, FileDownload, SSRF, Web, Network, or Other.",
                 "For SQLi, XSS, FileDownload, and SSRF findings, include findings[].payload_example when attack_results contains payload_example, test_payload, proof_payload, payload, or payloads.",
                 "When attack_results contains multiple SQLi items with different target path and parameter pairs, preserve them as distinct findings instead of collapsing them into one generic SQLi finding.",
+                "For SQLi findings, include observed parameter values from target, evidence, or extra.observed_values when present.",
                 "Use payload_example only as a short diagnostic verification string copied or summarized from attack_results. Do not invent payloads."
             ],
             "metadata": {
@@ -634,6 +681,7 @@ class LLMReporter:
 - This category rule overrides the mode_a category restriction from report_prompt.txt.
 - Write all human-readable report fields in Korean.
 - If attack_results contains multiple SQLi items with different target path and parameter pairs, keep those distinct SQLi candidates as separate findings. Do not collapse all SQLi evidence into one finding unless the target path and parameter are the same.
+- For SQLi findings, include observed parameter values from attack_results.target, attack_results.evidence, or attack_results.extra.observed_values when present.
 - For findings derived from SQLi, XSS, FileDownload, or SSRF attack_results, include findings[].payload_example when a provided payload_example, test_payload, proof_payload, payload, or payloads value exists.
 - payload_example must be copied or briefly summarized from attack_results and must remain a short diagnostic verification string, not a full exploit procedure.
 - If no provided payload exists for a finding, set payload_example to "-".
