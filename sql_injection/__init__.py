@@ -8,6 +8,7 @@ from .models import (
     NmapDBInfo,
     DBMSType,
     Confidence,
+    Endpoint,
 )
 from .scanner import run_scan
 
@@ -22,6 +23,7 @@ __all__ = [
     "NmapDBInfo",
     "DBMSType",
     "Confidence",
+    "Endpoint",
 ]
 
 

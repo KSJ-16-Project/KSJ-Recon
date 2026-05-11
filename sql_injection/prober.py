@@ -108,23 +108,39 @@ def _build_baseline_request(url: str, params: list[Parameter]) -> tuple[str, dic
     return current_url, body
 
 
-def _inject_param(url: str, param: Parameter, payload: str) -> tuple[str, dict]:
+def _inject_param(
+    url: str,
+    param: Parameter,
+    payload: str,
+    all_params: list[Parameter] | None = None,
+) -> tuple[str, dict]:
     """
     파라미터 위치에 따라 페이로드를 주입한 (url, body) 튜플을 반환한다.
     기존 값 뒤에 페이로드를 붙여 앱이 정상 파싱 후 SQL 처리까지 도달하게 한다.
+
+    all_params가 주어지면 같은 endpoint의 다른 파라미터도 정상값으로 동봉한다.
+    POST 폼은 hidden 필드까지 전부 보내야 백엔드 검증을 통과해 SQL 단계에 도달한다.
     """
     injected_value = param.value + payload
 
     if param.location == ParamLocation.QUERY:
         parsed = urlparse(url)
         qs = parse_qs(parsed.query, keep_blank_values=True)
+        if all_params:
+            for p in all_params:
+                if p.location == ParamLocation.QUERY:
+                    qs[p.name] = [p.value]
         qs[param.name] = [injected_value]
         new_query = urlencode({k: v[0] for k, v in qs.items()})
         new_url = urlunparse(parsed._replace(query=new_query))
         return new_url, {}
 
     if param.location == ParamLocation.BODY:
-        return url, {param.name: injected_value}
+        body: dict[str, str] = {}
+        if all_params:
+            body = {p.name: p.value for p in all_params if p.location == ParamLocation.BODY}
+        body[param.name] = injected_value
+        return url, body
 
     return url, {}
 
@@ -181,8 +197,10 @@ async def send_probe(
     auth: dict[str, str],
     method: str = "GET",
     csrf_tokens: dict[str, str] | None = None,
+    enctype: str = "",
+    all_params: list[Parameter] | None = None,
 ) -> ProbeLog:
-    injected_url, body = _inject_param(url, param, payload)
+    injected_url, body = _inject_param(url, param, payload, all_params)
     headers = _build_headers(param, payload, auth)
     # COOKIE 파라미터는 _build_headers가 Cookie 헤더를 완전히 구성하므로
     # cookies= 파라미터에 중복으로 넘기지 않는다
@@ -194,8 +212,15 @@ async def send_probe(
 
     start = time.monotonic()
     try:
-        if method == "POST" or param.location == ParamLocation.BODY:
-            resp = await client.post(injected_url, data=body, headers=headers, cookies=cookies)
+        is_post = method == "POST" or param.location == ParamLocation.BODY
+        if is_post:
+            if enctype == "multipart/form-data":
+                files = {k: (None, str(v)) for k, v in body.items()}
+                resp = await client.post(injected_url, files=files, headers=headers, cookies=cookies)
+            elif enctype == "application/json":
+                resp = await client.post(injected_url, json=body, headers=headers, cookies=cookies)
+            else:
+                resp = await client.post(injected_url, data=body, headers=headers, cookies=cookies)
         else:
             resp = await client.get(injected_url, headers=headers, cookies=cookies)
 
@@ -234,6 +259,7 @@ async def send_probes_concurrent(
     payloads: list[str],
     auth: dict[str, str],
     method: str = "GET",
+    enctype: str = "",
 ) -> list[ProbeLog]:
     """파라미터 × 페이로드 전체 조합을 동시에 전송한다."""
     async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT, follow_redirects=False) as client:
@@ -245,7 +271,7 @@ async def send_probes_concurrent(
             csrf_tokens = await fetch_csrf_token(client, url, auth)
 
         tasks = [
-            send_probe(client, url, param, payload, auth, method, csrf_tokens or None)
+            send_probe(client, url, param, payload, auth, method, csrf_tokens or None, enctype, params)
             for param in params
             for payload in payloads
         ]
