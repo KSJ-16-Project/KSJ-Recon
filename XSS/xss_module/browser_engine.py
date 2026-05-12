@@ -62,10 +62,13 @@ class BrowserExecutionEngine:
           if (window.__xssAlertHookInstalled) return;  // 중복 설치 방지
           window.__xssAlertHookInstalled = true;  // alert 감지 훅 설치 여부 저장
           window.__xssAlertTriggered = false;  // alert/confirm/prompt 발생 여부 초기화
-          window.__xssAlertText = null;  // 발생한 팝업 종류와 메시지 저장 변수 초기화
+          window.__xssAlertText = null;  // 마지막 팝업 종류와 메시지 저장 변수 초기화
+          window.__xssAlertTexts = [];  // 같은 페이지에서 여러 팝업이 발생할 때 모두 보존
           const record = (kind, message) => {  // 팝업 발생 정보를 기록하는 공통 함수
+            const text = kind + ':' + String(message ?? '');
             window.__xssAlertTriggered = true;  // 팝업이 발생했음을 표시
-            window.__xssAlertText = kind + ':' + String(message ?? '');  // 팝업 종류와 메시지 저장
+            window.__xssAlertText = text;  // 마지막 팝업 종류와 메시지 저장
+            window.__xssAlertTexts.push(text);
           };
           window.alert = (message) => { record('alert', message); };  // alert 호출을 가로채서 기록
           window.confirm = (message) => { record('confirm', message); return true; };  // confirm 호출 기록 후 true 반환
@@ -87,6 +90,13 @@ class BrowserExecutionEngine:
             return bool(data.get("triggered")), data.get("text")
         except Exception:
             return False, None
+
+    def read_alert_captures(self, page) -> list[str]:
+        try:
+            data = page.evaluate("() => Array.isArray(window.__xssAlertTexts) ? window.__xssAlertTexts : []")
+            return [str(item) for item in data if item is not None]
+        except Exception:
+            return []
 
     def wait_for_alert_capture(self, page, timeout_ms: int | None = None) -> None:
         try:
