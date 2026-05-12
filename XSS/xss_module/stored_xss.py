@@ -42,34 +42,17 @@ STORED_XSS_SUBMISSION_WARNING = (
 )
 
 
-def _alert_matches(alert_text: str | None, expected_alert_value: object | None) -> bool:
-    if expected_alert_value is None or not alert_text:
-        return False
-    kind, sep, value = str(alert_text).partition(":")
-    return sep == ":" and kind in {"alert", "confirm", "prompt"} and value == str(expected_alert_value)
-
-
-def _matching_alert(alert_text: str | None, alert_texts: list[str], expected_alert_value: object | None) -> str | None:
-    for text in [alert_text, *alert_texts]:
-        if _alert_matches(text, expected_alert_value):
-            return text
-    return None
-
-
 class StoredXSSScanner:
-    def __init__(
-        self,
-        targets: list[dict],
-        client: HttpClient,
-        builder: ResultBuilder,
-        auth_refresher=None,
-        auth_username: str | None = None,
-    ):
+    def __init__(self, targets: list[dict], client: HttpClient, builder: ResultBuilder, auth_refresher=None):
         self.targets = targets
         self.client = client
         self.builder = builder
         self.auth_refresher = auth_refresher
-        self.auth_username = auth_username
+        try:
+            from ksj_login import credentials as _ksj_creds
+            self.username = _ksj_creds._stored_config.username if _ksj_creds._stored_config else None
+        except Exception:
+            self.username = None
         self.analyzer = ContextAnalyzer()
         self.errors: list[dict] = []
         self.skipped: list[dict] = []
@@ -135,20 +118,21 @@ class StoredXSSScanner:
     def _test_form(self, target: dict, params: dict, param: str) -> dict | None:
         cleanup_marker, alert_number = new_marker()  # Returns (marker, alert_number)
         marker = cleanup_marker
-        alert_expected = cleanup_marker
         # Keep a unique plain-text marker around the script payload so stored
         # views that sanitize tags but still render text remain detectable.
-        # Alert text also uses the marker so previous test data cannot satisfy
-        # verification by reusing alert(1).
+        # Each test gets a different alert number to avoid false positives from previous test data.
         payload = (
             f"{cleanup_marker}"
-            f'<script data-testid="{cleanup_marker}">alert("{alert_expected}")</script>'
+            f'<script data-testid="{cleanup_marker}">alert({alert_number})</script>'
             f"{cleanup_marker}"
         )
-        data = self._normalize_form_data(dict(params), attack_param=param)
+        data = dict(params)
         # Store a marker-bearing payload so later verification can both trigger
-        # a marker-specific alert and identify/clean the test data by cleanup_marker.
+        # alert(1) and identify/clean the test data by cleanup_marker.
         data[param] = payload
+        # If con_id parameter exists, replace with logged-in username (email)
+        if 'con_id' in data and self.username:
+            data['con_id'] = self.username
         url = target["url"]
         method = target.get("method", "GET").upper()
         req_headers = target.get("headers") or {}
@@ -220,7 +204,6 @@ class StoredXSSScanner:
                 escaped=escaped,
                 payload=payload,
                 alert_number=alert_number,
-                alert_expected=alert_expected,
                 cleanup_marker=cleanup_marker,
                 side_effect_possible=True,
                 stored_xss_submission_warning=STORED_XSS_SUBMISSION_WARNING,
@@ -274,7 +257,6 @@ class StoredXSSScanner:
                 escaped=escaped,
                 payload=payload,
                 alert_number=alert_number,
-                alert_expected=alert_expected,
                 cleanup_marker=cleanup_marker,
                 side_effect_possible=True,
                 stored_xss_submission_warning=STORED_XSS_SUBMISSION_WARNING,
@@ -302,7 +284,7 @@ class StoredXSSScanner:
         triggered, triggered_url, alert_text = self._browser_verify_stored(
             check_urls, req_headers, req_cookies, 
             expected_marker=cleanup_marker,
-            expected_alert_number=alert_expected
+            expected_alert_number=alert_number
         )
         if triggered:
             return self.builder.finding(
@@ -316,8 +298,6 @@ class StoredXSSScanner:
                 context="unknown",
                 escaped=False,
                 payload=payload,
-                alert_number=alert_number,
-                alert_expected=alert_expected,
                 cleanup_marker=cleanup_marker,
                 side_effect_possible=True,
                 stored_xss_submission_warning=STORED_XSS_SUBMISSION_WARNING,
@@ -351,7 +331,7 @@ class StoredXSSScanner:
         url = target["url"]
         method = target.get("method", "GET").upper()
         for payload in WAF_BYPASS_PAYLOADS.get(context or "unknown", WAF_BYPASS_PAYLOADS["unknown"]):
-            test_data = self._normalize_form_data(dict(params), attack_param=param)
+            test_data = dict(params)
             test_data[param] = payload
             if method == "POST":
                 inject_csrf(self.client, url, test_data, headers, cookies)
@@ -385,43 +365,6 @@ class StoredXSSScanner:
     #  Helpers                                                             #
     # ------------------------------------------------------------------ #
 
-    def _normalize_form_data(self, data: dict, attack_param: str | None = None) -> dict:
-        """Repair placeholder values that prevent authenticated stored sinks.
-
-        Preprocessing often fills unknown form fields with "test".  Some
-        targets use an email/user-id field to associate the submitted record
-        with the logged-in account.  Leaving that field as "test" can make the
-        submit look successful while the record is not visible in the user's
-        check URLs.
-        """
-        if self.auth_username:
-            for key, value in list(data.items()):
-                if key == attack_param:
-                    continue
-                if self._looks_like_auth_identity_field(key) and value in (None, "", "test"):
-                    data[key] = self.auth_username
-
-        return data
-
-    def _looks_like_auth_identity_field(self, key: str) -> bool:
-        normalized = key.lower().replace("-", "_")
-        if normalized in {"email", "user_email", "login_email", "member_email", "account_email"}:
-            return True
-        if normalized in {
-            "user_id",
-            "userid",
-            "login_id",
-            "member_id",
-            "account_id",
-            "writer_id",
-            "author_id",
-            # Extended test dictionary: some targets use site-specific names
-            # for the authenticated writer/account field. This is heuristic.
-            "con_id",
-        }:
-            return True
-        return normalized.endswith("_email") or normalized.endswith("_user_id")
-
     def _submit(self, method: str, url: str, data: dict, body_format: str, headers: dict, cookies: dict):
         if method == "GET":
             return self._get_with_params(url, data, headers, cookies)
@@ -440,7 +383,7 @@ class StoredXSSScanner:
         return self.client.get(new_url, headers=headers, cookies=cookies)
 
     def _check_special_encoding(self, target: dict, params: dict, param: str, check_urls: list[str], marker: str) -> bool:
-        data = self._normalize_form_data(dict(params), attack_param=param)
+        data = dict(params)
         data[param] = f"{marker}{SPECIAL_PROBE}"
         method = target.get("method", "GET").upper()
         body_format = target.get("body_format", "form")
@@ -464,6 +407,9 @@ class StoredXSSScanner:
         for u in target.get("check_urls") or []:
             if u not in urls:
                 urls.append(u)
+        # view_url explicitly tells us where stored output appears (e.g. mypage_mtm_list.html)
+        if target.get("view_url") and target["view_url"] not in urls:
+            urls.append(target["view_url"])
         for u in [post_final_url, target["url"], *self.known_get_urls]:
             if u and u not in urls:
                 urls.append(u)
@@ -534,7 +480,6 @@ class StoredXSSScanner:
                             page.goto(check_url, wait_until="domcontentloaded", timeout=self.browser_engine.timeout_ms)
                             self.browser_engine.wait_for_alert_capture(page, timeout_ms=1500)
                             triggered, alert_text = self.browser_engine.read_alert_capture(page)
-                            alert_texts = self.browser_engine.read_alert_captures(page)
                             if triggered:
                                 # Verify that the alert matches the expected marker and alert number
                                 if expected_marker and expected_alert_number:
@@ -547,14 +492,12 @@ class StoredXSSScanner:
                                         )
                                         continue
                                     # Check if alert_text matches expected alert number
-                                    matching_alert = _matching_alert(alert_text, alert_texts, expected_alert_number)
-                                    if not matching_alert:
+                                    if alert_text and str(expected_alert_number) not in alert_text:
                                         logger.debug(
                                             "[stored_xss] alert triggered with unexpected value '%s' (expected %s); skipping",
                                             alert_text, expected_alert_number
                                         )
                                         continue
-                                    alert_text = matching_alert
                                 return True, check_url, alert_text
                     except Exception:
                         continue

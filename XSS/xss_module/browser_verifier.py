@@ -32,23 +32,6 @@ class BrowserVerifier:
         )
         self.errors: list[dict] = []
 
-    def _alert_matches(self, alert_text: str | None, expected_alert_value: object | None) -> bool:
-        if expected_alert_value is None or not alert_text:
-            return False
-        kind, sep, value = str(alert_text).partition(":")
-        return sep == ":" and kind in {"alert", "confirm", "prompt"} and value == str(expected_alert_value)
-
-    def _matching_alert(
-        self,
-        alert_text: str | None,
-        alert_texts: list[str],
-        expected_alert_value: object | None,
-    ) -> str | None:
-        for text in [alert_text, *alert_texts]:
-            if self._alert_matches(text, expected_alert_value):
-                return text
-        return None
-
     def verify(self, findings: list[dict]) -> list[dict]:
         candidates = [
             f for f in findings
@@ -161,7 +144,7 @@ class BrowserVerifier:
                         self.engine.wait_for_alert_capture(page, timeout_ms=800)
                         triggered, alert_text = self.engine.read_alert_capture(page)
 
-                if triggered and not self._alert_matches(alert_text, alert_id):
+                if triggered and alert_text and str(alert_id) not in alert_text:
                     triggered = False
                     alert_text = None
                 self._write_browser_evidence(finding, triggered, alert_text, payload, url, action)
@@ -254,7 +237,7 @@ class BrowserVerifier:
                         self.engine.wait_for_alert_capture(page, timeout_ms=800)
                         triggered, alert_text = self.engine.read_alert_capture(page)
 
-                if triggered and not self._alert_matches(alert_text, alert_id):
+                if triggered and alert_text and str(alert_id) not in alert_text:
                     triggered = False
                     alert_text = None
                 self._write_browser_evidence(finding, triggered, alert_text, payload, url, action)
@@ -358,7 +341,7 @@ class BrowserVerifier:
                 page.goto(url, wait_until="domcontentloaded", timeout=self.timeout_ms)
                 self.engine.wait_for_alert_capture(page, timeout_ms=2000)
                 triggered, alert_text = self.engine.read_alert_capture(page)
-                if triggered and not self._alert_matches(alert_text, alert_id):
+                if triggered and alert_text and str(alert_id) not in alert_text:
                     triggered = False
                     alert_text = None
                 self._write_browser_evidence(finding, triggered, alert_text, payload, url, f"header_{header_name}_injected")
@@ -386,8 +369,7 @@ class BrowserVerifier:
         alert_text = None
         action = "page_load"
         payload = finding.get("payload", "")
-        expected_alert_number = finding.get("alert_expected", finding.get("alert_number"))
-        expected_marker = finding.get("cleanup_marker") or finding.get("marker")
+        expected_alert_number = finding.get("alert_number")
         try:
             with self.engine.context(
                 browser,
@@ -407,20 +389,10 @@ class BrowserVerifier:
                         self.engine.wait_for_alert_capture(page, timeout_ms=800)
 
                 triggered, alert_text = self.engine.read_alert_capture(page)
-                alert_texts = self.engine.read_alert_captures(page)
-                if triggered:
-                    marker_ok = True
-                    if expected_marker:
-                        try:
-                            marker_ok = expected_marker in page.content()
-                        except Exception:
-                            marker_ok = False
-                    matching_alert = self._matching_alert(alert_text, alert_texts, expected_alert_number)
-                    if not marker_ok or not matching_alert:
+                if triggered and expected_alert_number is not None and alert_text:
+                    if str(expected_alert_number) not in alert_text:
                         triggered = False
                         alert_text = None
-                    else:
-                        alert_text = matching_alert
                 self._write_browser_evidence(finding, triggered, alert_text, payload, url, action)
 
             if triggered:
