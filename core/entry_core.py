@@ -325,7 +325,6 @@ if check_Url(recon_url):
 
         recon_results = mid_core.get_all_recon_results()
 
-        print("모듈 통합 데이터 저장 완료")
         progress.update(middle_core_task, advance=1, description="[yellow]✔ 모듈 데이터 통합 완료")
         if recon_mode=="mode_a":
             print("테스트 시작 , mode_a")
@@ -337,7 +336,6 @@ if check_Url(recon_url):
             console.print(f"[bold magenta]⏱ 소요 시간:[/] [bold cyan]{end - start:.2f}초[/]")
             pass
         elif recon_mode=="mode_b":
-            print("테스트 시작 , mode_b")
             preprocess_task = progress.add_task("[bold blue]각 공격 모듈에 맞는 통합 데이터 전처리 중...", total=1)
             preprocessor = LLMPreprocessor()
             pre_data = preprocessor.generate_preprocess_data(recon_results)
