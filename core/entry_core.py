@@ -311,7 +311,6 @@ if check_Url(recon_url):
             console.print(f"[bold red] KSJ-RECON 실행 중 오류 발생: {e}")
    
         # --- 5. Middle Core로 데이터 통합 ---
-        console.print()
         middle_core_task = progress.add_task("[yellow]정찰 모듈 데이터 통합 중...", total=1)
         
 
@@ -323,7 +322,6 @@ if check_Url(recon_url):
        
         progress.update(middle_core_task, advance=1, description="[yellow]✔ 정찰 모듈 데이터 통합 완료")
         if recon_mode=="mode_a":
-            console.print()
             reporter = LLMReporter()
             reporter.generate_dashboard_from_data(recon_results,recon_mode)
             end = time.time()
@@ -332,7 +330,6 @@ if check_Url(recon_url):
             console.print(f"[bold magenta]⏱ 소요 시간:[/] [bold cyan]{end - start:.2f}초[/]")
             pass
         elif recon_mode=="mode_b":
-            console.print()
             preprocess_task = progress.add_task("[bold blue]각 공격 모듈에 맞는 통합 데이터 전처리 중...", total=1)
             preprocessor = LLMPreprocessor()
             pre_data = preprocessor.generate_preprocess_data(recon_results)
@@ -342,7 +339,6 @@ if check_Url(recon_url):
           
             try:
                 # 2. Rich Progress Task 생성 (4개 모듈)
-                console.print()
                 sqli_task = progress.add_task("[bold red]SQLi 모듈 동작중...", total=1)
                 xss_task = progress.add_task("[bold yellow]XSS 모듈 동작중...", total=1)
                 fd_task = progress.add_task("[bold magenta]File-Download 모듈 동작중...", total=1)
@@ -389,7 +385,6 @@ if check_Url(recon_url):
             
             integrated_results=mid_core.get_integrated_results()
             reporter = LLMReporter()
-            console.print()
             senario_task = progress.add_task("[bold red]공격 시나리오 생성중...", total=1)
             reporter.generate_dashboard_from_data(integrated_results,recon_mode)
             progress.update(senario_task, advance=1, description="[bold red]✔ 공격 시나리오 생성 완료[/]")
