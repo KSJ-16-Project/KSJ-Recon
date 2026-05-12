@@ -18,6 +18,13 @@ from .result_builder import ResultBuilder
 logger = logging.getLogger(__name__)
 
 
+def _alert_matches(alert_text: str | None, expected_alert_number: int | None) -> bool:
+    if expected_alert_number is None or not alert_text:
+        return False
+    kind, sep, value = str(alert_text).partition(":")
+    return sep == ":" and kind in {"alert", "confirm", "prompt"} and value == str(expected_alert_number)
+
+
 class DOMStoredXSSVerifier:
     def __init__(
         self,
@@ -236,7 +243,7 @@ class DOMStoredXSSVerifier:
                 hook_triggered, hook_text = self.engine.read_alert_capture(page)
                 if hook_triggered:
                     # Verify alert matches expected alert number
-                    if hook_text and str(alert_number) in hook_text:
+                    if _alert_matches(hook_text, alert_number):
                         trigger_stage = "after_submit_same_document"
                         alert_text = hook_text
                     else:
@@ -253,7 +260,7 @@ class DOMStoredXSSVerifier:
                     hook_triggered, hook_text = self.engine.read_alert_capture(page)
                     if hook_triggered:
                         # Verify alert matches expected alert number
-                        if hook_text and str(alert_number) in hook_text:
+                        if _alert_matches(hook_text, alert_number):
                             trigger_stage = "after_revisit"
                             alert_text = hook_text
                         else:
