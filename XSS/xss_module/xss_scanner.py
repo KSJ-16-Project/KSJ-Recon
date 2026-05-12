@@ -86,7 +86,6 @@ class XSSScanner:
         self._partial_saved: bool = False
         self._final_saved: bool = False
         self._auth_applied: bool = False  # set to True when auth credentials are present
-        self._auth_username: str | None = None
 
         self._init_auth(input_data)
 
@@ -140,8 +139,12 @@ class XSSScanner:
             if cookies:
                 self.client.update_auth(cookies=cookies)
                 self._auth_applied = True
-        elif self._auth_username is None:
-            self._ksj_fill_auth_username()
+        else:
+            # credentials가 있으면 JSON 쿠키보다 fresh login을 우선 적용
+            fresh = self._ksj_get_cookies()
+            if fresh:
+                self.client.update_auth(cookies=fresh)
+                logger.info("auth: ksj_login fresh session overrides JSON cookies")
 
     def _register_auth_credentials(self, auth: dict | None) -> None:
         """Forward form_login credentials from input.json to ksj_login."""
@@ -152,7 +155,6 @@ class XSSScanner:
         password = auth.get("password")
         if not (login_url and username and password):
             return
-        self._auth_username = username
         try:
             import ksj_login
             ksj_login.store_credentials(login_url, username, password)
@@ -171,27 +173,11 @@ class XSSScanner:
                 result = ex.submit(lambda: asyncio.run(ksj_login.get_session())).result()
             if result.success:
                 logger.info("auth acquired from ksj_login")
-                if getattr(result, "config", None) and getattr(result.config, "username", None):
-                    self._auth_username = result.config.username
                 return ksj_login.to_cookie_dict(result.cookies)
             logger.warning("ksj_login session failed: %s", result.reason)
         except Exception as e:
             logger.warning("ksj_login error: %s", e)
         return None
-
-    def _ksj_fill_auth_username(self) -> None:
-        """Populate auth username from ksj_login when cookies were supplied."""
-        try:
-            import ksj_login
-            if not ksj_login.has_credentials():
-                return
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-                result = ex.submit(lambda: asyncio.run(ksj_login.get_session())).result()
-            if result.success and getattr(result, "config", None) and getattr(result.config, "username", None):
-                self._auth_username = result.config.username
-        except Exception as e:
-            logger.warning("ksj_login username lookup failed: %s", e)
 
     def _refresh_auth(self) -> None:
         """Refresh session via cookies_refresher or ksj_login fallback."""
@@ -287,7 +273,6 @@ class XSSScanner:
             stored = StoredXSSScanner(
                 self.targets, self.client, self.builder,
                 auth_refresher=self._refresh_auth,
-                auth_username=self._auth_username,
             )
             results.extend(stored.scan())
             self._set_partial_results(results)
