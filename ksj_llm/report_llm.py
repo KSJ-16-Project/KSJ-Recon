@@ -419,6 +419,38 @@ class LLMReporter:
 
         return (path_key.rstrip("/"), str(param or "").strip())
 
+    def _pick_sqli_payload_example(self, module_data):
+        if not isinstance(module_data, dict):
+            return None
+
+        technique_queries = module_data.get("technique_queries")
+        if not isinstance(technique_queries, dict):
+            return self._pick_payload_example(module_data)
+
+        unsafe_technique_words = (
+            "file", "outfiles", "outfile", "xp_cmdshell", "stacked", "info"
+        )
+
+        examples = []
+        for section_name in ("confirmed", "possible"):
+            section = technique_queries.get(section_name)
+            if not isinstance(section, dict):
+                continue
+
+            for technique, payloads in section.items():
+                technique_text = str(technique or "").strip().lower()
+                if any(word in technique_text for word in unsafe_technique_words):
+                    continue
+
+                for payload in self._as_list(payloads):
+                    text = self._truncate_text(payload, limit=240)
+                    if text:
+                        examples.append(text)
+                    if len(examples) >= 2:
+                        return " | ".join(examples)
+
+        return examples[0] if examples else None
+
     def _extract_sqli_items(self, module_data):
         if not isinstance(module_data, dict):
             return []
@@ -430,35 +462,85 @@ class LLMReporter:
         dbms_type = module_data.get("dbms_type")
         confidence = module_data.get("confidence")
         status = "confirmed" if str(confidence or "").strip().lower() == "high" else "detected"
+        module_target = self._pick_first(module_data, ("target", "target_url", "url", "endpoint", "request_url", "path"))
+        payload_example = self._pick_sqli_payload_example(module_data)
+
+        def normalize_values(value):
+            values = value if isinstance(value, list) else []
+            normalized = []
+            for item_value in values:
+                if item_value in (None, "", [], {}):
+                    continue
+                text = self._short_text(item_value, 80)
+                if text and text not in normalized:
+                    normalized.append(text)
+                if len(normalized) >= 5:
+                    break
+            return normalized
+
+        def target_with_values(url, param, values):
+            if not url or not param or not values:
+                return url
+            try:
+                parsed = urlsplit(str(url))
+                if parsed.query:
+                    return url
+            except ValueError:
+                pass
+            return f"{url}?{param}={values[0]}"
 
         deduped = {}
         for item in injectable_params:
-            if not isinstance(item, dict):
-                continue
-
-            url = item.get("url") or item.get("target") or item.get("endpoint")
-            param = item.get("param") or item.get("parameter")
+            if isinstance(item, dict):
+                url = self._pick_first(item, ("target", "target_url", "url", "endpoint", "request_url", "path"))
+                param = self._pick_first(item, ("param", "parameter", "field", "input_name", "name"))
+                values = normalize_values(
+                    item.get("values") or item.get("observed_values") or item.get("sample_values")
+                )
+            else:
+                url = module_target
+                param = str(item).strip()
+                values = []
             if not url and not param:
                 continue
 
             key = self._url_path_param_key(url, param)
             if key not in deduped:
                 deduped[key] = {
-                    "target": url,
+                    "target": target_with_values(url, param, values),
                     "parameter": param,
                     "vulnerability": "SQL injection candidate",
                     "risk": "HIGH" if status == "confirmed" else "MEDIUM",
                     "status": status,
                     "evidence": (
                         f"SQLi module reported injectable parameter '{param}' "
-                        f"on this path with confidence={confidence or '-'}"
+                        f"with confidence={confidence or '-'}"
+                        + (f"; observed values: {', '.join(values)}" if values else "")
                     ),
+                    "payload_example": payload_example,
+                    "observed_values": ", ".join(values) if values else None,
                     "dbms_type": dbms_type,
                     "confidence": confidence,
                     "duplicate_count": 1
                 }
             else:
                 deduped[key]["duplicate_count"] += 1
+                existing_values = deduped[key].get("observed_values")
+                existing = [value.strip() for value in str(existing_values or "").split(",") if value.strip()]
+                changed = False
+                for value in values:
+                    if value not in existing:
+                        existing.append(value)
+                        changed = True
+                    if len(existing) >= 5:
+                        break
+                if changed:
+                    deduped[key]["observed_values"] = ", ".join(existing)
+                    deduped[key]["evidence"] = (
+                        f"SQLi module reported injectable parameter '{param}' "
+                        f"with confidence={confidence or '-'}"
+                        f"; observed values: {', '.join(existing)}"
+                    )
 
         return list(deduped.values())
 
@@ -480,7 +562,7 @@ class LLMReporter:
         }
 
         known_keys = {
-            "target", "url", "endpoint", "request_url", "path",
+            "target", "target_url", "url", "endpoint", "request_url", "path",
             "method", "http_method", "parameter", "param", "field", "input_name",
             "vulnerability", "type", "name", "title", "check",
             "risk", "severity", "level", "status", "result", "state",
@@ -507,7 +589,7 @@ class LLMReporter:
                 if isinstance(item, dict):
                     compact = {
                         "module": str(module_name),
-                        "target": self._pick_first(item, ("target", "url", "endpoint", "request_url", "path")),
+                        "target": self._pick_first(item, ("target", "target_url", "url", "endpoint", "request_url", "path")),
                         "method": self._pick_first(item, ("method", "http_method")),
                         "parameter": self._pick_first(item, ("parameter", "param", "field", "input_name")),
                         "vulnerability": self._pick_first(item, ("vulnerability", "type", "name", "title", "check")),
@@ -573,6 +655,7 @@ class LLMReporter:
                 "For attack-module findings, use one category from SQLi, XSS, FileDownload, SSRF, Web, Network, or Other.",
                 "For SQLi, XSS, FileDownload, and SSRF findings, include findings[].payload_example when attack_results contains payload_example, test_payload, proof_payload, payload, or payloads.",
                 "When attack_results contains multiple SQLi items with different target path and parameter pairs, preserve them as distinct findings instead of collapsing them into one generic SQLi finding.",
+                "For SQLi findings, include observed parameter values from target, evidence, or extra.observed_values when present.",
                 "Use payload_example only as a short diagnostic verification string copied or summarized from attack_results. Do not invent payloads."
             ],
             "metadata": {
@@ -598,6 +681,7 @@ class LLMReporter:
 - This category rule overrides the mode_a category restriction from report_prompt.txt.
 - Write all human-readable report fields in Korean.
 - If attack_results contains multiple SQLi items with different target path and parameter pairs, keep those distinct SQLi candidates as separate findings. Do not collapse all SQLi evidence into one finding unless the target path and parameter are the same.
+- For SQLi findings, include observed parameter values from attack_results.target, attack_results.evidence, or attack_results.extra.observed_values when present.
 - For findings derived from SQLi, XSS, FileDownload, or SSRF attack_results, include findings[].payload_example when a provided payload_example, test_payload, proof_payload, payload, or payloads value exists.
 - payload_example must be copied or briefly summarized from attack_results and must remain a short diagnostic verification string, not a full exploit procedure.
 - If no provided payload exists for a finding, set payload_example to "-".
@@ -715,27 +799,29 @@ Do not include markdown, comments, explanations, or code fences.
 {response_text}
 """
 
-        response = self.client.messages.create(
+        repaired_text = self.create_message_text(repair_prompt, max_tokens=24000)
+        return self._parse_llm_json_text(repaired_text)
+
+    def create_message_text(self, prompt: str, max_tokens=24000):
+        chunks = []
+
+        with self.client.messages.stream(
             model=self.model.strip(),
-            max_tokens=8192,
+            max_tokens=max_tokens,
             messages=[
-                {"role": "user", "content": repair_prompt}
+                {"role": "user", "content": prompt}
             ]
-        )
-        return self._parse_llm_json_text(response.content[0].text)
+        ) as stream:
+            for text in stream.text_stream:
+                chunks.append(text)
+
+        return "".join(chunks)
 
     def generate_report_from_data(self, scan_data: dict, mode="mode_a"):
         mode = self.normalize_mode(mode)
         prompt = self.build_prompt(scan_data, mode=mode)
 
-        response = self.client.messages.create(
-            model=self.model.strip(),
-            max_tokens=8192,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
-        response_text = response.content[0].text
+        response_text = self.create_message_text(prompt, max_tokens=24000)
 
         try:
             return self.parse_llm_json(response_text)

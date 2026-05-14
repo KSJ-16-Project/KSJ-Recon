@@ -41,12 +41,20 @@ class NmapDBInfo:
 
 
 @dataclass
+class Endpoint:
+    """한 번의 요청에 같이 보내야 할 파라미터 묶음."""
+    url: str
+    method: str = "GET"          # "GET" | "POST"
+    enctype: str = ""            # "" | "application/x-www-form-urlencoded" | "multipart/form-data" | "application/json"
+    params: list[Parameter] = field(default_factory=list)
+
+
+@dataclass
 class ScanInput:
     target_url: str
-    crawler_data: list[Parameter]
-    auth: dict[str, str] = field(default_factory=dict)   # Login 모듈이 채워서 넘겨줌
+    endpoints: list[Endpoint] = field(default_factory=list)
+    auth: dict[str, str] = field(default_factory=dict)
     nmap_data: Optional[NmapDBInfo] = None
-    fuzzer_data: list[str] = field(default_factory=list) # Fuzzer가 발견한 숨겨진 엔드포인트 URL 목록
 
     @classmethod
     def from_dict(cls, data: dict) -> "ScanInput":
@@ -54,13 +62,22 @@ class ScanInput:
         nmap_raw = data.get("nmap_data")
         return cls(
             target_url=data["target_url"],
-            crawler_data=[
-                Parameter(
-                    name=p["name"],
-                    location=ParamLocation(p["location"]),
-                    value=str(p.get("value", "")),
+            endpoints=[
+                Endpoint(
+                    url=e["url"],
+                    method=str(e.get("method", "GET")).upper(),
+                    enctype=e.get("enctype", ""),
+                    params=[
+                        Parameter(
+                            name=p["name"],
+                            location=ParamLocation(p["location"]),
+                            value=str(p.get("value", "")),
+                        )
+                        for p in e.get("params", [])
+                        if p.get("location") in {"query", "body", "cookie", "header"}
+                    ],
                 )
-                for p in data.get("crawler_data", [])
+                for e in data.get("endpoints", [])
             ],
             auth={k: v for k, v in (data.get("auth") or {}).items() if v},
             nmap_data=(
@@ -72,7 +89,6 @@ class ScanInput:
                 if nmap_raw and (int(nmap_raw.get("port") or 0) or nmap_raw.get("service") or nmap_raw.get("version"))
                 else None
             ),
-            fuzzer_data=data.get("fuzzer_data") or [],
         )
 
 
@@ -98,7 +114,7 @@ class ScanOutput:
     dbms_type: DBMSType
     dbms_version: Optional[str]
     confidence: Confidence
-    injectable_params: list[dict]  # [{"param": str, "url": str}]
+    injectable_params: list[dict]  # [{"param": str, "values": list[str], "url": str, "method": str}]
     technique_queries: TechniqueQueries
     probe_log: list[ProbeLog]
     auth_expired: bool = False  # True면 오케스트레이터가 Login 모듈 재호출

@@ -391,9 +391,36 @@ Keep JSON keys and enum values in English.
             return False
         return bool(self._as_str(param.get("name")).strip())
 
+    def _normalize_sql_endpoint(self, item):
+        endpoint = self._as_dict(item)
+        method = self._as_str(endpoint.get("method") or "GET").upper()
+        if method not in ("GET", "POST"):
+            method = "GET"
+
+        return {
+            "url": self._as_str(endpoint.get("url")),
+            "method": method,
+            "enctype": self._as_str(endpoint.get("enctype")),
+            "params": [
+                self._normalize_sql_param(param)
+                for param in self._as_list(endpoint.get("params"))
+                if self._is_valid_sql_param(param)
+            ]
+        }
+
+    def _is_valid_sql_endpoint(self, item):
+        endpoint = self._as_dict(item)
+        return bool(
+            self._as_str(endpoint.get("url")).strip()
+            and any(
+                self._is_valid_sql_param(param)
+                for param in self._as_list(endpoint.get("params"))
+            )
+        )
+
     def _normalize_xss_url(self, item):
         if isinstance(item, str):
-            return {"url": item}
+            return {"submit_url": item}
 
         target = self._as_dict(item)
         submit_url = self._as_str(target.get("submit_url") or target.get("url"))
@@ -408,12 +435,12 @@ Keep JSON keys and enum values in English.
 
         if target_type == "dom_hash":
             normalized = {
-                "url": submit_url,
+                "submit_url": submit_url,
                 "type": "dom_hash"
             }
         elif target_type == "form":
             normalized = {
-                "url": submit_url,
+                "submit_url": submit_url,
                 "type": "form",
                 "fields": fields,
                 "attack_params": attack_params,
@@ -421,9 +448,9 @@ Keep JSON keys and enum values in English.
             }
         else:
             normalized = {
-                "url": submit_url,
+                "submit_url": submit_url,
                 "method": method if method in ("GET", "POST") else "GET",
-                "params": body,
+                "body": body,
                 "attack_params": attack_params
             }
 
@@ -468,25 +495,19 @@ Keep JSON keys and enum values in English.
         target = self._as_dict(item)
         check_urls = self._as_string_list(target.get("check_urls"))
         view_url = self._as_str(target.get("view_url") or (check_urls[0] if check_urls else ""))
-        body_format = self._as_str(target.get("body_format")).lower()
+        body_format = self._as_str(target.get("body_format") or "form").lower()
         params = self._as_dict(target.get("body") or target.get("params"))
-        normalized_check_urls = []
-        for url in [view_url, *check_urls]:
-            if url and url not in normalized_check_urls:
-                normalized_check_urls.append(url)
 
         normalized = {
-            "url": self._as_str(target.get("submit_url") or target.get("url")),
-            "params": params,
-            "check_urls": normalized_check_urls,
+            "submit_url": self._as_str(target.get("submit_url") or target.get("url")),
+            "view_url": view_url,
+            "body": params,
             "attack_params": self._as_string_list(target.get("attack_params") or target.get("inject_params")),
             "safe_to_submit": self._as_bool(target.get("safe_to_submit"), True)
         }
-        method = self._as_str(target.get("method")).upper()
-        if method in ("GET", "POST"):
-            normalized["method"] = method
-        if body_format in ("form", "json"):
-            normalized["body_format"] = body_format
+        method = self._as_str(target.get("method") or "POST").upper()
+        normalized["method"] = method if method in ("GET", "POST") else "POST"
+        normalized["body_format"] = body_format if body_format in ("form", "json") else "form"
         headers = self._as_dict(target.get("headers"))
         if headers:
             normalized["headers"] = headers
@@ -509,6 +530,51 @@ Keep JSON keys and enum values in English.
 
     def _normalize_xss_options(self, value):
         return self._as_dict(value).copy()
+
+    def _cookie_header_to_dict(self, value):
+        cookies = {}
+        cookie_header = self._as_str(value).strip()
+        if not cookie_header:
+            return cookies
+
+        for part in cookie_header.split(";"):
+            if "=" not in part:
+                continue
+            name, cookie_value = part.split("=", 1)
+            name = name.strip()
+            if not name:
+                continue
+            cookies[name] = cookie_value.strip()
+        return cookies
+
+    def _headers_from_auth(self, auth):
+        auth = self._as_dict(auth)
+        headers = {}
+        for key in ("Authorization", "Referer", "Accept-Language"):
+            value = self._as_str(auth.get(key)).strip()
+            if value:
+                headers[key] = value
+        return headers
+
+    def _base_url_from_xss_data(self, xss_data):
+        xss_data = self._as_dict(xss_data)
+        candidates = self._as_string_list(xss_data.get("spider_urls"))
+        candidates.extend(
+            self._as_str(item.get("url") or item.get("submit_url"))
+            for item in self._as_list(xss_data.get("urls"))
+            if isinstance(item, dict)
+        )
+        candidates.extend(
+            self._as_str(item.get("url") or item.get("submit_url"))
+            for item in self._as_list(xss_data.get("stored_targets"))
+            if isinstance(item, dict)
+        )
+
+        for url in candidates:
+            parsed = urlparse(url)
+            if parsed.scheme and parsed.netloc:
+                return f"{parsed.scheme}://{parsed.netloc}"
+        return ""
 
     def _normalize_attack_target(self, item):
         target = self._as_dict(item)
@@ -583,11 +649,6 @@ Keep JSON keys and enum values in English.
         normalized = {
             "sql_data": {
                 "target_url": self._as_str(sql_data.get("target_url")),
-                "crawler_data": [
-                    self._normalize_sql_param(item)
-                    for item in self._as_list(sql_data.get("crawler_data"))
-                    if self._is_valid_sql_param(item)
-                ],
                 "auth": {
                     "cookie": self._as_str(auth.get("cookie")),
                     "Authorization": self._as_str(auth.get("Authorization")),
@@ -599,7 +660,11 @@ Keep JSON keys and enum values in English.
                     "service": self._as_str(nmap_data.get("service")),
                     "version": self._as_str(nmap_data.get("version"))
                 },
-                "fuzzer_data": self._as_string_list(sql_data.get("fuzzer_data"))
+                "endpoints": [
+                    self._normalize_sql_endpoint(item)
+                    for item in self._as_list(sql_data.get("endpoints"))
+                    if self._is_valid_sql_endpoint(item)
+                ]
             },
             "xss_data": {},
             "filedown_data": {},
@@ -607,10 +672,23 @@ Keep JSON keys and enum values in English.
         }
 
         xss_data = self._as_dict(pre_data.get("xss_data")).copy()
+        xss_headers = self._as_dict(xss_data.get("headers")).copy()
+        for key, value in self._headers_from_auth(auth).items():
+            xss_headers.setdefault(key, value)
+
+        xss_cookies = self._as_dict(xss_data.get("cookies")).copy()
+        for key, value in self._cookie_header_to_dict(auth.get("cookie")).items():
+            xss_cookies.setdefault(key, value)
+
+        xss_base_url = (
+            self._as_str(xss_data.get("base_url"))
+            or self._as_str(sql_data.get("target_url"))
+            or self._base_url_from_xss_data(xss_data)
+        )
         normalized["xss_data"] = {
-            "base_url": self._as_str(xss_data.get("base_url")),
-            "headers": self._as_dict(xss_data.get("headers")),
-            "cookies": self._as_dict(xss_data.get("cookies")),
+            "base_url": xss_base_url,
+            "headers": xss_headers,
+            "cookies": xss_cookies,
             "spider_urls": self._as_string_list(xss_data.get("spider_urls")),
             "urls": [
                 self._normalize_xss_url(item)

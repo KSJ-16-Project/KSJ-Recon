@@ -48,6 +48,11 @@ class StoredXSSScanner:
         self.client = client
         self.builder = builder
         self.auth_refresher = auth_refresher
+        try:
+            from ksj_login import credentials as _ksj_creds
+            self.username = _ksj_creds._stored_config.username if _ksj_creds._stored_config else None
+        except Exception:
+            self.username = None
         self.analyzer = ContextAnalyzer()
         self.errors: list[dict] = []
         self.skipped: list[dict] = []
@@ -111,19 +116,23 @@ class StoredXSSScanner:
 
 
     def _test_form(self, target: dict, params: dict, param: str) -> dict | None:
-        cleanup_marker = new_marker()
+        cleanup_marker, alert_number = new_marker()  # Returns (marker, alert_number)
         marker = cleanup_marker
         # Keep a unique plain-text marker around the script payload so stored
         # views that sanitize tags but still render text remain detectable.
+        # Each test gets a different alert number to avoid false positives from previous test data.
         payload = (
             f"{cleanup_marker}"
-            f'<script data-testid="{cleanup_marker}">alert(1)</script>'
+            f'<script data-testid="{cleanup_marker}">alert({alert_number})</script>'
             f"{cleanup_marker}"
         )
         data = dict(params)
         # Store a marker-bearing payload so later verification can both trigger
         # alert(1) and identify/clean the test data by cleanup_marker.
         data[param] = payload
+        # If con_id parameter exists, replace with logged-in username (email)
+        if 'con_id' in data and self.username:
+            data['con_id'] = self.username
         url = target["url"]
         method = target.get("method", "GET").upper()
         req_headers = target.get("headers") or {}
@@ -194,6 +203,7 @@ class StoredXSSScanner:
                 context=submit_analysis.context,
                 escaped=escaped,
                 payload=payload,
+                alert_number=alert_number,
                 cleanup_marker=cleanup_marker,
                 side_effect_possible=True,
                 stored_xss_submission_warning=STORED_XSS_SUBMISSION_WARNING,
@@ -246,6 +256,7 @@ class StoredXSSScanner:
                 context=analysis.context,
                 escaped=escaped,
                 payload=payload,
+                alert_number=alert_number,
                 cleanup_marker=cleanup_marker,
                 side_effect_possible=True,
                 stored_xss_submission_warning=STORED_XSS_SUBMISSION_WARNING,
@@ -270,7 +281,11 @@ class StoredXSSScanner:
 
         # Fallback: when list/detail pages transform text and strict marker
         # matching fails, verify real JS execution in the browser.
-        triggered, triggered_url, alert_text = self._browser_verify_stored(check_urls, req_headers, req_cookies)
+        triggered, triggered_url, alert_text = self._browser_verify_stored(
+            check_urls, req_headers, req_cookies, 
+            expected_marker=cleanup_marker,
+            expected_alert_number=alert_number
+        )
         if triggered:
             return self.builder.finding(
                 type="stored_xss_candidate_limited",
@@ -392,6 +407,9 @@ class StoredXSSScanner:
         for u in target.get("check_urls") or []:
             if u not in urls:
                 urls.append(u)
+        # view_url explicitly tells us where stored output appears (e.g. mypage_mtm_list.html)
+        if target.get("view_url") and target["view_url"] not in urls:
+            urls.append(target["view_url"])
         for u in [post_final_url, target["url"], *self.known_get_urls]:
             if u and u not in urls:
                 urls.append(u)
@@ -437,7 +455,14 @@ class StoredXSSScanner:
                     return results
         return results
 
-    def _browser_verify_stored(self, check_urls: list[str], headers: dict, cookies: dict) -> tuple[bool, str | None, str | None]:
+    def _browser_verify_stored(
+        self, 
+        check_urls: list[str], 
+        headers: dict, 
+        cookies: dict,
+        expected_marker: str | None = None,
+        expected_alert_number: int | None = None
+    ) -> tuple[bool, str | None, str | None]:
         if not check_urls:
             return False, None, None
         try:
@@ -456,6 +481,23 @@ class StoredXSSScanner:
                             self.browser_engine.wait_for_alert_capture(page, timeout_ms=1500)
                             triggered, alert_text = self.browser_engine.read_alert_capture(page)
                             if triggered:
+                                # Verify that the alert matches the expected marker and alert number
+                                if expected_marker and expected_alert_number:
+                                    page_content = page.content()
+                                    # Check if expected marker is in page content
+                                    if expected_marker not in page_content:
+                                        logger.debug(
+                                            "[stored_xss] alert triggered (alert_text=%s) but expected_marker '%s' not in page; skipping (likely previous test data)",
+                                            alert_text, expected_marker[:20]
+                                        )
+                                        continue
+                                    # Check if alert_text matches expected alert number
+                                    if alert_text and str(expected_alert_number) not in alert_text:
+                                        logger.debug(
+                                            "[stored_xss] alert triggered with unexpected value '%s' (expected %s); skipping",
+                                            alert_text, expected_alert_number
+                                        )
+                                        continue
                                 return True, check_url, alert_text
                     except Exception:
                         continue

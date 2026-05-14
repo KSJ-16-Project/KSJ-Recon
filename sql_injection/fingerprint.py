@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from .models import DBMSType, Confidence, Parameter, ProbeLog, NmapDBInfo
+from .models import DBMSType, Confidence, Parameter, ParamLocation, ProbeLog, NmapDBInfo
 from .payloads import (
     NMAP_PORT_MAP,
     NMAP_SERVICE_MAP,
@@ -14,6 +14,7 @@ from .payloads import (
 from .prober import (
     send_probes_concurrent, send_probe,
     _to_integer_context,
+    fetch_csrf_token,
 )
 
 
@@ -85,8 +86,9 @@ async def detect_by_error(
     params: list[Parameter],
     auth: dict[str, str],
     method: str = "GET",
+    enctype: str = "",
 ) -> tuple[DBMSType, list[str], list[ProbeLog]]:
-    logs = await send_probes_concurrent(url, params, ERROR_PROBES, auth, method)
+    logs = await send_probes_concurrent(url, params, ERROR_PROBES, auth, method, enctype)
     dbms, injectable = _parse_dbms_from_logs(logs)
     return dbms, injectable, logs
 
@@ -99,6 +101,7 @@ async def _run_boolean_phase(
     auth: dict[str, str],
     method: str,
     transform,
+    enctype: str = "",
 ) -> tuple[DBMSType, list[str], list[ProbeLog]]:
     """주어진 페이로드 변환 함수로 Phase 2를 수행한다.
     transform=None이면 string context, _to_integer_context면 integer context.
@@ -108,13 +111,20 @@ async def _run_boolean_phase(
     dbms_scores: dict[DBMSType, int] = {}
 
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
+        # POST/BODY 조건이면 CSRF 토큰 1회 취득 (phase 마다 새 client라 Phase 1 토큰 재사용 불가)
+        csrf_tokens: dict[str, str] = {}
+        if method == "POST" or any(p.location == ParamLocation.BODY for p in params):
+            csrf_tokens = await fetch_csrf_token(client, url, auth)
+
         for param in params:
             for dbms, true_payload, false_payload in BOOLEAN_PROBES:
                 tp = transform(true_payload) if transform else true_payload
                 fp = transform(false_payload) if transform else false_payload
                 true_log, false_log = await asyncio.gather(
-                    send_probe(client, url, param, tp, auth, method),
-                    send_probe(client, url, param, fp, auth, method),
+                    send_probe(client, url, param, tp, auth, method,
+                               csrf_tokens=csrf_tokens or None, enctype=enctype, all_params=params),
+                    send_probe(client, url, param, fp, auth, method,
+                               csrf_tokens=csrf_tokens or None, enctype=enctype, all_params=params),
                 )
                 all_logs.extend([true_log, false_log])
 
@@ -138,18 +148,21 @@ async def detect_by_boolean(
     params: list[Parameter],
     auth: dict[str, str],
     method: str = "GET",
+    enctype: str = "",
 ) -> tuple[DBMSType, list[str], list[ProbeLog]]:
     """파라미터 컨텍스트(따옴표 wrapping 여부)를 외부에서 알 수 없으므로,
     string context로 먼저 시도하고 식별 실패 시 integer context로 재시도한다.
     """
     # 1차: string context
-    dbms, injectable, logs = await _run_boolean_phase(url, params, auth, method, transform=None)
+    dbms, injectable, logs = await _run_boolean_phase(
+        url, params, auth, method, transform=None, enctype=enctype
+    )
     if dbms != DBMSType.UNKNOWN:
         return dbms, injectable, logs
 
     # 2차: integer context fallback
     dbms2, injectable2, logs2 = await _run_boolean_phase(
-        url, params, auth, method, transform=_to_integer_context
+        url, params, auth, method, transform=_to_integer_context, enctype=enctype
     )
     return dbms2, injectable2, logs + logs2
 
@@ -162,6 +175,7 @@ async def detect_dbms(
     auth: dict[str, str],
     nmap_data: NmapDBInfo | None = None,
     method: str = "GET",
+    enctype: str = "",
 ) -> DBMSDetectResult:
     all_logs: list[ProbeLog] = []
 
@@ -177,7 +191,7 @@ async def detect_dbms(
         )
 
     # Phase 1
-    dbms, injectable, logs = await detect_by_error(url, params, auth, method)
+    dbms, injectable, logs = await detect_by_error(url, params, auth, method, enctype)
     all_logs.extend(logs)
     if dbms != DBMSType.UNKNOWN:
         return DBMSDetectResult(
@@ -189,7 +203,7 @@ async def detect_dbms(
         )
 
     # Phase 2
-    dbms, injectable, logs = await detect_by_boolean(url, params, auth, method)
+    dbms, injectable, logs = await detect_by_boolean(url, params, auth, method, enctype)
     all_logs.extend(logs)
     if dbms != DBMSType.UNKNOWN:
         return DBMSDetectResult(

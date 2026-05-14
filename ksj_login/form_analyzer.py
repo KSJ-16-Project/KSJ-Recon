@@ -2,24 +2,24 @@
 
 from __future__ import annotations
 
+import sys
+
 from playwright.async_api import Browser, Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
 
 from .models import FormSelectors
 
 
-_USERNAME_KEYWORDS = (
-    "user",
-    "email",
-    "mail",
-    "login",
-    "account",
-    "userid",
-    "username",
-    "loginid",
-    "id",
-)
+def _dbg(*args) -> None:
+    print(*args, file=sys.stderr, flush=True)
 
-_ID_NAME_PATTERNS = ("_id", "id_", "userid", "loginid", "memberid")
+
+# detect_selectors_via_dom 실패 시 이유를 저장 — credentials.py가 AuthResult.error에 포함
+_detection_failure_reason: str = ""
+
+
+def get_detection_failure_reason() -> str:
+    return _detection_failure_reason
+
 
 _SUBMIT_SELECTOR = (
     "button[type=submit], input[type=submit], "
@@ -69,41 +69,46 @@ _DOM_SELECTOR_JS = """
 """
 
 
+_DEBUG_LOG = "/tmp/ksj_dom_debug.txt"
+
+
+def _log(msg: str) -> None:
+    _dbg(msg)
+    with open(_DEBUG_LOG, "a", encoding="utf-8") as f:
+        f.write(msg + "\n")
+
+
 async def detect_selectors_via_dom(browser: Browser, url: str) -> FormSelectors | None:
     """Playwright로 URL을 직접 방문해 password input 기반으로 FormSelectors를 추론한다.
     <form> 태그 밖 input도 탐지 가능."""
+    global _detection_failure_reason
     ctx = None
     try:
         ctx = await browser.new_context(
             ignore_https_errors=True,
             user_agent=_UA,
+            extra_http_headers={"Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8"},
         )
         page = await ctx.new_page()
+        await page.add_init_script(
+            "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})"
+        )
 
-        # domcontentloaded: networkidle보다 빠르게 완료되고 Cloudflare 비콘 등
-        # 지속 요청이 있어도 타임아웃되지 않음
         try:
             await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-        except PlaywrightError:
+        except PlaywrightError as e:
+            _detection_failure_reason = f"페이지 로딩 실패: {e}"
             return None
 
-        # SPA 대응: JS 번들 실행 후 React/Vue가 DOM을 그릴 때까지 대기
-        found = False
         try:
             await page.wait_for_selector("input[type='password']", timeout=15_000)
-            found = True
         except PlaywrightTimeoutError:
-            pass
-
-        # 진단: 폼을 못 찾았을 때 실제 어떤 페이지인지 출력
-        if not found:
-            try:
-                title = await page.title()
-                body_snippet = await page.evaluate("document.body?.innerText?.slice(0,200) ?? ''")
-                print(f"[detect_selectors_via_dom] 폼 미발견 — title: {title!r}, url: {page.url!r}")
-                print(f"[detect_selectors_via_dom] body: {body_snippet!r}")
-            except PlaywrightError:
-                pass
+            title = await page.title()
+            body_snippet = await page.evaluate("document.body?.innerText?.slice(0, 200) ?? ''")
+            _detection_failure_reason = (
+                f"password input 미발견 — title={title!r}, url={page.url!r}, body={body_snippet!r}"
+            )
+            return None
 
         result = await page.evaluate(_DOM_SELECTOR_JS)
         if result:
@@ -112,8 +117,10 @@ async def detect_selectors_via_dom(browser: Browser, url: str) -> FormSelectors 
                 password=result["password"],
                 submit=_SUBMIT_SELECTOR,
             )
+        _detection_failure_reason = "JS 셀렉터 추론 실패 (password input 있으나 username 없음)"
         return None
-    except (PlaywrightError, Exception):
+    except (PlaywrightError, Exception) as e:
+        _detection_failure_reason = f"{type(e).__name__}: {e}"
         return None
     finally:
         if ctx is not None:
@@ -121,99 +128,3 @@ async def detect_selectors_via_dom(browser: Browser, url: str) -> FormSelectors 
                 await ctx.close()
             except PlaywrightError:
                 pass
-
-
-def analyze_login_form(page: dict) -> FormSelectors:
-    """Return username, password, and submit selectors for Playwright."""
-    form = page.get("_login_form")
-    if not form:
-        raise ValueError("page must contain _login_form from find_login_page()")
-
-    fields = form.get("fields", [])
-    password_field = _find_password_field(fields)
-    if password_field is None:
-        raise ValueError("password field not found")
-
-    username_field = _find_username_field(fields, password_field)
-    if username_field is None:
-        raise ValueError("username field not found")
-
-    return FormSelectors(
-        username=_to_selector(username_field),
-        password=_to_selector(password_field),
-        submit=_SUBMIT_SELECTOR,
-    )
-
-
-def _field_type(field: dict) -> str:
-    return (field.get("type") or field.get("field_type") or "text").lower()
-
-
-def _find_password_field(fields: list[dict]) -> dict | None:
-    for field in fields:
-        if _field_type(field) == "password":
-            return field
-    return None
-
-
-def _find_username_field(fields: list[dict], password_field: dict) -> dict | None:
-    text_like = [
-        field
-        for field in fields
-        if _field_type(field) in ("text", "email", "tel", "search", "")
-    ]
-    if not text_like:
-        return None
-
-    for field in text_like:
-        if _field_type(field) == "email":
-            return field
-
-    for field in text_like:
-        haystack = " ".join(
-            [
-                (field.get("name") or "").lower(),
-                (field.get("id") or "").lower(),
-                (field.get("placeholder") or "").lower(),
-                (field.get("aria_label") or "").lower(),
-            ]
-        )
-        if any(keyword in haystack for keyword in _USERNAME_KEYWORDS):
-            return field
-        if any(pattern in haystack for pattern in _ID_NAME_PATTERNS):
-            return field
-
-    try:
-        password_index = fields.index(password_field)
-        for index in range(password_index - 1, -1, -1):
-            if fields[index] in text_like:
-                return fields[index]
-    except ValueError:
-        pass
-
-    return text_like[0]
-
-
-def _to_selector(field: dict) -> str:
-    name = field.get("name") or ""
-    if name:
-        return f"input[name='{_escape(name)}']"
-
-    field_id = field.get("id") or ""
-    if field_id:
-        return f"#{_escape(field_id)}"
-
-    placeholder = field.get("placeholder") or ""
-    if placeholder:
-        return f"input[placeholder='{_escape(placeholder)}']"
-
-    field_type = _field_type(field)
-    if field_type == "password":
-        return "input[type=password]"
-    if field_type == "email":
-        return "input[type=email]"
-    return "input[type=text]"
-
-
-def _escape(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("'", "\\'")

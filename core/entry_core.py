@@ -242,9 +242,6 @@ if check_Url(recon_url):
     transient=False, 
     ) as progress:
         
-        
-        # if login_choice==1:
-        #     ksj_login.store_credentials(login_url, user_id, user_password)
             
         # Crawler 설정 (config 생성)
         config = CrawlerConfig(
@@ -263,13 +260,11 @@ if check_Url(recon_url):
        
         # 크롤러 데이터에서 Fuzzer 모듈을 위한 URL 리스트 뽑기 ( 미들 코어에서 )
         spider_urls=asyncio.run(mid_core.make_url_list(final_crawl_data))
-        # print("스파이더",spider_urls)
-        # print("미들 코어에서 나온",spider_urls)
         mid_core.set_crawler_data(final_crawl_data)
 
        
         
-        progress.update(crawl_task, advance=1, description="[bold red]✔ Crawler 분석 완료")
+        progress.update(crawl_task, advance=1, description="[bold red]✔ Crawler 모듈 완료")
         
         
         # 개별 작업 바 생성
@@ -301,23 +296,22 @@ if check_Url(recon_url):
                 # 완료되는 순서대로 처리 (as_completed 사용)
                 from concurrent.futures import as_completed
                 futures = {future_nmap: "nmap", future_fuzzer: "fuzzer"}
-                # futures = {future_nmap: "nmap"}
                 for future in as_completed(futures):
                     target = futures[future]
                     result = future.result()
                     
                     if target == "nmap":
                         nmap_data = result
-                        progress.update(task1, advance=1, description="[cyan]✔ Nmap 스캔 완료")
+                        progress.update(task1, advance=1, description="[cyan]✔ Nmap 모듈 완료")
                     elif target == "fuzzer":
                         fuzzer_data = result
-                        progress.update(task2, advance=1, description="[magenta]✔ Fuzzer 완료")
+                        progress.update(task2, advance=1, description="[magenta]✔ Fuzzer 모듈 완료")
         
         except Exception as e:
             console.print(f"[bold red] KSJ-RECON 실행 중 오류 발생: {e}")
    
         # --- 5. Middle Core로 데이터 통합 ---
-        middle_core_task = progress.add_task("[yellow]모듈 데이터 통합 중...", total=1)
+        middle_core_task = progress.add_task("[yellow]정찰 모듈 데이터 통합 중...", total=1)
         
 
         mid_core.set_nmap_data(nmap_data)
@@ -325,10 +319,9 @@ if check_Url(recon_url):
 
         recon_results = mid_core.get_all_recon_results()
 
-        print("모듈 통합 데이터 저장 완료")
-        progress.update(middle_core_task, advance=1, description="[yellow]✔ 모듈 데이터 통합 완료")
+       
+        progress.update(middle_core_task, advance=1, description="[yellow]✔ 정찰 모듈 데이터 통합 완료")
         if recon_mode=="mode_a":
-            print("테스트 시작 , mode_a")
             reporter = LLMReporter()
             reporter.generate_dashboard_from_data(recon_results,recon_mode)
             end = time.time()
@@ -337,7 +330,6 @@ if check_Url(recon_url):
             console.print(f"[bold magenta]⏱ 소요 시간:[/] [bold cyan]{end - start:.2f}초[/]")
             pass
         elif recon_mode=="mode_b":
-            print("테스트 시작 , mode_b")
             preprocess_task = progress.add_task("[bold blue]각 공격 모듈에 맞는 통합 데이터 전처리 중...", total=1)
             preprocessor = LLMPreprocessor()
             pre_data = preprocessor.generate_preprocess_data(recon_results)
@@ -370,19 +362,19 @@ if check_Url(recon_url):
                             
                             if module_type == "sqli":
                                 mid_core.set_sqli_data(results)
-                                progress.update(task_id, advance=1, description="[bold red]✔ SQLi 완료[/]")
+                                progress.update(task_id, advance=1, description="[bold red]✔ SQLi 모듈 완료[/]")
                             
                             elif module_type == "xss":
                                 mid_core.set_xss_data(results)
-                                progress.update(task_id, advance=1, description="[bold yellow]✔ XSS 완료[/]")
+                                progress.update(task_id, advance=1, description="[bold yellow]✔ XSS 모듈 완료[/]")
                             
                             elif module_type == "filedown":
                                 mid_core.set_file_download_data(results)
-                                progress.update(task_id, advance=1, description="[bold magenta]✔ File-Download 완료[/]")
+                                progress.update(task_id, advance=1, description="[bold magenta]✔ File-Download 모듈 완료[/]")
                             
                             elif module_type == "ssrf":
                                 mid_core.set_ssrf_data(results)
-                                progress.update(task_id, advance=1, description="[bold cyan]✔ SSRF 완료[/]")
+                                progress.update(task_id, advance=1, description="[bold cyan]✔ SSRF 모듈 완료[/]")
                         
                         except Exception as exc:
                             console.print(f"[bold red] 오류 발생: {exc}")
@@ -400,19 +392,6 @@ if check_Url(recon_url):
             final_time=end - start
             mid_core.set_time(final_time)
             console.print(f"[bold magenta]⏱ 소요 시간:[/] [bold cyan]{end - start:.2f}초[/]")
-        
-
-        #report_task = progress.add_task("[bold blue]LLM 기반 보고서 생성 중...", total=1)
-
-        # preprocessor -> core가 받고 -> 공격 모듈에 뿌려주기 -> 모드 B에서만
-        #공격 모듈이 데이터 주면 그거를 json으로 통합 ( 형식 디코 확인 ) 후 LLM generate_dashboard_from_data -> mode_a , mode_b 인자로 들어가야함
-        #reporter.generate_dashboard_from_data(integrated_results,recon_mode)
-        #progress.update(report_task, advance=1, description="[bold blue]✔ LLM 보고서 생성 및 저장 완료")
-
-# 결과물 출력 최적화 (Rich 전용 JSON 출력)
-    # console.print(Panel("[bold white]최종 통합 결과 데이터 (JSON)[/bold white]", border_style="yellow"))
-    # console.print_json(data=results)
-    # console.print("[bold green]Middle_core 테스트 끝[/bold green]")
 else:
     console.print("[bold red]✘ Error: URL를 다시 입력하세요.[/bold red]")
 

@@ -7,6 +7,7 @@ from .payloads import VERSION_PROBES, ERROR_VERSION_PROBES
 from .prober import (
     send_probe, _build_headers, _build_cookies, _build_baseline_request,
     _inject_param, _to_integer_context,
+    fetch_csrf_token,
 )
 
 
@@ -41,14 +42,24 @@ async def _fetch_baseline(
     params: list[Parameter],
     auth: dict[str, str],
     method: str,
+    enctype: str = "",
+    csrf_tokens: dict[str, str] | None = None,
 ) -> tuple[int, int]:
     """모든 파라미터 원본 값으로 요청해 baseline 상태코드와 응답 길이를 확보한다."""
     baseline_url, body = _build_baseline_request(url, params)
+    if csrf_tokens:
+        body.update(csrf_tokens)
     headers = _build_headers(params[0], "", auth)
     cookies = _build_cookies(auth)
     try:
         if method == "POST":
-            resp = await client.post(baseline_url, data=body, headers=headers, cookies=cookies)
+            if enctype == "multipart/form-data":
+                files = {k: (None, str(v)) for k, v in body.items()}
+                resp = await client.post(baseline_url, files=files, headers=headers, cookies=cookies)
+            elif enctype == "application/json":
+                resp = await client.post(baseline_url, json=body, headers=headers, cookies=cookies)
+            else:
+                resp = await client.post(baseline_url, data=body, headers=headers, cookies=cookies)
         else:
             resp = await client.get(baseline_url, headers=headers, cookies=cookies)
         return resp.status_code, len(resp.content)
@@ -65,11 +76,17 @@ async def _try_version_probes(
     probes: list[tuple[str, str]],
     baseline_status: int,
     baseline_length: int,
+    enctype: str = "",
+    all_params: list[Parameter] | None = None,
+    csrf_tokens: dict[str, str] | None = None,
 ) -> tuple[str | None, list[ProbeLog]]:
     """주어진 프로브 목록을 순회하며 baseline과 일치하는 응답을 찾으면 해당 라벨 반환."""
     logs: list[ProbeLog] = []
     for label, payload in probes:
-        log = await send_probe(client, url, param, payload, auth, method)
+        log = await send_probe(
+            client, url, param, payload, auth, method,
+            csrf_tokens=csrf_tokens, enctype=enctype, all_params=all_params,
+        )
         logs.append(log)
 
         if log.response_status == 0:
@@ -93,18 +110,30 @@ async def _try_error_version_extraction(
     auth: dict[str, str],
     method: str,
     dbms: DBMSType,
+    enctype: str = "",
+    all_params: list[Parameter] | None = None,
+    csrf_tokens: dict[str, str] | None = None,
 ) -> tuple[str | None, list[ProbeLog]]:
     """에러 메시지에서 직접 버전을 파싱한다. Boolean 프로빙 실패 시 fallback."""
     logs: list[ProbeLog] = []
     for payload, pattern in ERROR_VERSION_PROBES.get(dbms, []):
-        injected_url, body = _inject_param(url, param, payload)
+        injected_url, body = _inject_param(url, param, payload, all_params)
+        if csrf_tokens:
+            body.update(csrf_tokens)
         headers = _build_headers(param, payload, auth)
         cookies = _build_cookies(auth)
 
         start = time.monotonic()
         try:
-            if method == "POST" or param.location == ParamLocation.BODY:
-                resp = await client.post(injected_url, data=body, headers=headers, cookies=cookies)
+            is_post = method == "POST" or param.location == ParamLocation.BODY
+            if is_post:
+                if enctype == "multipart/form-data":
+                    files = {k: (None, str(v)) for k, v in body.items()}
+                    resp = await client.post(injected_url, files=files, headers=headers, cookies=cookies)
+                elif enctype == "application/json":
+                    resp = await client.post(injected_url, json=body, headers=headers, cookies=cookies)
+                else:
+                    resp = await client.post(injected_url, data=body, headers=headers, cookies=cookies)
             else:
                 resp = await client.get(injected_url, headers=headers, cookies=cookies)
             elapsed_ms = (time.monotonic() - start) * 1000
@@ -141,6 +170,7 @@ async def extract_version(
     auth: dict[str, str],
     nmap_data: NmapDBInfo | None = None,
     method: str = "GET",
+    enctype: str = "",
 ) -> tuple[str | None, list[ProbeLog]]:
     """
     DBMS 버전을 추출한다.
@@ -174,13 +204,20 @@ async def extract_version(
     param = params[0]
 
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
+        # POST/BODY 조건이면 CSRF 토큰 1회 취득 (phase 마다 새 client라 Phase 1/2 토큰 재사용 불가)
+        csrf_tokens: dict[str, str] = {}
+        if method == "POST" or any(p.location == ParamLocation.BODY for p in params):
+            csrf_tokens = await fetch_csrf_token(client, url, auth)
+        csrf_or_none = csrf_tokens or None
+
         baseline_status, baseline_length = await _fetch_baseline(
-            client, url, params, auth, method
+            client, url, params, auth, method, enctype, csrf_or_none
         )
 
         # 1차: string context
         version, str_logs = await _try_version_probes(
-            client, url, param, auth, method, probes_str, baseline_status, baseline_length
+            client, url, param, auth, method, probes_str,
+            baseline_status, baseline_length, enctype, params, csrf_or_none,
         )
         logs.extend(str_logs)
         if version:
@@ -188,7 +225,8 @@ async def extract_version(
 
         # 2차: integer context fallback
         version, int_logs = await _try_version_probes(
-            client, url, param, auth, method, probes_int, baseline_status, baseline_length
+            client, url, param, auth, method, probes_int,
+            baseline_status, baseline_length, enctype, params, csrf_or_none,
         )
         logs.extend(int_logs)
         if version:
@@ -196,7 +234,7 @@ async def extract_version(
 
         # 3차: 에러 메시지 파싱 fallback (boolean 비교가 불가능한 환경 대응)
         version, err_logs = await _try_error_version_extraction(
-            client, url, param, auth, method, dbms
+            client, url, param, auth, method, dbms, enctype, params, csrf_or_none,
         )
         logs.extend(err_logs)
         return version, logs

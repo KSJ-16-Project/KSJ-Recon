@@ -10,10 +10,39 @@ import secrets
 MARKER_PREFIX = "xssmark"
 SPECIAL_PROBE = "<xssmark>'\"&"
 
+# Alert counter for stored XSS tests - incremented for each test to avoid false positives
+_alert_counter = 0
 
-def new_marker() -> str:
-    """Return a per-run unique marker to reduce false matches."""
-    return f"{MARKER_PREFIX}_{secrets.token_hex(6)}"
+
+def new_marker() -> tuple[str, int]:
+    """Return a per-test unique marker and alert number.
+
+    Each test gets a different alert number (alert(1), alert(2), etc.)
+    to distinguish between multiple parameters and avoid false positives
+    from previous test data.
+
+    Returns:
+        (marker_string, alert_number) tuple
+    """
+    global _alert_counter
+    _alert_counter += 1
+    marker = f"{MARKER_PREFIX}_{secrets.token_hex(6)}"
+    return marker, _alert_counter
+
+
+def next_alert_id() -> int:
+    """Return a new unique alert number for browser verification payloads."""
+    global _alert_counter
+    _alert_counter += 1
+    return _alert_counter
+
+
+def inject_alert_id(payload: str, alert_id: int) -> str:
+    """Replace alert(1) / alert`1` with alert(<id>) / alert`<id>` in a payload."""
+    import re
+    result = re.sub(r'alert\(1\)', f'alert({alert_id})', payload)
+    result = re.sub(r'alert`1`', f'alert`{alert_id}`', result)
+    return result
 
 
 CONTEXT_PAYLOADS = {

@@ -41,7 +41,6 @@ _current_scanner: XSSScanner | None = None
 
 
 def _handle_sigint(_sig, _frame):
-    print("\n[interrupted] saving partial results...")
     if _current_scanner is not None:
         _current_scanner.save_partial()
     sys.exit(0)
@@ -51,6 +50,7 @@ signal.signal(signal.SIGINT, _handle_sigint)
 
 
 async def run_xss_scan(input_json: dict, *, cookies_refresher: Callable[[], dict] | None = None) -> dict:
+    logging.getLogger("XSS").setLevel(logging.CRITICAL)
     scanner = XSSScanner(input_json, cookies_refresher=cookies_refresher)
     # Run the scan in a worker thread so Playwright sync APIs never execute
     # inside the active asyncio event loop thread.
@@ -133,11 +133,35 @@ class XSSScanner:
         self.client.update_auth(session_id=session_id, token=token)
         self._auth_applied = bool(session_id or token or input_data.get("cookies"))
 
+        self._register_auth_credentials(input_data.get("auth"))
+
         if not self._auth_applied:
             cookies = self._ksj_get_cookies()
             if cookies:
                 self.client.update_auth(cookies=cookies)
                 self._auth_applied = True
+        else:
+            # credentials가 있으면 JSON 쿠키보다 fresh login을 우선 적용
+            fresh = self._ksj_get_cookies()
+            if fresh:
+                self.client.update_auth(cookies=fresh)
+                logger.info("auth: ksj_login fresh session overrides JSON cookies")
+
+    def _register_auth_credentials(self, auth: dict | None) -> None:
+        """Forward form_login credentials from input.json to ksj_login."""
+        if not isinstance(auth, dict):
+            return
+        login_url = auth.get("login_url")
+        username = auth.get("username")
+        password = auth.get("password")
+        if not (login_url and username and password):
+            return
+        try:
+            import ksj_login
+            ksj_login.store_credentials(login_url, username, password)
+            logger.info("ksj_login credentials registered from input.json (%s)", login_url)
+        except Exception as e:
+            logger.warning("failed to register ksj_login credentials: %s", e)
 
     def _ksj_get_cookies(self) -> dict | None:
         """Acquire cookies from ksj_login; returns None if unavailable or failed."""
@@ -314,11 +338,13 @@ class XSSScanner:
 
 def main() -> None:
     import argparse
-    logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
     parser = argparse.ArgumentParser(description="Lightweight XSS module")
     parser.add_argument("input", nargs="?", default="input.json")
     parser.add_argument("-o", "--output", default=None)
+    parser.add_argument("-v", "--verbose", action="store_true", help="show scan progress logs")
     args = parser.parse_args()
+    log_level = logging.INFO if args.verbose else logging.CRITICAL
+    logging.basicConfig(level=log_level, format="[%(levelname)s] %(message)s")
 
     with open(args.input, "r", encoding="utf-8") as f:
         input_data = json.load(f)
@@ -338,8 +364,6 @@ def main() -> None:
     # partial은 비정상 종료 복구용 임시 파일이므로 정상 완료 후에는 남기지 않습니다.
     scanner.mark_final_saved()
     scanner.cleanup_partial()
-
-    print(out_path)
 
 
 if __name__ == "__main__":

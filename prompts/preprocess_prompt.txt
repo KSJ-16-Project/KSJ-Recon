@@ -43,8 +43,8 @@ Classify an item as a SQLi test candidate when the input contains one or more of
 - URLs related to posts, products, users, search results, detail pages, or list pages.
 - Database-related services, ports, products, or versions in scan_data.
 - Only include real request parameters that can be represented as name/location/value.
-- Do not create SQLi crawler_data from route placeholders or path variables such as /products/:id, /users/{id}, or /api/items/123 unless the same value is also present as a query, body, or header parameter.
-- Do not use "path" as a SQLi parameter location. Path-based routes may be listed in sql_data.fuzzer_data as URL strings, but they must not become sql_data.crawler_data items.
+- Do not create SQLi endpoint params from route placeholders or path variables such as /products/:id, /users/{id}, or /api/items/123 unless the same value is also present as a query, body, or header parameter.
+- Do not use "path" as a SQLi parameter location.
 
 2. XSS candidates
 Classify an item as an XSS test candidate when the input contains one or more of the following signals:
@@ -89,7 +89,6 @@ Return this exact top-level structure:
 {
   "sql_data": {
     "target_url": "",
-    "crawler_data": [],
     "auth": {
       "cookie": "",
       "Authorization": "",
@@ -101,12 +100,16 @@ Return this exact top-level structure:
       "service": "",
       "version": ""
     },
-    "fuzzer_data": []
+    "endpoints": []
   },
   "xss_data": {
+    "base_url": "",
+    "headers": {},
+    "cookies": {},
     "spider_urls": [],
     "urls": [],
-    "stored_targets": []
+    "stored_targets": [],
+    "options": {}
   },
   "filedown_data": {
     "target": {
@@ -162,19 +165,33 @@ All candidate values must come from scan_data.
 sql_data.target_url must be copied from crawler.target_url or fuzzer.base_url.
 If both are missing, use "".
 
-sql_data.crawler_data MUST be an array of parameter objects copied from scan_data only.
-sql_data.crawler_data is passed directly to the SQL module. It MUST match this exact item shape and MUST NOT contain extra keys:
+sql_data.endpoints MUST be an array of endpoint objects copied from scan_data only.
+Each sql_data.endpoints item is a SQLi operation candidate and MUST match this exact shape:
 {
-  "name": "parameter_name",
-  "location": "query",
-  "value": "parameter_value"
+  "url": "https://example.com/path",
+  "method": "GET",
+  "enctype": "",
+  "params": [
+    {
+      "name": "parameter_name",
+      "location": "query",
+      "value": "parameter_value"
+    }
+  ]
 }
-Every sql_data.crawler_data item MUST contain:
+Every sql_data.endpoints item MUST contain:
+- url: string
+- method: "GET" | "POST"
+- enctype: string
+- params: array
+Every params item MUST contain:
 - name: string
 - location: "query" | "body" | "header" | "unknown"
 - value: string
-Never include path, url, endpoint, method, params, data, headers, reason, priority, evidence, or any other key inside a sql_data.crawler_data item.
-Never output "location": "path" for SQLi. If the only signal is a route path or path placeholder, do not add it to crawler_data.
+Never include path, endpoint, data, headers, reason, priority, evidence, or any other extra key inside a sql_data.endpoints item or params item.
+Never output "location": "path" for SQLi. If the only signal is a route path or path placeholder, do not add it to params.
+If any SQLi string value is missing or empty, use "" instead of null.
+Only include endpoints that have both a copied URL and at least one real query/body/header parameter.
 
 sql_data.auth MUST contain cookie, Authorization, Referer, and Accept-Language.
 Use values from scan_data.crawler.auth when available.
@@ -184,18 +201,30 @@ sql_data.nmap_data MUST contain port, service, and version.
 Use the highest-relevance open service from scan_data.nmap.ports when available.
 If a value is missing, use "".
 
-sql_data.fuzzer_data MUST be an array of URL strings copied from scan_data.fuzzer.spider_urls, scan_data.fuzzer.results, crawler pages, sitemap URLs, robots hints, or endpoint hints.
-Only include URLs or paths that are present in scan_data.
-Do not convert fuzzer_data URLs or route paths into crawler_data parameters unless explicit query/body/header parameter names and values are present.
+xss_data.base_url must be copied from crawler.target_url or fuzzer.base_url.
+If both are missing, use "".
+
+xss_data.headers MUST be an object containing only request headers needed by the XSS module.
+Use Authorization, Referer, and Accept-Language from scan_data.crawler.auth when available.
+If no header values are available, use {}.
+
+xss_data.cookies MUST be an object of cookie name/value pairs needed by the XSS module.
+Use scan_data.crawler.auth.cookie when available by splitting a Cookie header such as "a=b; c=d" into {"a":"b","c":"d"}.
+If no cookie values are available, use {}.
 
 xss_data.spider_urls MUST be an array of URL strings copied from scan_data only.
-xss_data MUST contain only spider_urls, urls, and stored_targets.
-Do not include base_url, session_id, token, login_mock_path, options, evidence_dir, results_dir, cookies, headers, priority, reason, evidence, or any other metadata in xss_data.
+xss_data.options MUST be an object. Use {} unless scan_data provides an explicit XSS scanner option.
+xss_data MUST contain only base_url, headers, cookies, spider_urls, urls, stored_targets, and options.
+Do not include session_id, token, login_mock_path, evidence_dir, results_dir, priority, reason, evidence, or any other metadata in xss_data.
 
 Every xss_data.urls item MUST contain only fields needed by the XSS module:
-- url: string, copied from scan_data only
-- For POST Reflected XSS: method and body.
-- For DOM Stored XSS: type, fields, and safe_to_submit.
+- submit_url: string, copied from scan_data only
+- view_url: string, copied from scan_data only, when a separate response/view page is known
+- method: "GET" or "POST", when HTTP submission is needed
+- body_format: "form" or "json", when a POST body format is known
+- body: object, when request parameters or form fields are known
+- attack_params: array of parameter names that can receive the XSS payload
+- For DOM Stored XSS: type, fields, attack_params, and safe_to_submit.
 Do not include empty fields or metadata fields.
 
 xss_data.urls is used for:
@@ -205,7 +234,10 @@ xss_data.urls is used for:
 Every xss_data.stored_targets item MUST contain only:
 - submit_url: string, copied from scan_data only
 - view_url: string, copied from scan_data only
+- method: "GET" or "POST"
+- body_format: "form" or "json"
 - body: object
+- attack_params: array of parameter names that can receive the XSS payload
 - safe_to_submit: boolean
 Do not include empty fields or metadata fields.
 For Stored XSS and DOM Stored form candidates that you decide to emit, set safe_to_submit to true by default.

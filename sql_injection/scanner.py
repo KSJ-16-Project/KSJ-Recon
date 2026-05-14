@@ -5,6 +5,7 @@ import ksj_login
 from .models import (
     ScanInput, ScanOutput, TechniqueQueries,
     ProbeLog, ParamLocation, DBMSType, Confidence,
+    Endpoint,
 )
 from .fingerprint import detect_dbms, DBMSDetectResult
 from .version import extract_version
@@ -47,8 +48,13 @@ def _select_techniques(
     if any(log.elapsed_ms and log.elapsed_ms > 1000 for log in all_logs):
         possible["Time-based blind"] = dbms_queries.get("Time-based blind", [])
 
-    # possible: Stacked queries (POST/BODY 파라미터 있는 경우)
-    if any(p.location == ParamLocation.BODY for p in scan_input.crawler_data):
+    # possible: Stacked queries (어떤 endpoint든 BODY 파라미터가 있으면)
+    has_body = any(
+        p.location == ParamLocation.BODY
+        for ep in scan_input.endpoints
+        for p in ep.params
+    )
+    if has_body:
         possible["Stacked queries"] = dbms_queries.get("Stacked queries", [])
 
     # possible: Nmap이 DB 포트 직접 발견 → 더 열린 환경
@@ -91,43 +97,54 @@ async def _try_relogin() -> dict[str, str] | None:
     return {"cookie": ksj_login.to_cookie_header(auth_result.cookies)}
 
 
+def _empty_output(
+    probe_log: list[ProbeLog] | None = None,
+    auth_expired: bool = False,
+) -> ScanOutput:
+    return ScanOutput(
+        dbms_type=DBMSType.UNKNOWN,
+        dbms_version=None,
+        confidence=Confidence.LOW,
+        injectable_params=[],
+        technique_queries=TechniqueQueries(confirmed={}, possible={}),
+        probe_log=probe_log or [],
+        auth_expired=auth_expired,
+    )
+
+
 # ── 메인 오케스트레이션 ─────────────────────────────────────────
 
 async def run_scan(scan_input: ScanInput) -> ScanOutput:
     auth = scan_input.auth
     all_logs: list[ProbeLog] = []
 
-    # 빈 params 가드
-    if not scan_input.crawler_data:
-        return ScanOutput(
-            dbms_type=DBMSType.UNKNOWN,
-            dbms_version=None,
-            confidence=Confidence.LOW,
-            injectable_params=[],
-            technique_queries=TechniqueQueries(confirmed={}, possible={}),
-            probe_log=[],
-            auth_expired=False,
-        )
+    # 빈 endpoints 가드
+    if not scan_input.endpoints:
+        return _empty_output()
 
     try:
-        # 프로빙할 URL 목록: target_url + fuzzer_data
-        target_urls = [scan_input.target_url] + scan_input.fuzzer_data
         best_result: DBMSDetectResult | None = None
-        all_injectable: list[dict] = []       # [{"param": str, "url": str}]
-        seen_injectable: set[tuple] = set()   # (param, url) 중복 방지
-        failed_urls: set[str] = set()         # 재시도 후에도 실패한 URL
-        relogin_unavailable = False           # 한 번이라도 재로그인 불가 발생
+        best_endpoint: Endpoint | None = None
+        # (param, url, method) 트리플 → 출력 dict. 같은 트리플의 다른 value들은 values 배열에 누적
+        injectable_map: dict[tuple, dict] = {}
+        failed: set[tuple] = set()             # 재시도 후에도 실패한 (url, method)
+        relogin_unavailable = False            # 한 번이라도 재로그인 불가 발생
 
-        # DBMS 탐지 — 전체 URL 순회, DBMS 확정 후에도 injectable params 계속 수집
-        for url in target_urls:
-            if url in failed_urls:
+        # endpoint 단위 순회 — DBMS 확정 후에도 injectable params 계속 수집
+        for ep in scan_input.endpoints:
+            key = (ep.url, ep.method)
+            if key in failed:
+                continue
+            if not ep.params:
                 continue
 
             result = await detect_dbms(
-                url=url,
-                params=scan_input.crawler_data,
+                url=ep.url,
+                params=ep.params,
                 auth=auth,
                 nmap_data=scan_input.nmap_data,
+                method=ep.method,
+                enctype=ep.enctype,
             )
             all_logs.extend(result.probe_log)
 
@@ -135,57 +152,70 @@ async def run_scan(scan_input: ScanInput) -> ScanOutput:
                 new_auth = await _try_relogin()
                 if new_auth:
                     auth = new_auth
-                    # 같은 URL 재시도
+                    # 같은 endpoint 재시도
                     result = await detect_dbms(
-                        url=url,
-                        params=scan_input.crawler_data,
+                        url=ep.url,
+                        params=ep.params,
                         auth=auth,
                         nmap_data=scan_input.nmap_data,
+                        method=ep.method,
+                        enctype=ep.enctype,
                     )
                     all_logs.extend(result.probe_log)
                     if _check_auth_expired(result.probe_log):
-                        # 재시도 후에도 실패 → 이유 불문 스킵
-                        failed_urls.add(url)
+                        failed.add(key)
                         continue
                 else:
                     # 재로그인 불가(자격증명 없음 또는 로그인 실패)
-                    # → 이 URL은 스킵하지만 스캔 자체는 계속 (공개 URL 시도 보존)
-                    failed_urls.add(url)
+                    # → 해당 endpoint만 스킵, 공개 endpoint는 계속 시도
+                    failed.add(key)
                     relogin_unavailable = True
                     continue
 
             for param_name in result.injectable_params:
-                key = (param_name, url)
-                if key not in seen_injectable:
-                    seen_injectable.add(key)
-                    all_injectable.append({"param": param_name, "url": url})
+                triple = (param_name, ep.url, ep.method)
+                value = next((p.value for p in ep.params if p.name == param_name), "")
+                entry = injectable_map.get(triple)
+                if entry is None:
+                    injectable_map[triple] = {
+                        "param": param_name,
+                        "values": [value],
+                        "url": ep.url,
+                        "method": ep.method,
+                    }
+                elif value not in entry["values"]:
+                    entry["values"].append(value)
+
             if best_result is None:
                 best_result = result
+                best_endpoint = ep
             if result.dbms != DBMSType.UNKNOWN:
                 best_result = result
+                best_endpoint = ep
 
-        # 모든 URL이 auth_expired로 막힌 경우 (best_result 미설정)
-        if best_result is None:
-            return ScanOutput(
-                dbms_type=DBMSType.UNKNOWN,
-                dbms_version=None,
-                confidence=Confidence.LOW,
-                injectable_params=[],
-                technique_queries=TechniqueQueries(confirmed={}, possible={}),
-                probe_log=all_logs,
-                auth_expired=relogin_unavailable,
-            )
+        # 모든 endpoint가 막힌 경우
+        if best_result is None or best_endpoint is None:
+            return _empty_output(probe_log=all_logs, auth_expired=relogin_unavailable)
 
-        # 버전 추출 — DBMS가 실제로 식별된 URL을 사용해야 함
-        # (메인 타겟이 막혀 있고 fuzzer URL에서 식별된 경우, 메인으로 가면 항상 실패)
-        injectable_names = {item["param"] for item in all_injectable}
-        injectable_params = [p for p in scan_input.crawler_data if p.name in injectable_names]
+        # 버전 추출 — DBMS가 식별된 endpoint를 그대로 사용
+        # (URL/method/enctype/폼 묶음을 그대로 쓰지 않으면 Phase 3가 항상 실패)
+        all_injectable = list(injectable_map.values())
+        injectable_names = {
+            item["param"] for item in all_injectable
+            if item["url"] == best_endpoint.url and item["method"] == best_endpoint.method
+        }
+        target_params = (
+            [p for p in best_endpoint.params if p.name in injectable_names]
+            or best_endpoint.params
+        )
         version, version_logs = await extract_version(
             dbms=best_result.dbms,
-            url=best_result.url or scan_input.target_url,
-            params=injectable_params or scan_input.crawler_data,
+            url=best_endpoint.url,
+            params=target_params,
             auth=auth,
             nmap_data=scan_input.nmap_data,
+            method=best_endpoint.method,
+            enctype=best_endpoint.enctype,
         )
         all_logs.extend(version_logs)
 
@@ -208,12 +238,4 @@ async def run_scan(scan_input: ScanInput) -> ScanOutput:
         )
 
     except asyncio.CancelledError:
-        return ScanOutput(
-            dbms_type=DBMSType.UNKNOWN,
-            dbms_version=None,
-            confidence=Confidence.LOW,
-            injectable_params=[],
-            technique_queries=TechniqueQueries(confirmed={}, possible={}),
-            probe_log=all_logs,
-            auth_expired=False,
-        )
+        return _empty_output(probe_log=all_logs)

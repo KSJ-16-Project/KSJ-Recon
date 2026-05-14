@@ -17,12 +17,15 @@ class Middle_core:
         self.save_path_recon = os.path.join(self.output_dir, "recon_report.json")
         self.save_path_senario = os.path.join(self.output_dir, "attack_senario.json")
         # 클래스 내부 메모리에 데이터를 저장할 딕셔너리 초기화
+        
+        # 정찰 모듈 통합 데이터
         self.Recon_storage={
             "nmap":None,
             "crawler":None,
             "fuzzer":None
         }
 
+        # 공격 모듈 통합 데이터
         self.Attack_storage={
             "sqli": None,
             "xss": None,
@@ -30,6 +33,7 @@ class Middle_core:
             "ssrf": None
         }
 
+        # LLM 기반 공격시나리오 생성 모듈에 전달할 통합 데이터
         self.Integrated_storage = {
             "scan": self.Recon_storage,
             "attacks": self.Attack_storage,
