@@ -1,0 +1,191 @@
+{
+  "status": "ok",
+  "module": "fuzzer_portable",
+  "mode": "directory",
+  "target": "http://scanme.nmap.org",
+  "timestamp": "2026-04-29T23:50:23.466695",
+  "results": [
+    {
+      "url": "http://scanme.nmap.org/images",
+      "status": 301,
+      "length": 318,
+      "risk": "LOW",
+      "depth": 1
+    },
+    {
+      "url": "http://scanme.nmap.org/index",
+      "status": 200,
+      "length": 6974,
+      "risk": "LOW",
+      "depth": 1
+    },
+    {
+      "url": "http://scanme.nmap.org/shared",
+      "status": 301,
+      "length": 318,
+      "risk": "LOW",
+      "depth": 1
+    },
+    {
+      "url": "http://scanme.nmap.org/index",
+      "status": 200,
+      "length": 6974,
+      "risk": "LOW",
+      "depth": 1
+    },
+    {
+      "url": "http://scanme.nmap.org/site_css",
+      "status": 200,
+      "length": 3926,
+      "risk": "LOW",
+      "depth": 1
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/templates",
+      "status": 301,
+      "length": 328,
+      "risk": "LOW",
+      "depth": 2
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/js",
+      "status": 301,
+      "length": 321,
+      "risk": "LOW",
+      "depth": 2
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/images",
+      "status": 301,
+      "length": 325,
+      "risk": "LOW",
+      "depth": 2
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/css",
+      "status": 301,
+      "length": 322,
+      "risk": "LOW",
+      "depth": 2
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/error",
+      "status": 301,
+      "length": 324,
+      "risk": "LOW",
+      "depth": 2
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/ga",
+      "status": 200,
+      "length": 376,
+      "risk": "LOW",
+      "depth": 2
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/templates/top",
+      "status": 200,
+      "length": 2687,
+      "risk": "LOW",
+      "depth": 3
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/templates/idx",
+      "status": 200,
+      "length": 2888,
+      "risk": "LOW",
+      "depth": 3
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/templates/bottom",
+      "status": 200,
+      "length": 3600,
+      "risk": "LOW",
+      "depth": 3
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/images/menu",
+      "status": 200,
+      "length": 230,
+      "risk": "LOW",
+      "depth": 3
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/images/p",
+      "status": 301,
+      "length": 327,
+      "risk": "LOW",
+      "depth": 3
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/images/pro",
+      "status": 301,
+      "length": 329,
+      "risk": "LOW",
+      "depth": 3
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/images/favicon",
+      "status": 200,
+      "length": 529,
+      "risk": "LOW",
+      "depth": 3
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/css/search",
+      "status": 200,
+      "length": 206,
+      "risk": "LOW",
+      "depth": 3
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/css/main",
+      "status": 200,
+      "length": 3030,
+      "risk": "LOW",
+      "depth": 3
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/css/mod",
+      "status": 200,
+      "length": 4085,
+      "risk": "LOW",
+      "depth": 3
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/css/submit",
+      "status": 200,
+      "length": 726,
+      "risk": "LOW",
+      "depth": 3
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/css/mailman",
+      "status": 200,
+      "length": 540,
+      "risk": "LOW",
+      "depth": 3
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/css/mm",
+      "status": 200,
+      "length": 337,
+      "risk": "LOW",
+      "depth": 3
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/css/tab",
+      "status": 200,
+      "length": 2157,
+      "risk": "LOW",
+      "depth": 3
+    },
+    {
+      "url": "http://scanme.nmap.org/shared/error/includes",
+      "status": 301,
+      "length": 333,
+      "risk": "LOW",
+      "depth": 3
+    }
+  ]
+}

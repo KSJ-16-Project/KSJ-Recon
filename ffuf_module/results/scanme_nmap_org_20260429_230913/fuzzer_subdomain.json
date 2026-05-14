@@ -1,0 +1,25 @@
+{
+  "status": "ok",
+  "module": "fuzzer_portable",
+  "mode": "subdomain",
+  "target": "https://nmap.org",
+  "timestamp": "2026-04-30T01:55:00.022999",
+  "results": [
+    {
+      "host": "chat.nmap.org",
+      "status": 200,
+      "length": 6974,
+      "schemes": [
+        "http"
+      ]
+    },
+    {
+      "host": "echo.nmap.org",
+      "status": 200,
+      "length": 6974,
+      "schemes": [
+        "http"
+      ]
+    }
+  ]
+}
